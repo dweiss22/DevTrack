@@ -16,9 +16,10 @@ The ingestion layer is deliberately separate from reporting tables, so a transit
 
 1. An administrator signs in with an administrator-created Supabase email/password account and connects Wrike from **Administration**.
 2. The OAuth callback securely exchanges the code and stores AES-256-GCM encrypted access and refresh tokens. OAuth state is signed and expires after 10 minutes.
-3. The administrator configures one or more account, space, folder, project, parent-task, or task-list scopes, previews them, and runs a manual sync.
-4. The sync service paginates records, upserts users/tasks/time entries by organization plus Wrike ID, records partial failures, and refreshes an expiring token automatically.
-5. The dashboard and detailed Tasks, Team, and Time Entries reports read the normalized reporting tables through RLS.
+3. The administrator configures account, space, folder, project, parent-task, or task-list scopes and selects filterable custom fields.
+4. One organization-level coordinator paginates and deduplicates records, refreshes tokens against the OAuth-provided Wrike data-center host, and records partial failures.
+5. Administrators configure reporting groups by source and/or Wrike person before enabling strict reporting access.
+6. The dashboard, Tasks, Team, Time Entries, and Ask DevTrack pages read the same RLS-protected reporting data.
 
 ## Local setup
 
@@ -31,7 +32,7 @@ The ingestion layer is deliberately separate from reporting tables, so a transit
    npm run dev
    ```
 
-4. In Supabase, run `supabase/migrations/202607160001_initial_schema.sql` with the SQL Editor or `supabase db push`.
+4. In Supabase, run both files in `supabase/migrations` in filename order with the SQL Editor, or use `supabase db push`.
 5. Create an organization, then add each permitted Supabase Auth user to `application_users`. Set at least one user’s `role` to `admin`.
 
    ```sql
@@ -69,7 +70,7 @@ set organization_id = excluded.organization_id,
     role = excluded.role;
 ```
 
-Give the first administrator the `admin` role and ordinary reporting users the `member` role. The application shows an **Access awaiting approval** screen, including the authenticated user's ID, until this assignment is made.
+Give the first administrator the `admin` role and ordinary reporting users the `member` role. Configure and test reporting groups before enabling strict access from Administration. The application shows an **Access awaiting approval** screen until an Auth user is assigned here.
 
 Keep public signup disabled under **Authentication → Sign In / Providers → Email**. User creation should be performed by an administrator through the Supabase Dashboard. Provide passwords through an approved secure channel; never include them in source code or SQL saved in the repository.
 
@@ -110,34 +111,29 @@ Create a Wrike API application and set its redirect/callback URL exactly to:
 <NEXT_PUBLIC_APP_URL>/api/wrike/callback
 ```
 
-For local development this is `http://localhost:3000/api/wrike/callback`. Register the production HTTPS URL separately in Wrike. The connecting administrator needs permission to access the selected spaces/folders/projects, task details, contacts, and timelogs. Some Wrike plans or account settings limit group/custom-field/approval endpoints; those fields are retained in `raw_data` when supplied and can be expanded safely as account permissions allow.
+For local development this is `http://localhost:3000/api/wrike/callback`. Register the production HTTPS URL separately in Wrike. DevTrack requests the `wsReadOnly` OAuth scope. The connecting account needs permission to read the selected work, contacts, workflows, custom fields, and timelogs. Reconnect connections created before migration `202607160002` so the account-specific API host is stored.
+
+The Administration health check verifies the account endpoint, data-center host, token state, latency, and most recent successful or partial synchronization without returning credentials.
 
 ## Data and metric definitions
 
-- A task is **completed** when Wrike provides `completed_at` or its status matches completed/closed/done.
-- An **active** task is any non-completed task.
-- An **overdue** task is active and has a due date before the current date.
+- A task is **completed** when Wrike provides a completion timestamp or its status group is Completed.
+- **Open** includes Active and Deferred; Cancelled is a separate state.
+- An **overdue** task is open and has a due date before the current date.
 - Completion trends use the Wrike completion timestamp; time trends use each time-entry’s tracked date.
 - Actual effort is the sum of idempotently persisted time-entry minutes. Planned effort uses Wrike effort allocation when available.
 - Shared tasks count once in task totals. Contributors remain visible individually; the application does not silently divide shared work among assignees.
 - Inaccessible or removed records are preserved for history and can be marked deleted rather than hard-deleted.
 
-## Stored Wrike GET calls
+## Filters and Ask DevTrack
 
-Reusable Wrike GET paths are centralized in `lib/wrike/endpoints.ts` and are resolved against `WRIKE_API_BASE_URL` by the server-side client:
+Task and time filters are URL-backed and server-paginated. Available dimensions include text, status/state, person, reporting source, tracked dates, time presence, category, and administrator-selected custom fields. `[LCT]` is selected automatically when first discovered.
 
-| Name | API path |
-| --- | --- |
-| Account workflows | `/workflows` |
-| Space folders | `/folders/IEACHQK7I46YBWEN/folders` |
-| Custom fields list | `/customfields?title=%5BLCT%5D` (equivalent to `title=[LCT]`) |
-| Account timelogs | `/timelogs` |
-
-The scope browser uses the stored Space folders call. The other calls are available to synchronization and administration services without duplicating URLs.
+Ask DevTrack is a deterministic reporting parser, not an external language model. It supports task counts/lists, time totals and averages, breakdowns, planned-versus-actual comparisons, relative dates, and quoted task titles. It executes the same authorized Supabase reporting functions as the filter pages. Questions and answers are visible to their owner and organization administrators and are removed after 90 days.
 
 ## Scheduling and deployment
 
-`vercel.json` schedules `GET /api/cron/wrike-sync` daily at 06:00 UTC. Configure Vercel to send `Authorization: Bearer <CRON_SECRET>` (or invoke this protected endpoint from an external scheduler that can send the header). Each active scope is processed independently, and runs are recorded in `wrike_sync_runs`.
+`vercel.json` schedules `GET /api/cron/wrike-sync` daily at 06:00 UTC and saved-history cleanup at 07:00 UTC. Configure the scheduler to send `Authorization: Bearer <CRON_SECRET>`. Daily syncs are incremental with a five-minute overlap; Sunday is a full reconciliation. Admins can run either mode manually. Full reconciliation removes stale relationships and marks missing records deleted without erasing history.
 
 Deploy by setting the same production environment variables in Vercel (or another Next.js host), applying the Supabase migration, registering the production Wrike callback URL, and configuring the scheduler. Keep the service-role key server-only.
 
@@ -148,7 +144,9 @@ npm run test
 npm run build
 ```
 
-The included metric tests cover overdue status, planned-versus-actual detection, and shared-task contributor counting. Add mocked Wrike HTTP tests for your account-specific endpoint shapes before changing synchronization behavior. No live Wrike access is required for unit tests.
+The unit suite covers metrics, filters, the deterministic question parser, Wrike hosts, pagination, task paths, and effort/time normalization. `supabase/tests/reporting_rls.sql` adds database integration coverage for organization isolation, compatibility access, intersection/union groups, and conversation auditing; run it against a local Supabase stack with `supabase test db`.
+
+No live Wrike access is required for automated tests. Production acceptance still requires applying both migrations, reconnecting Wrike, running a health check, full-syncing a representative scope, comparing sampled task/timelog/custom-field values with Wrike, testing member groups, and only then enabling strict access and Ask DevTrack.
 
 ## Troubleshooting
 
