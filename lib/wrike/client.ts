@@ -29,7 +29,9 @@ export class WrikeClient {
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
-      throw new WrikeApiError(`Wrike request failed (${response.status}).`, response.status);
+      const payload = await response.clone().json().catch(() => null) as { errorDescription?: string; error?: string } | null;
+      const detail = payload?.errorDescription ?? payload?.error;
+      throw new WrikeApiError(`Wrike request failed (${response.status})${detail ? `: ${detail.slice(0, 300)}` : "."}`, response.status);
     }
     throw new Error("Wrike retry loop ended unexpectedly.");
   }

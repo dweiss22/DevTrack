@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { folderTasksPath, TASK_IMPORT_FOLDER_IDS } from "@/lib/wrike/folder-task-import";
 import { allocatedMinutes, entryMinutes, plannedMinutes, taskPath } from "@/lib/wrike/sync";
 
 describe("Wrike synchronization contracts", () => {
@@ -10,23 +11,24 @@ describe("Wrike synchronization contracts", () => {
     expect(decodeURIComponent(path)).toContain("subTasks=true");
     expect(decodeURIComponent(path)).toContain("updatedDate=");
   });
-  it("builds an account-wide read-only task request for the one-click import", () => {
-    const path = taskPath({ id: "scope", label: "All Wrike data", scope_type: "account", source_ids: ["account"] });
-    expect(path).toMatch(/^\/tasks\?/);
-    expect(decodeURIComponent(path)).toContain("subTasks=true");
-    expect(decodeURIComponent(path)).toContain('"customFields"');
-    expect(decodeURIComponent(path)).toContain('"effortAllocation"');
-  });
   it("uses exact task-id paths and normalizes effort and time to minutes", () => {
     expect(taskPath({ id: "scope", label: "List", scope_type: "list", source_ids: ["A", "B"] })).toMatch(/^\/tasks\/A,B\?/);
     expect(plannedMinutes({ id: "T", title: "Task", status: "Active", effortAllocation: { totalEffort: 125, allocatedEffort: 90 } })).toBe(125);
     expect(allocatedMinutes({ id: "T", title: "Task", status: "Active", effortAllocation: { totalEffort: 125, allocatedEffort: 90 } })).toBe(90);
     expect(entryMinutes({ id: "E", taskId: "T", trackedDate: "2026-07-01", hours: 1.25 })).toBe(75);
   });
-  it("builds the configured Space import as a descendant and subtask GET", () => {
-    const path = decodeURIComponent(taskPath({ id: "space-import", label: "Space", scope_type: "space", source_ids: ["IEACHQK7I46YBWEN"] }));
-    expect(path).toContain("/spaces/IEACHQK7I46YBWEN/tasks?");
-    expect(path).toContain("descendants=true");
-    expect(path).toContain("subTasks=true");
+  it("builds the 13 configured folder task GET requests", () => {
+    expect(TASK_IMPORT_FOLDER_IDS).toHaveLength(13);
+    expect(new Set(TASK_IMPORT_FOLDER_IDS).size).toBe(13);
+    for (const folderId of TASK_IMPORT_FOLDER_IDS) {
+      const path = decodeURIComponent(folderTasksPath(folderId));
+      expect(path).toContain(`/folders/${folderId}/tasks?`);
+      expect(path).toContain("descendants=true");
+      expect(path).toContain("subTasks=true");
+      expect(path).toContain('"description"');
+      expect(path).toContain('"responsibleIds"');
+      expect(path).toContain('"customFields"');
+      expect(path).toContain('"effortAllocation"');
+    }
   });
 });

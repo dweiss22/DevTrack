@@ -8,7 +8,7 @@ DevTrack is a secure reporting application for online-course development work ma
 - **Supabase** provides authentication, PostgreSQL, Row Level Security (RLS), and the application data store.
 - **Wrike OAuth 2.0 + REST API** supplies task, user, and time-entry data. All OAuth exchange, token refresh, and synchronization operations occur on the server.
 - **Recharts** renders accessible dashboard charts.
-- **Vercel Cron** calls the protected daily sync endpoint; Supabase scheduled functions can be substituted if preferred.
+- **Vercel Cron** is available for later synchronization stages; the multi-API task/time sync is intentionally disabled while this first task endpoint is validated.
 
 The ingestion layer is deliberately separate from reporting tables, so a transitional spreadsheet/file importer or additional source can be added later without replacing the Wrike integration.
 
@@ -16,10 +16,9 @@ The ingestion layer is deliberately separate from reporting tables, so a transit
 
 1. An administrator signs in with an administrator-created Supabase email/password account and connects Wrike from **Administration**.
 2. The OAuth callback securely exchanges the code and stores AES-256-GCM encrypted access and refresh tokens. OAuth state is signed and expires after 10 minutes.
-3. The administrator enters a Wrike Space ID and selects **Import Wrike Space**. DevTrack automatically creates the Space scope and runs a full import; advanced scope configuration remains available when needed.
-4. One organization-level coordinator calls Wrike's read-only GET endpoints, paginates and deduplicates records, refreshes tokens against the OAuth-provided Wrike data-center host, and records partial failures.
-5. Administrators configure reporting groups by source and/or Wrike person before enabling strict reporting access.
-6. The dashboard, Tasks, Team, Time Entries, and Ask DevTrack pages read the same RLS-protected reporting data.
+3. The administrator selects **Reset and import folder tasks**. This first-stage importer calls only the 13 configured Wrike folder-task GET endpoints.
+4. DevTrack retrieves and paginates every folder response before changing Supabase, then resets prior Wrike-derived reporting rows, deduplicates tasks, and stores task details plus source-folder membership.
+5. The Tasks page and dashboard read the imported task rows. Timelogs, contacts, workflows, and other Wrike APIs are deliberately deferred until task ingestion is validated.
 
 ## Local setup
 
@@ -111,23 +110,22 @@ Create a Wrike API application and set its redirect/callback URL exactly to:
 <NEXT_PUBLIC_APP_URL>/api/wrike/callback
 ```
 
-For local development this is `http://localhost:3000/api/wrike/callback`. Register the production HTTPS URL separately in Wrike. DevTrack requests the `wsReadOnly` OAuth scope. The connecting account needs permission to read the selected work, contacts, workflows, custom fields, and timelogs. Reconnect connections created before migration `202607160002` so the account-specific API host is stored.
+For local development this is `http://localhost:3000/api/wrike/callback`. Register the production HTTPS URL separately in Wrike. DevTrack requests the `wsReadOnly` OAuth scope. For this stage, the connecting account must be able to read all 13 configured folders and their descendant tasks. Reconnect connections created before migration `202607160002` so the account-specific API host is stored.
 
-The Administration health check verifies the account endpoint, data-center host, token state, latency, and most recent successful or partial synchronization without returning credentials.
+The Administration health check verifies the account endpoint, data-center host, token state, latency, and most recent focused folder-task import without returning credentials.
 
-### One-click Space import
+### Focused folder task import
 
-The primary Administration action is **Import Wrike Space**. It defaults to Space ID `IEACHQK7I46YBWEN`, remains editable per organization, and automatically creates or updates the dedicated Space scope before running a full import. The outbound Wrike requests are GET requests; the application endpoint is `POST /api/wrike/import-space` because clicking it changes Supabase data.
+The only enabled bulk-import action in Administration is **Reset and import folder tasks**. It calls `GET /folders/{folderId}/tasks` with `descendants=true`, subtasks, optional reporting fields, and pagination for the explicit 13-folder allowlist in `lib/wrike/folder-task-import.ts`. The application endpoint is `POST /api/wrike/import-folder-tasks` because clicking it changes Supabase data.
 
-Imported tasks are stored in the normalized `wrike_*` tables used by the application. Each button run also refreshes the administrator-only physical `public.wrike_space_report_rows` table with one task-centric JSON record per task. The user-facing, RLS-protected `public.wrike_space_report` view calculates the fields each member is allowed to see, including assignees, locations, custom fields, time entries, and planned/actual minutes:
+All 13 Wrike responses must succeed before existing Wrike-derived data is reset. The importer keeps the OAuth connection, organization, and application users, writes deduplicated tasks to `public.wrike_tasks`, records source membership in `public.wrike_folder_task_imports`, and records the result in `public.wrike_folder_task_import_runs`:
 
 ```sql
-select title,status,actual_minutes,report_data
-from public.wrike_space_report_rows
-order by imported_at desc;
+select t.title,t.status,m.folder_wrike_id,m.imported_at
+from public.wrike_tasks t
+join public.wrike_folder_task_imports m on m.task_id=t.id
+order by m.imported_at desc,t.title;
 ```
-
-After connecting, an administrator can select **Import all Wrike data**. This creates or reactivates a single account-wide source automatically, performs a full read-only import, and populates the normalized Supabase reporting tables used by the dashboard, Tasks, Time Entries, Team, and Ask DevTrack pages. No manual scope configuration is required for this workflow.
 
 ## Data and metric definitions
 
@@ -139,15 +137,15 @@ After connecting, an administrator can select **Import all Wrike data**. This cr
 - Shared tasks count once in task totals. Contributors remain visible individually; the application does not silently divide shared work among assignees.
 - Inaccessible or removed records are preserved for history and can be marked deleted rather than hard-deleted.
 
-## Filters and Ask DevTrack
+## Later reporting stages
 
-Task and time filters are URL-backed and server-paginated. Available dimensions include text, status/state, person, reporting source, tracked dates, time presence, category, and administrator-selected custom fields. `[LCT]` is selected automatically when first discovered.
+The current navigation intentionally exposes only Overview, Tasks, and Administration. Task filters are URL-backed and server-paginated. People, time-entry, workflow, folder-name, custom-field-definition, reporting-group, and Ask DevTrack features remain in the codebase but are not part of this first API validation stage.
 
-Ask DevTrack is a deterministic reporting parser, not an external language model. It supports task counts/lists, time totals and averages, breakdowns, planned-versus-actual comparisons, relative dates, and quoted task titles. It executes the same authorized Supabase reporting functions as the filter pages. Questions and answers are visible to their owner and organization administrators and are removed after 90 days.
+They should be enabled one API at a time only after the 13-folder task counts and sample task fields have been checked against Wrike.
 
 ## Scheduling and deployment
 
-`vercel.json` schedules `GET /api/cron/wrike-sync` daily at 06:00 UTC and saved-history cleanup at 07:00 UTC. Configure the scheduler to send `Authorization: Bearer <CRON_SECRET>`. Daily syncs are incremental with a five-minute overlap; Sunday is a full reconciliation. Admins can run either mode manually. Full reconciliation removes stale relationships and marks missing records deleted without erasing history.
+The older Wrike synchronization schedule has been removed from `vercel.json`, and `GET /api/cron/wrike-sync` returns a protected `skipped` response if called manually. Only the saved-history cleanup remains scheduled at 07:00 UTC. Configure the scheduler to send `Authorization: Bearer <CRON_SECRET>`.
 
 Deploy by setting the same production environment variables in Vercel (or another Next.js host), applying the Supabase migration, registering the production Wrike callback URL, and configuring the scheduler. Keep the service-role key server-only.
 
@@ -160,12 +158,12 @@ npm run build
 
 The unit suite covers metrics, filters, the deterministic question parser, Wrike hosts, pagination, task paths, and effort/time normalization. `supabase/tests/reporting_rls.sql` adds database integration coverage for organization isolation, compatibility access, intersection/union groups, and conversation auditing; run it against a local Supabase stack with `supabase test db`.
 
-No live Wrike access is required for automated tests. Production acceptance still requires applying both migrations, reconnecting Wrike, running a health check, full-syncing a representative scope, comparing sampled task/timelog/custom-field values with Wrike, testing member groups, and only then enabling strict access and Ask DevTrack.
+No live Wrike access is required for automated tests. Production validation for this stage requires applying all migrations through `202607160004_folder_task_import.sql`, deploying the server-side credentials, reconnecting Wrike if necessary, running the health check, selecting **Reset and import folder tasks**, and comparing the displayed unique task count and sampled task fields with the 13 Wrike folder responses.
 
 ## Troubleshooting
 
 - **“Wrike OAuth is not configured”**: check client ID, secret, app URL, and token encryption key.
 - **Callback fails**: ensure the callback URL in Wrike exactly matches `NEXT_PUBLIC_APP_URL/api/wrike/callback`, including protocol.
 - **Token refresh fails**: reconnect from Administration; an expired/revoked connection is marked accordingly without exposing the underlying token.
-- **No data after sync**: verify the connecting administrator can see the selected source and timelogs in Wrike; inspect the sync-run error details in Administration.
+- **No data after import**: first apply migration `202607160004_folder_task_import.sql`. Then verify the connecting administrator can open every configured folder in Wrike and select **Reset and import folder tasks**. A successful OAuth connection alone does not run the task API.
 - **User cannot see reports**: make sure their Auth user ID is in `application_users` for the correct organization. RLS intentionally prevents cross-organization reads.
