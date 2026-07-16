@@ -16,8 +16,8 @@ The ingestion layer is deliberately separate from reporting tables, so a transit
 
 1. An administrator signs in with an administrator-created Supabase email/password account and connects Wrike from **Administration**.
 2. The OAuth callback securely exchanges the code and stores AES-256-GCM encrypted access and refresh tokens. OAuth state is signed and expires after 10 minutes.
-3. The administrator configures account, space, folder, project, parent-task, or task-list scopes and selects filterable custom fields.
-4. One organization-level coordinator paginates and deduplicates records, refreshes tokens against the OAuth-provided Wrike data-center host, and records partial failures.
+3. The administrator enters a Wrike Space ID and selects **Import Wrike Space**. DevTrack automatically creates the Space scope and runs a full import; advanced scope configuration remains available when needed.
+4. One organization-level coordinator calls Wrike's read-only GET endpoints, paginates and deduplicates records, refreshes tokens against the OAuth-provided Wrike data-center host, and records partial failures.
 5. Administrators configure reporting groups by source and/or Wrike person before enabling strict reporting access.
 6. The dashboard, Tasks, Team, Time Entries, and Ask DevTrack pages read the same RLS-protected reporting data.
 
@@ -32,7 +32,7 @@ The ingestion layer is deliberately separate from reporting tables, so a transit
    npm run dev
    ```
 
-4. In Supabase, run both files in `supabase/migrations` in filename order with the SQL Editor, or use `supabase db push`.
+4. In Supabase, run all files in `supabase/migrations` in filename order, preferably with `supabase db push`.
 5. Create an organization, then add each permitted Supabase Auth user to `application_users`. Set at least one user’s `role` to `admin`.
 
    ```sql
@@ -114,6 +114,20 @@ Create a Wrike API application and set its redirect/callback URL exactly to:
 For local development this is `http://localhost:3000/api/wrike/callback`. Register the production HTTPS URL separately in Wrike. DevTrack requests the `wsReadOnly` OAuth scope. The connecting account needs permission to read the selected work, contacts, workflows, custom fields, and timelogs. Reconnect connections created before migration `202607160002` so the account-specific API host is stored.
 
 The Administration health check verifies the account endpoint, data-center host, token state, latency, and most recent successful or partial synchronization without returning credentials.
+
+### One-click Space import
+
+The primary Administration action is **Import Wrike Space**. It defaults to Space ID `IEACHQK7I46YBWEN`, remains editable per organization, and automatically creates or updates the dedicated Space scope before running a full import. The outbound Wrike requests are GET requests; the application endpoint is `POST /api/wrike/import-space` because clicking it changes Supabase data.
+
+Imported tasks are stored in the normalized `wrike_*` tables used by the application. Each button run also refreshes the administrator-only physical `public.wrike_space_report_rows` table with one task-centric JSON record per task. The user-facing, RLS-protected `public.wrike_space_report` view calculates the fields each member is allowed to see, including assignees, locations, custom fields, time entries, and planned/actual minutes:
+
+```sql
+select title,status,actual_minutes,report_data
+from public.wrike_space_report_rows
+order by imported_at desc;
+```
+
+After connecting, an administrator can select **Import all Wrike data**. This creates or reactivates a single account-wide source automatically, performs a full read-only import, and populates the normalized Supabase reporting tables used by the dashboard, Tasks, Time Entries, Team, and Ask DevTrack pages. No manual scope configuration is required for this workflow.
 
 ## Data and metric definitions
 
