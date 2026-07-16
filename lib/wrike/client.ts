@@ -13,11 +13,12 @@ export class WrikeClient {
     throw new Error("Wrike retry loop ended unexpectedly.");
   }
   async all<T>(path: string): Promise<T[]> {
-    const records: T[] = []; let nextPage = 0;
+    const records: T[] = []; let nextPageToken: string | undefined;
     while (true) {
       const connector = path.includes("?") ? "&" : "?";
-      const page = await this.request<{ data: T[]; nextPageToken?: string }>(`${path}${connector}pageSize=100${nextPage ? `&pageToken=${nextPage}` : ""}`);
-      records.push(...page.data); if (!page.nextPageToken) return records; nextPage = Number(page.nextPageToken);
+      const tokenQuery = nextPageToken ? `&pageToken=${encodeURIComponent(nextPageToken)}` : "";
+      const page = await this.request<{ data: T[]; nextPageToken?: string }>(`${path}${connector}pageSize=100${tokenQuery}`);
+      records.push(...page.data); if (!page.nextPageToken) return records; nextPageToken = page.nextPageToken;
     }
   }
 }

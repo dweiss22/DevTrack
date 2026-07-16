@@ -74,6 +74,19 @@ For local development this is `http://localhost:3000/api/wrike/callback`. Regist
 - Shared tasks count once in task totals. Contributors remain visible individually; the application does not silently divide shared work among assignees.
 - Inaccessible or removed records are preserved for history and can be marked deleted rather than hard-deleted.
 
+## Stored Wrike GET calls
+
+Reusable Wrike GET paths are centralized in `lib/wrike/endpoints.ts` and are resolved against `WRIKE_API_BASE_URL` by the server-side client:
+
+| Name | API path |
+| --- | --- |
+| Account workflows | `/workflows` |
+| Space folders | `/folders/IEACHQK7I46YBWEN/folders` |
+| Custom fields list | `/customfields?title=%5BLCT%5D` (equivalent to `title=[LCT]`) |
+| Account timelogs | `/timelogs` |
+
+The scope browser uses the stored Space folders call. The other calls are available to synchronization and administration services without duplicating URLs.
+
 ## Scheduling and deployment
 
 `vercel.json` schedules `GET /api/cron/wrike-sync` daily at 06:00 UTC. Configure Vercel to send `Authorization: Bearer <CRON_SECRET>` (or invoke this protected endpoint from an external scheduler that can send the header). Each active scope is processed independently, and runs are recorded in `wrike_sync_runs`.
