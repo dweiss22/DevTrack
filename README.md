@@ -14,7 +14,7 @@ The ingestion layer is deliberately separate from reporting tables, so a transit
 
 ## Included workflow
 
-1. An administrator signs in with Microsoft Entra ID through Supabase Auth and connects Wrike from **Administration**. Email magic links remain available as a fallback.
+1. An administrator signs in with an administrator-created Supabase email/password account and connects Wrike from **Administration**.
 2. The OAuth callback securely exchanges the code and stores AES-256-GCM encrypted access and refresh tokens. OAuth state is signed and expires after 10 minutes.
 3. The administrator configures one or more account, space, folder, project, parent-task, or task-list scopes, previews them, and runs a manual sync.
 4. The sync service paginates records, upserts users/tasks/time entries by organization plus Wrike ID, records partial failures, and refreshes an expiring token automatically.
@@ -40,24 +40,20 @@ The ingestion layer is deliberately separate from reporting tables, so a transit
    values ('<auth-user-uuid>', '<organization-uuid>', 'admin');
    ```
 
-## Microsoft Entra ID sign-in
+## Email and password sign-in
 
-DevTrack uses Supabase's Azure OAuth provider for Microsoft organizational sign-in. Authentication and application authorization are deliberately separate:
+Authentication and application authorization are deliberately separate:
 
-- `auth.users` and `auth.identities` are managed by Supabase Auth and record everyone who has authenticated.
-- `public.application_users` is DevTrack's access list. A person cannot read reporting data until their Supabase user ID is assigned to an organization here.
+- `auth.users` is managed by Supabase Auth and contains email/password identities.
+- `public.application_users` is DevTrack's access list. An authenticated person cannot read reporting data until their Auth user ID is assigned to an organization here.
 
-To configure Microsoft sign-in:
+DevTrack does not expose public registration. To add a user:
 
-1. In Microsoft Entra ID, create an App registration using the account type appropriate for your organization.
-2. Add this Web redirect URI to that registration: `https://<supabase-project-ref>.supabase.co/auth/v1/callback`.
-3. Create a client secret and retain its **Value** (not its secret ID).
-4. In Supabase, open **Authentication → Sign In / Providers → Azure**, enable the provider, and enter the Entra Application (client) ID and client-secret value.
-5. For a single-tenant application, set the Azure Tenant URL to `https://login.microsoftonline.com/<tenant-id>`.
-6. In Supabase **Authentication → URL Configuration**, set the Site URL to `NEXT_PUBLIC_APP_URL` and add `<NEXT_PUBLIC_APP_URL>/auth/callback` to Redirect URLs.
-7. Redeploy Vercel, then choose **Continue with Microsoft** on `/login`.
-
-After a person's first successful Microsoft sign-in, find them in **Supabase → Authentication → Users**. Assign access with:
+1. In Supabase, open **Authentication → Users**.
+2. Select **Add user → Create new user**.
+3. Enter the user's email and a strong initial password, enable automatic email confirmation, and create the user.
+4. Copy the newly created user's UUID.
+5. Assign that UUID to a DevTrack organization with:
 
 ```sql
 insert into public.application_users (id, organization_id, display_name, role)
@@ -73,7 +69,9 @@ set organization_id = excluded.organization_id,
     role = excluded.role;
 ```
 
-The application shows an **Access awaiting approval** screen, including the authenticated user's ID, until this assignment is made.
+Give the first administrator the `admin` role and ordinary reporting users the `member` role. The application shows an **Access awaiting approval** screen, including the authenticated user's ID, until this assignment is made.
+
+Keep public signup disabled under **Authentication → Sign In / Providers → Email**. User creation should be performed by an administrator through the Supabase Dashboard. Provide passwords through an approved secure channel; never include them in source code or SQL saved in the repository.
 
 To audit authentication and application access together:
 

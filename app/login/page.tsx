@@ -1,3 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
-export default function LoginPage() { const [email, setEmail] = useState(""); const [notice, setNotice] = useState(""); useEffect(() => { const error = new URLSearchParams(window.location.search).get("error"); if (error) setNotice(error); }, []); return <main className="login"><section className="card"><p className="eyebrow">DEVTRACK</p><h1>Sign in</h1><p>Use your organization’s Microsoft account.</p><a className="button microsoft-button" href="/api/auth/microsoft">Continue with Microsoft</a><div className="login-divider"><span>or use an email link</span></div><form onSubmit={async (event) => { event.preventDefault(); const response = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }); const body = await response.json(); setNotice(response.ok ? "Check your email for a sign-in link." : body.error); }}><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /><button className="secondary">Send sign-in link</button></form>{notice && <p className="notice">{notice}</p>}</section></main>; }
+import { useState } from "react";
+
+export default function LoginPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [notice, setNotice] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  return <main className="login"><section className="card"><p className="eyebrow">DEVTRACK</p><h1>Sign in</h1><p>Sign in with the email and password supplied by your DevTrack administrator.</p><form onSubmit={async (event) => { event.preventDefault(); setSubmitting(true); setNotice(""); const response = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) }); const body = await response.json(); setSubmitting(false); if (!response.ok) return setNotice(body.error); window.location.assign(body.redirectTo); }}><label>Email<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /></label><label>Password<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required /></label><button disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</button></form>{notice && <p className="notice error">{notice}</p>}</section></main>;
+}

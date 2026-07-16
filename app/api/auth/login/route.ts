@@ -1,11 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { env } from "@/lib/env";
 
 export async function POST(request: NextRequest) {
-  const parsed = z.object({ email: z.string().email() }).safeParse(await request.json());
-  if (!parsed.success) return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
-  const supabase = await createClient(); const { error } = await supabase.auth.signInWithOtp({ email: parsed.data.email, options: { emailRedirectTo: `${env.NEXT_PUBLIC_APP_URL}/auth/callback` } });
-  return error ? NextResponse.json({ error: "Could not send sign-in link." }, { status: 500 }) : NextResponse.json({ ok: true });
+  const parsed = z.object({
+    email: z.string().trim().email(),
+    password: z.string().min(8).max(128)
+  }).safeParse(await request.json());
+  if (!parsed.success) return NextResponse.json({ error: "Enter a valid email and password." }, { status: 400 });
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
+  if (error || !data.user) {
+    return NextResponse.json({ error: "The email or password is incorrect." }, { status: 401 });
+  }
+
+  const { data: applicationUser } = await supabase
+    .from("application_users")
+    .select("id")
+    .eq("id", data.user.id)
+    .maybeSingle();
+
+  return NextResponse.json({ ok: true, redirectTo: applicationUser ? "/" : "/access-pending" });
 }
