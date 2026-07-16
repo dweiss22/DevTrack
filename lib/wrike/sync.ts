@@ -124,7 +124,13 @@ async function upsertMetadata(organizationId: string, client: WrikeClient, accou
   const enabledFieldMap = new Map<string, { id: string; type: string | null; options: Map<string,string> }>();
   for (const row of enabledAfter ?? []) {
     const field = row.wrike_custom_fields as unknown as { id: string; wrike_id: string; field_type: string | null; raw_data: WrikeCustomField } | null;
-    if (field) enabledFieldMap.set(field.wrike_id, { id: field.id, type: field.field_type, options: new Map((field.raw_data.settings?.values ?? []).flatMap((option) => option.id && option.value ? [[option.id, option.value] as [string,string]] : [])) });
+    if (field) {
+      const readableValues = [
+        ...(field.raw_data.settings?.values ?? []),
+        ...(field.raw_data.settings?.options ?? []).map((option) => option.value)
+      ];
+      enabledFieldMap.set(field.wrike_id, { id: field.id, type: field.field_type, options: new Map(readableValues.map((value) => [value, value])) });
+    }
   }
   return { userMap, spaceMap, folderMap, projectMap, enabledFieldMap, userCount: users.length };
 }
@@ -138,7 +144,10 @@ function normalizedCustomValue(value: unknown, type: string | null, options = ne
     text_value: scalar.map((item) => options.get(item) ?? item).join(", ") || null,
     numeric_value: Number.isFinite(numberValue) ? numberValue : null,
     date_value: dateValue,
-    option_ids: lowered.includes("drop") || lowered.includes("select") ? scalar : []
+    display_value: Array.isArray(value) ? scalar.map((item) => options.get(item) ?? item) : scalar.length ? options.get(scalar[0]) ?? scalar[0] : null,
+    option_ids: [],
+    option_values: lowered.includes("drop") || lowered.includes("select") ? scalar : [],
+    resolved: true
   };
 }
 

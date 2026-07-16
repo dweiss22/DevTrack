@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const migration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607160002_reliable_reporting.sql"), "utf8");
 const spaceImportMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607160003_one_click_space_import.sql"), "utf8");
 const folderImportMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607160004_folder_task_import.sql"), "utf8");
+const metadataMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607160005_real_wrike_metadata.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -33,5 +34,12 @@ describe("reporting migration contract", () => {
     expect(folderImportMigration).toContain("reset_wrike_reporting_data");
     expect(folderImportMigration).toContain("delete from public.wrike_tasks where organization_id=target_organization_id");
     expect(folderImportMigration).toContain("grant execute on function public.reset_wrike_reporting_data(uuid) to service_role");
+  });
+  it("preserves real folder and readable custom-field metadata", () => {
+    expect(metadataMigration).toContain("child_wrike_ids text[]");
+    expect(metadataMigration).toContain("enriched_metadata jsonb");
+    expect(metadataMigration).toContain("option_values text[]");
+    expect(metadataMigration).toContain("metadata_diagnostics jsonb");
+    expect(metadataMigration).toContain("'title', coalesce(folder.title, project.title, l.wrike_location_id)");
   });
 });

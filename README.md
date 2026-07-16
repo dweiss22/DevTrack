@@ -16,9 +16,9 @@ The ingestion layer is deliberately separate from reporting tables, so a transit
 
 1. An administrator signs in with an administrator-created Supabase email/password account and connects Wrike from **Administration**.
 2. The OAuth callback securely exchanges the code and stores AES-256-GCM encrypted access and refresh tokens. OAuth state is signed and expires after 10 minutes.
-3. The administrator selects **Reset and import folder tasks**. This first-stage importer calls only the 13 configured Wrike folder-task GET endpoints.
-4. DevTrack retrieves and paginates every folder response before changing Supabase, then resets prior Wrike-derived reporting rows, deduplicates tasks, and stores task details plus source-folder membership.
-5. The Tasks page and dashboard read the imported task rows. Timelogs, contacts, workflows, and other Wrike APIs are deliberately deferred until task ingestion is validated.
+3. The administrator selects **Reset and import folder tasks**. The importer validates the Learning folder tree, both LCT custom-field title searches, and the 13 configured Wrike folder-task GET endpoints.
+4. DevTrack retrieves and validates every response before changing Supabase, then resets prior Wrike-derived reporting rows, deduplicates tasks, and stores task details with resolved folder and LCT labels.
+5. The Tasks page and task detail show readable folder/custom-field titles while retaining Wrike IDs internally. Timelogs, contacts, workflows, and other Wrike APIs remain deferred.
 
 ## Local setup
 
@@ -116,16 +116,25 @@ The Administration health check verifies the account endpoint, data-center host,
 
 ### Focused folder task import
 
-The only enabled bulk-import action in Administration is **Reset and import folder tasks**. It calls `GET /folders/{folderId}/tasks` with `descendants=true`, subtasks, optional reporting fields, and pagination for the explicit 13-folder allowlist in `lib/wrike/folder-task-import.ts`. The application endpoint is `POST /api/wrike/import-folder-tasks` because clicking it changes Supabase data.
+The only enabled bulk-import action in Administration is **Reset and import folder tasks**. It calls:
 
-All 13 Wrike responses must succeed before existing Wrike-derived data is reset. The importer keeps the OAuth connection, organization, and application users, writes deduplicated tasks to `public.wrike_tasks`, records source membership in `public.wrike_folder_task_imports`, and records the result in `public.wrike_folder_task_import_runs`:
+- `GET /folders/IEACHQK7I46YBWEN/folders` for the real `folderTree` metadata response.
+- `GET /customfields?title=%5BLCT%5D` and `GET /customfields?title=LCT`; if neither returns the required `LCT Reporting` field, it falls back to `GET /customfields` and applies a narrow local prefix rule.
+- `GET /folders/{folderId}/tasks` with `descendants=true`, subtasks, optional reporting fields, and pagination for the explicit 13-folder allowlist in `lib/wrike/folder-task-import.ts`.
+
+Custom-field URLs are constructed with `URL` and `URLSearchParams`. Dropdown values are treated as the readable strings Wrike actually returns; the importer does not manufacture option IDs. The application endpoint remains `POST /api/wrike/import-folder-tasks` because clicking it changes Supabase data.
+
+The folder tree, custom-field metadata, and all 13 task responses must validate before existing Wrike-derived data is reset. The importer keeps the OAuth connection, organization, and application users; stores raw responses plus normalized folders, projects, LCT definitions, locations, and values; and records title-search evidence in `public.wrike_folder_task_import_runs.metadata_diagnostics`:
 
 ```sql
-select t.title,t.status,m.folder_wrike_id,m.imported_at
+select t.title,t.status,f.wrike_id as folder_id,f.title as folder_title,m.imported_at
 from public.wrike_tasks t
 join public.wrike_folder_task_imports m on m.task_id=t.id
+left join public.wrike_folders f on f.id=m.folder_id
 order by m.imported_at desc,t.title;
 ```
+
+After the first production import, open the Administration import history to record whether `[LCT]` returned `LCT Reporting`, what the `LCT` query returned, whether the unfiltered fallback was required, and the final matched titles. Wrike exposes the `title` parameter but does not document its exact matching semantics, so the stored live response evidence is authoritative for this account.
 
 ## Data and metric definitions
 
@@ -139,7 +148,7 @@ order by m.imported_at desc,t.title;
 
 ## Later reporting stages
 
-The current navigation intentionally exposes only Overview, Tasks, and Administration. Task filters are URL-backed and server-paginated. People, time-entry, workflow, folder-name, custom-field-definition, reporting-group, and Ask DevTrack features remain in the codebase but are not part of this first API validation stage.
+The current navigation intentionally exposes only Overview, Tasks, and Administration. Task filters are URL-backed and server-paginated. Folder names and LCT custom-field definitions are now resolved; people, time-entry, workflow, reporting-group, and Ask DevTrack features remain outside this stage.
 
 They should be enabled one API at a time only after the 13-folder task counts and sample task fields have been checked against Wrike.
 
@@ -158,12 +167,12 @@ npm run build
 
 The unit suite covers metrics, filters, the deterministic question parser, Wrike hosts, pagination, task paths, and effort/time normalization. `supabase/tests/reporting_rls.sql` adds database integration coverage for organization isolation, compatibility access, intersection/union groups, and conversation auditing; run it against a local Supabase stack with `supabase test db`.
 
-No live Wrike access is required for automated tests. Production validation for this stage requires applying all migrations through `202607160004_folder_task_import.sql`, deploying the server-side credentials, reconnecting Wrike if necessary, running the health check, selecting **Reset and import folder tasks**, and comparing the displayed unique task count and sampled task fields with the 13 Wrike folder responses.
+No live Wrike access is required for automated tests. Production validation for this stage requires applying all migrations through `202607160005_real_wrike_metadata.sql`, deploying the server-side credentials, reconnecting Wrike if necessary, running the health check, selecting **Reset and import folder tasks**, inspecting the recorded title-search diagnostics, and comparing sampled task folders and LCT values with Wrike.
 
 ## Troubleshooting
 
 - **“Wrike OAuth is not configured”**: check client ID, secret, app URL, and token encryption key.
 - **Callback fails**: ensure the callback URL in Wrike exactly matches `NEXT_PUBLIC_APP_URL/api/wrike/callback`, including protocol.
 - **Token refresh fails**: reconnect from Administration; an expired/revoked connection is marked accordingly without exposing the underlying token.
-- **No data after import**: first apply migration `202607160004_folder_task_import.sql`. Then verify the connecting administrator can open every configured folder in Wrike and select **Reset and import folder tasks**. A successful OAuth connection alone does not run the task API.
+- **No data after import**: first apply migrations through `202607160005_real_wrike_metadata.sql`. Then verify the connecting administrator can read the Learning folder tree, `LCT Reporting`, and every configured task folder before selecting **Reset and import folder tasks**. A successful OAuth connection alone does not run the APIs.
 - **User cannot see reports**: make sure their Auth user ID is in `application_users` for the correct organization. RLS intentionally prevents cross-organization reads.

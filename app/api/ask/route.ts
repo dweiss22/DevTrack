@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     supabase.from("wrike_enabled_custom_fields").select("wrike_custom_fields(id,title,raw_data)").eq("organization_id", profile.organization_id)
   ]);
   const enabledFields = (customFields ?? []).flatMap((row) => {
-    const field = row.wrike_custom_fields as unknown as { id: string; title: string; raw_data?: { settings?: { values?: { value?: string }[] } } } | null;
+    const field = row.wrike_custom_fields as unknown as { id: string; title: string; raw_data?: { settings?: { values?: string[]; options?: { value: string }[] } } } | null;
     return field ? [field] : [];
   });
   const references: AskReferences = {
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     projects: (projects ?? []).map((row) => ({ id: row.id, name: row.title })),
     statuses: [...new Set((statusRows ?? []).map((row) => row.title))],
     customFields: enabledFields.map((field) => ({ id: field.id, name: field.title })),
-    customOptions: enabledFields.flatMap((field) => (field.raw_data?.settings?.values ?? []).flatMap((option) => option.value ? [{ fieldId: field.id, fieldName: field.title, name: option.value }] : []))
+    customOptions: enabledFields.flatMap((field) => [...new Set([...(field.raw_data?.settings?.values ?? []), ...(field.raw_data?.settings?.options ?? []).map((option) => option.value)])].map((name) => ({ fieldId: field.id, fieldName: field.title, name })))
   };
   const parsed = parseAsk(parsedBody.data.message, references, organization.timezone, previousFilters);
   if (!conversationId) {

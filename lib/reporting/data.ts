@@ -4,7 +4,7 @@ import { filtersForRpc, type ReportingFilters } from "@/lib/reporting/filters";
 export type ReportingTaskRow = {
   task_id: string; title: string; status: string; custom_status_id: string | null; due_date: string | null; completed_at: string | null;
   planned_minutes: number | null; actual_minutes: number; updated_at_wrike: string | null;
-  assignees: { id: string; name: string }[]; locations: { folderId: string | null; projectId: string | null; wrikeId: string }[];
+  assignees: { id: string; name: string }[]; locations: { folderId: string | null; projectId: string | null; wrikeId: string; title: string; scope: string | null; resolved: boolean }[];
   custom_values: Record<string, string | null>; total_count: number;
 };
 export type ReportingTimeRow = { entry_id: string; entry_date: string; minutes: number; category: string | null; comment: string | null; task_id: string; task_title: string; task_status: string; user_id: string | null; user_name: string | null; total_count: number };

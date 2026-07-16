@@ -11,6 +11,6 @@ describe("stored Wrike GET calls", () => {
 
   it("encodes dynamic path and query values", () => {
     expect(wrikeEndpoints.folderChildren("folder/one")).toBe("/folders/folder%2Fone/folders");
-    expect(wrikeEndpoints.customFields("[LCT] & Review")).toBe("/customfields?title=%5BLCT%5D%20%26%20Review");
+    expect(wrikeEndpoints.customFields("[LCT] & Review")).toBe("/customfields?title=%5BLCT%5D+%26+Review");
   });
 });

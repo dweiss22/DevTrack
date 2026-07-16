@@ -32,7 +32,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const statuses = [...new Set((statusOptionsResult.data ?? []).map((row) => row.status).filter(Boolean))].sort();
 
   return <AppShell lastSynced={lastRunResult.data?.created_at}>
-    <header className="page-header"><div><p className="eyebrow">TASK IMPORT OVERVIEW</p><h1>Wrike tasks at a glance</h1><p>These results come only from the configured folder task API.</p></div><a className="button" href="/admin">Import folder tasks</a></header>
+    <header className="page-header"><div><p className="eyebrow">TASK IMPORT OVERVIEW</p><h1>Wrike tasks at a glance</h1><p>These results combine the configured task endpoints with validated folder and LCT metadata.</p></div><a className="button" href="/admin">Import folder tasks</a></header>
     <ReportFilters filters={filters} statuses={statuses} taskOnly />
     <section className="metric-grid">
       <Metric label="Imported tasks" value={totals.trackedTasks} />
@@ -43,6 +43,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <Metric label="Total planned hours" value={hours(totals.plannedMinutes)} />
     </section>
     <DashboardCharts statusData={(statusResult.data ?? []) as { name: string; tasks: number }[]} />
-    <section className="card"><h2>Current import scope</h2><p>Task title, status, dates, description, parent IDs, assignee IDs, custom values, and effort are stored. People, timelogs, workflow definitions, and folder names will remain unavailable until their APIs are added in later steps.</p></section>
+    <section className="card"><h2>Current import scope</h2><p>Task details, effort, parent IDs, readable folder titles, folder/project hierarchy, and LCT custom-field values are stored. People, timelogs, and workflow definitions remain unavailable until their APIs are added in later steps.</p></section>
   </AppShell>;
 }

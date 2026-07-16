@@ -1,11 +1,11 @@
+import { buildCustomFieldsPath } from "@/lib/wrike/metadata";
+
 const pathSegment = (value: string) => encodeURIComponent(value);
 
 export const wrikeEndpoints = {
   accountWorkflows: () => "/workflows",
   folderChildren: (folderId: string) => `/folders/${pathSegment(folderId)}/folders`,
-  customFields: (title?: string) => title
-    ? `/customfields?title=${pathSegment(title)}`
-    : "/customfields",
+  customFields: (title?: string) => buildCustomFieldsPath(title),
   accountTimelogs: () => "/timelogs"
 } as const;
 
