@@ -1,0 +1,1 @@
+{ "crons": [{ "path": "/api/cron/wrike-sync", "schedule": "0 6 * * *" }] }
