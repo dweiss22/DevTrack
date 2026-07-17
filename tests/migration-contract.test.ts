@@ -12,6 +12,7 @@ const referenceDataMigration = fs.readFileSync(path.join(process.cwd(), "supabas
 const customFieldNormalizationMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170003_wrike_custom_field_normalization.sql"), "utf8");
 const referenceResolutionMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170004_wrike_reference_resolution.sql"), "utf8");
 const dashboardAnalyticsMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170005_dashboard_analytics.sql"), "utf8");
+const dashboardPerformanceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170006_dashboard_query_performance.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -121,5 +122,12 @@ describe("reporting migration contract", () => {
     expect(dashboardAnalyticsMigration).toContain("'Cross Vertical'");
     expect(dashboardAnalyticsMigration).toContain("wrike_tasks_workflow_active_idx");
     expect(dashboardAnalyticsMigration).toContain("grant execute on function public.reporting_online_learning_dashboard_v2(jsonb) to authenticated,service_role");
+  });
+  it("uses set-based time aggregation when organization-wide reporting access is available", () => {
+    expect(dashboardPerformanceMigration).toContain("has_unrestricted_organization_access");
+    expect(dashboardPerformanceMigration).toContain("group by entry.task_id");
+    expect(dashboardPerformanceMigration).toContain("public.can_access_wrike_time_entry(entry.id)");
+    expect(dashboardPerformanceMigration).toContain("alter function public.reporting_online_learning_dashboard_v2(jsonb) security definer");
+    expect(dashboardPerformanceMigration).toContain("where task.organization_id=viewer_organization_id");
   });
 });
