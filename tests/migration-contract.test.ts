@@ -11,6 +11,7 @@ const combinedImportMigration = fs.readFileSync(path.join(process.cwd(), "supaba
 const referenceDataMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170002_wrike_reference_data.sql"), "utf8");
 const customFieldNormalizationMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170003_wrike_custom_field_normalization.sql"), "utf8");
 const referenceResolutionMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170004_wrike_reference_resolution.sql"), "utf8");
+const dashboardAnalyticsMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170005_dashboard_analytics.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -109,5 +110,16 @@ describe("reporting migration contract", () => {
     expect(referenceResolutionMigration).toContain("custom_status_value in (select jsonb_array_elements_text(requested))");
     expect(referenceResolutionMigration).toContain("unresolved reference admin access");
     expect(referenceResolutionMigration).toContain("manual mapping admin access");
+  });
+  it("aggregates the redesigned Online Learning dashboard without browser-side raw fact loading", () => {
+    expect(dashboardAnalyticsMigration).toContain("reporting_online_learning_dashboard_v2");
+    expect(dashboardAnalyticsMigration).toContain("IEACHQK7K4BHMLHM");
+    expect(dashboardAnalyticsMigration).toContain("wrike_reporting_year");
+    expect(dashboardAnalyticsMigration).toContain("visible_actual_minutes");
+    expect(dashboardAnalyticsMigration).toContain("dashboard_classification='completed'");
+    expect(dashboardAnalyticsMigration).toContain("'Multiple Authoring Tools'");
+    expect(dashboardAnalyticsMigration).toContain("'Cross Vertical'");
+    expect(dashboardAnalyticsMigration).toContain("wrike_tasks_workflow_active_idx");
+    expect(dashboardAnalyticsMigration).toContain("grant execute on function public.reporting_online_learning_dashboard_v2(jsonb) to authenticated,service_role");
   });
 });

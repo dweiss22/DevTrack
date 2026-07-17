@@ -15,21 +15,27 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--canvas); color: var(--ink); font: 15px/1.45 Inter, ui-sans-serif, system-ui, sans-serif; }
 a { color: inherit; text-decoration: none; }
+a:focus-visible, button:focus-visible { outline: 3px solid #8ec5ff; outline-offset: 2px; }
 
 .app-shell { display: grid; grid-template-columns: 252px 1fr; min-height: 100vh; }
-.app-shell aside { display: flex; flex-direction: column; justify-content: space-between; padding: 24px 14px; background: linear-gradient(165deg, var(--navy) 0%, var(--navy-deep) 72%); color: #dceafb; box-shadow: 8px 0 28px #033a7714; }
+.app-shell > aside { display: flex; flex-direction: column; justify-content: space-between; padding: 24px 14px; background: linear-gradient(165deg, var(--navy) 0%, var(--navy-deep) 72%); color: #dceafb; box-shadow: 8px 0 28px #033a7714; }
 .brand, .login-brand { display: flex; gap: 11px; align-items: center; }
 .brand { margin: 0 10px 32px; color: #fff; }
 .brand-icon { border-radius: 10px; box-shadow: 0 6px 18px #001c3d70; }
 .brand-copy { display: grid; line-height: 1.1; }
 .brand-copy strong { font-size: 19px; letter-spacing: -.2px; }
 .brand-copy small { margin-top: 4px; color: #a9caee; font-size: 10px; font-weight: 650; letter-spacing: .7px; text-transform: uppercase; }
-.app-shell nav { display: grid; gap: 4px; }
-.app-shell nav a { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 8px; }
-.app-shell nav a:hover { background: #ffffff18; color: #fff; }
-.sidebar-footer { margin: 0 10px; }
-.lexipol-logo { display: block; width: 142px; height: auto; margin: 0 0 18px; opacity: .95; }
+.app-shell > aside nav { display: grid; gap: 4px; }
+.app-shell > aside nav a { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 8px; }
+.app-shell > aside nav a:hover { background: #ffffff18; color: #fff; }
+.app-shell > aside nav a.active, .app-shell > aside nav a[aria-current="page"] { background: #fff; color: var(--navy); font-weight: 700; box-shadow: 0 7px 18px #001c3d35; }
+.nav-divider { height: 1px; margin: 10px 8px; background: #ffffff2e; }
+.sidebar-footer { display: grid; gap: 12px; margin: 28px 10px 0; }
+.lexipol-logo { display: block; width: 142px; height: auto; margin: 2px 0; opacity: .95; }
 .sync-note { margin: 0; font-size: 12px; color: #a9bdd5; }
+.logout-button { display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; padding: 10px; border: 1px solid #ffffff2e; background: #ffffff0d; box-shadow: none; }
+.logout-button:hover { background: #ffffff1c; }
+.sidebar-mobile-toggle, .sidebar-backdrop { display: none; }
 
 main { max-width: 1500px; width: 100%; padding: 42px; margin: auto; }
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 28px; }
@@ -50,6 +56,36 @@ main { max-width: 1500px; width: 100%; padding: 42px; margin: auto; }
 .metric small { display: block; color: var(--muted); margin-top: 4px; }
 .chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 14px 0; }
 .chart h2, .card h2 { font-size: 16px; margin: 0 0 18px; }
+.breadcrumb { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; color: var(--muted); font-size: 13px; }
+.breadcrumb a { color: var(--blue); font-weight: 650; }
+
+.dashboard-header { margin-bottom: 20px; }
+.dashboard-stat-bar { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin: 0 0 20px; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 8px 24px #033a770a; }
+.dashboard-stat { min-height: 126px; padding: 24px 28px; border-right: 1px solid var(--line); }
+.dashboard-stat:last-child { border-right: 0; }
+.dashboard-stat p { margin: 0; color: var(--muted); font-size: 13px; font-weight: 650; }
+.dashboard-stat strong { display: block; margin: 6px 0 1px; color: var(--navy); font-size: 34px; line-height: 1.15; }
+.dashboard-stat small { font-size: 12px; }
+.dashboard-charts { display: grid; gap: 18px; }
+.dashboard-chart { min-width: 0; padding: 24px; }
+.dashboard-chart h2 { margin: 0 0 4px; font-size: 18px; }
+.dashboard-chart > p, .chart-heading p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+.chart-heading { display: flex; justify-content: space-between; gap: 16px; }
+.chart-empty { display: grid; place-items: center; min-height: 220px; text-align: center; }
+.chart-notice { padding: 12px; border-radius: 8px; background: #fff8e6; color: #815400 !important; }
+.chart-tooltip { display: grid; gap: 5px; max-width: 320px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 9px; background: #fff; box-shadow: 0 8px 24px #0b244224; font-size: 12px; }
+.chart-tooltip span { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.chart-tooltip span small { flex-basis: 100%; margin-left: 13px; }
+.chart-tooltip i { width: 8px; height: 8px; border-radius: 2px; }
+.chart-data { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+.chart-data summary { width: max-content; color: var(--blue); cursor: pointer; font-size: 12px; font-weight: 650; }
+.chart-data table { margin-top: 10px; }
+.dashboard-donut-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; }
+.donut-card { min-width: 0; }
+.sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
+.loading-chart { min-height: 320px; }
+.loading-pulse { border-radius: 8px; background: linear-gradient(90deg,#edf3f9 25%,#f8fbfe 50%,#edf3f9 75%); background-size: 200% 100%; animation: loading-shimmer 1.5s infinite; }
+@keyframes loading-shimmer { to { background-position: -200% 0; } }
 
 table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 th, td { text-align: left; padding: 12px; border-bottom: 1px solid var(--line); }
@@ -119,11 +155,17 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
 
 @media (max-width: 1100px) {
   .filter-fields { grid-template-columns: repeat(3, minmax(130px, 1fr)); }
+  .dashboard-donut-grid { grid-template-columns: 1fr 1fr; }
+  .dashboard-donut-grid > :last-child { grid-column: 1 / -1; }
 }
 @media (max-width: 900px) {
   .app-shell { grid-template-columns: 1fr; }
-  .app-shell aside { display: none; }
-  main { padding: 24px; }
+  .app-shell > aside { position: fixed; z-index: 60; inset: 0 auto 0 0; width: min(300px,85vw); transform: translateX(-105%); transition: transform .2s ease; }
+  .app-shell > aside.sidebar-open { transform: translateX(0); }
+  .sidebar-mobile-toggle { position: fixed; z-index: 55; top: 12px; left: 12px; display: flex; align-items: center; gap: 7px; padding: 8px 11px; }
+  .sidebar-mobile-toggle svg { width: 18px; }
+  .sidebar-backdrop { position: fixed; z-index: 50; inset: 0; display: block; border-radius: 0; background: #00152d99; box-shadow: none; }
+  main { padding: 72px 24px 24px; }
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .chart-grid, .admin-grid, .ask-layout { grid-template-columns: 1fr; }
   .conversation-list { order: 2; }
@@ -132,6 +174,11 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
   .filter-fields { grid-template-columns: 1fr 1fr; }
   .ask-form { grid-template-columns: 1fr; }
   .metric-grid { grid-template-columns: 1fr; }
+  .dashboard-stat-bar { grid-template-columns: 1fr; }
+  .dashboard-stat { min-height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .dashboard-stat:last-child { border-bottom: 0; }
+  .dashboard-donut-grid { grid-template-columns: 1fr; }
+  .dashboard-donut-grid > :last-child { grid-column: auto; }
   .page-header { flex-direction: column; }
   table { display: block; overflow-x: auto; }
 }

@@ -66,7 +66,8 @@ describe("central Wrike reference resolution", () => {
   it("parses every workflow and defensive space pages and classifies statuses centrally", () => {
     expect(parseWrikeWorkflowsResponse({ data: [{ id: "WF1", name: "One" }, { id: "WF2", name: "Two", customStatuses: [] }] })).toHaveLength(2);
     expect(parseWrikeSpacesResponse({ data: [{ id: "SPACE001", title: "Learning" }], nextPageToken: "next" })).toEqual({ data: [{ id: "SPACE001", title: "Learning" }], nextPageToken: "next" });
-    expect(automaticStatusClassification({ name: "Stalled - Waiting", group: "Active" })).toBe("stalled_or_canceled");
+    expect(automaticStatusClassification({ name: "Stalled - Waiting", group: "Active" })).toBe("active");
+    expect(automaticStatusClassification({ name: "Any label", group: "Canceled" })).toBe("stalled_or_canceled");
     expect(automaticStatusClassification({ name: "Published", group: "Completed" })).toBe("completed");
     expect(automaticStatusClassification({ name: "In review", group: "Active" })).toBe("active");
     expect(automaticStatusClassification({ name: "Unknown", group: "Other" })).toBeNull();

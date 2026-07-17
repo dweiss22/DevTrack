@@ -6,7 +6,7 @@ export async function POST() {
   const { profile } = await requireAdmin();
   try {
     const result = await importConfiguredFolderTasks(profile.organization_id);
-    return NextResponse.json({ ok: true, ...result, tasksUrl: "/tasks" });
+    return NextResponse.json({ ok: true, ...result, tasksUrl: "/projects" });
   } catch (error) {
     return NextResponse.json({
       error: error instanceof Error ? error.message : "Folder task and timelog import failed.",

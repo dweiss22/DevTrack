@@ -142,9 +142,8 @@ const failureFor = (operation: ReferenceFailure["operation"], wrikeId: string | 
 });
 
 export function automaticStatusClassification(status: Pick<WrikeWorkflowStatus, "name" | "group">) {
-  const title = status.name.toLocaleLowerCase();
   const group = (status.group ?? "").toLocaleLowerCase();
-  if (/(stalled|cancelled|canceled)/.test(title) || group === "cancelled" || group === "canceled") return "stalled_or_canceled" as const;
+  if (group === "cancelled" || group === "canceled") return "stalled_or_canceled" as const;
   if (group === "completed") return "completed" as const;
   if (group === "active" || group === "deferred") return "active" as const;
   return null;

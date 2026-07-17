@@ -13,6 +13,8 @@ describe("Wrike custom-field normalization", () => {
     expect(normalizeWrikeCustomFieldTitle("[LCT] Authoring Tool (L)")).toEqual({ normalizedTitle: "Authoring Tool", normalizedKey: "authoring tool", sourceDesignation: "L" });
     expect(normalizeWrikeCustomFieldTitle("[LCT] Authoring Tool").normalizedTitle).toBe("Authoring Tool");
     expect(normalizeWrikeCustomFieldTitle("  [lct]   Course   Type   (m) ")).toEqual({ normalizedTitle: "Course Type", normalizedKey: "course type", sourceDesignation: "M" });
+    expect(normalizeWrikeCustomFieldTitle("[LCT] Reporting (M)").normalizedKey).toBe("reporting");
+    expect(normalizeWrikeCustomFieldTitle("[LCT] Reporting (L)").normalizedKey).toBe("reporting");
   });
 
   it("applies only the centralized conservative aliases", () => {

@@ -48,8 +48,8 @@ export async function POST(request: NextRequest) {
   if (parsed.clarification?.length) {
     answer = `I found more than one match: ${parsed.clarification.join(", ")}. Use the exact name or the report filters to narrow the question.`;
   } else if (parsed.intent === "unsupported") {
-    answer = "I can answer deterministic reporting questions such as “Count overdue tasks,” “How much time last month by person?”, or “Compare planned and actual time this quarter.” Use the structured reports for forecasting or other analysis.";
-    referencesOut = [{ id: "tasks-report", title: "Open task filters", href: "/tasks" }, { id: "time-report", title: "Open time filters", href: "/time-entries" }];
+    answer = "I can answer deterministic reporting questions such as “Count overdue projects,” “How much time last month by person?”, or “Compare planned and actual time this quarter.” Use the structured reports for forecasting or other analysis.";
+    referencesOut = [{ id: "projects-report", title: "Open project filters", href: "/projects" }, { id: "time-report", title: "Open time filters", href: "/time-entries" }];
   } else if (parsed.intent === "time-total" || parsed.intent === "time-average" || parsed.intent === "time-breakdown") {
     const summary = await loadTimeSummary(supabase, parsed.filters, parsed.intent === "time-breakdown" ? parsed.groupBy : "total");
     if (!summary.length) answer = "No visible time entries matched that question.";
@@ -60,8 +60,8 @@ export async function POST(request: NextRequest) {
     const taskFilters = { ...parsed.filters, page: 1, pageSize: parsed.intent === "count" ? 10 : 50 };
     const tasks = await loadTaskRows(supabase, taskFilters);
     const total = tasks[0]?.total_count ?? 0;
-    if (parsed.intent === "count") answer = `${total} visible task${total === 1 ? "" : "s"} matched.`;
-    else if (!tasks.length) answer = "No visible tasks matched that question.";
+    if (parsed.intent === "count") answer = `${total} visible project${total === 1 ? "" : "s"} matched.`;
+    else if (!tasks.length) answer = "No visible projects matched that question.";
     else if (parsed.intent === "compare") answer = tasks.slice(0, 20).map((task) => `${task.title}: ${task.planned_minutes == null ? "no plan" : `${hours(task.planned_minutes)} planned`} / ${hours(task.actual_minutes)} actual hours`).join("\n");
     else if (tasks.length === 1 && parsed.filters.q) {
       const entries = await loadTimeRows(supabase, { ...parsed.filters, q: undefined, taskIds: [tasks[0].task_id], page: 1, pageSize: 20 });
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       answer = `${tasks[0].title} is ${status}. It has ${tasks[0].planned_minutes == null ? "no planned effort" : `${hours(tasks[0].planned_minutes)} planned hours`} and ${hours(tasks[0].actual_minutes)} visible recorded hours. Due: ${tasks[0].due_date ?? "not set"}. Assignees: ${assignees}.${recent}`;
     }
     else answer = tasks.slice(0, 20).map((task) => `${task.title} — ${task.status_reference.resolved ? task.status_name : `unresolved Wrike status ${task.custom_status_id}`}, ${hours(task.actual_minutes)} recorded hours`).join("\n");
-    referencesOut = tasks.slice(0, 20).map((task) => ({ id: task.task_id, title: task.title, href: `/tasks/${task.task_id}` }));
+    referencesOut = tasks.slice(0, 20).map((task) => ({ id: task.task_id, title: task.title, href: `/projects/${task.task_id}` }));
   }
   await Promise.all([
     supabase.from("reporting_messages").insert({ conversation_id: conversationId, organization_id: profile.organization_id, user_id: user.id, role: "assistant", content: answer, parsed_query: parsed, result_references: referencesOut }),

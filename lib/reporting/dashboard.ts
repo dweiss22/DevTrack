@@ -1,0 +1,123 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { filtersForRpc, type ReportingFilters } from "@/lib/reporting/filters";
+
+export const ONLINE_LEARNING_WORKFLOW_ID = "IEACHQK7K4BHMLHM";
+
+export type DashboardMetrics = {
+  totalProjects: number;
+  activeProjects: number;
+  completedProjects: number;
+  stalledOrCanceledProjects: number;
+  unresolvedStatusProjects: number;
+  customFieldConflictProjects: number;
+  timeDataSynchronized: boolean;
+};
+
+export type ReportingYearCount = { label: string; sortYear: number; projects: number };
+export type ReportingYearTime = { label: string; sortYear: number; projectCount: number; totalMinutes: number; averageMinutes: number | null; timeDataSynchronized: boolean };
+export type ReportingYearStatus = {
+  label: string;
+  sortYear: number;
+  stalledOrCanceled: number;
+  active: number;
+  completed: number;
+  total: number;
+  stalledStatuses: string[];
+  activeStatuses: string[];
+  completedStatuses: string[];
+};
+export type DashboardCategory = { name: string; projects: number };
+
+export type DashboardAnalytics = {
+  metrics: DashboardMetrics;
+  projectsByReportingYear: ReportingYearCount[];
+  averageTimeByReportingYear: ReportingYearTime[];
+  projectsByStatus: ReportingYearStatus[];
+  courseTypes: DashboardCategory[];
+  authoringTools: DashboardCategory[];
+  verticals: DashboardCategory[];
+};
+
+export const EMPTY_DASHBOARD_ANALYTICS: DashboardAnalytics = {
+  metrics: { totalProjects: 0, activeProjects: 0, completedProjects: 0, stalledOrCanceledProjects: 0, unresolvedStatusProjects: 0, customFieldConflictProjects: 0, timeDataSynchronized: false },
+  projectsByReportingYear: [],
+  averageTimeByReportingYear: [],
+  projectsByStatus: [],
+  courseTypes: [],
+  authoringTools: [],
+  verticals: []
+};
+
+export async function loadDashboardAnalytics(supabase: SupabaseClient, filters: ReportingFilters): Promise<DashboardAnalytics> {
+  const { data, error } = await supabase.rpc("reporting_online_learning_dashboard_v2", { filters: filtersForRpc(filters) });
+  if (error) throw new Error(`Dashboard analytics could not be loaded: ${error.message}`);
+  return data ? data as DashboardAnalytics : EMPTY_DASHBOARD_ANALYTICS;
+}
+
+export function normalizeReportingYear(values: readonly string[]) {
+  const years = new Set<number>();
+  for (const value of values) {
+    const match = value.match(/(?:^|\D)((?:19|20|21)\d{2})(?:\D|$)/);
+    if (match) years.add(Number(match[1]));
+  }
+  return years.size === 1 ? [...years][0] : null;
+}
+
+export function normalizeDashboardValues(values: readonly string[]) {
+  const byKey = new Map<string, string>();
+  for (const value of values) {
+    const display = value.trim().replace(/\s+/g, " ");
+    if (!display) continue;
+    const key = display.toLocaleLowerCase();
+    if (!byKey.has(key)) byKey.set(key, display);
+  }
+  return [...byKey.values()];
+}
+
+export function dashboardCategory(values: readonly string[], multipleLabel: string) {
+  const normalized = normalizeDashboardValues(values);
+  if (!normalized.length) return "Unassigned";
+  return normalized.length === 1 ? normalized[0] : multipleLabel;
+}
+
+export function averageProjectMinutes(projectMinutes: readonly number[]) {
+  if (!projectMinutes.length) return null;
+  return projectMinutes.reduce((sum, minutes) => sum + minutes, 0) / projectMinutes.length;
+}
+
+export type DashboardProjectSample = {
+  workflowId: string | null;
+  statusWorkflowId?: string | null;
+  classification: "completed" | "active" | "stalled_or_canceled" | null;
+  reportingValues?: string[];
+  actualMinutes?: number;
+};
+
+export function isOnlineLearningProject(project: Pick<DashboardProjectSample, "workflowId" | "statusWorkflowId">) {
+  return project.workflowId === ONLINE_LEARNING_WORKFLOW_ID || project.statusWorkflowId === ONLINE_LEARNING_WORKFLOW_ID;
+}
+
+export function effectiveDashboardClassification(classification: DashboardProjectSample["classification"]) {
+  return classification === "completed" || classification === "stalled_or_canceled" ? classification : "active";
+}
+
+export function dashboardMetricCounts(projects: readonly DashboardProjectSample[]) {
+  const included = projects.filter(isOnlineLearningProject);
+  return {
+    totalProjects: included.length,
+    activeProjects: included.filter((project) => effectiveDashboardClassification(project.classification) === "active").length,
+    completedProjects: included.filter((project) => effectiveDashboardClassification(project.classification) === "completed").length
+  };
+}
+
+export function completedReportingYearAverages(projects: readonly DashboardProjectSample[]) {
+  const grouped = new Map<string, { sortYear: number; minutes: number[] }>();
+  for (const project of projects.filter((item) => isOnlineLearningProject(item) && effectiveDashboardClassification(item.classification) === "completed")) {
+    const year = normalizeReportingYear(project.reportingValues ?? []);
+    const label = year == null ? "Unassigned" : String(year);
+    const group = grouped.get(label) ?? { sortYear: year ?? Number.MAX_SAFE_INTEGER, minutes: [] };
+    group.minutes.push(project.actualMinutes ?? 0);
+    grouped.set(label, group);
+  }
+  return [...grouped.entries()].map(([label, group]) => ({ label, sortYear: group.sortYear, projectCount: group.minutes.length, totalMinutes: group.minutes.reduce((sum, minutes) => sum + minutes, 0), averageMinutes: averageProjectMinutes(group.minutes)! })).sort((left, right) => left.sortYear - right.sortYear);
+}

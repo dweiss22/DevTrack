@@ -143,18 +143,20 @@ On the first connected deployment run, DevTrack records `folder_recursive` only 
 
 ## Data and metric definitions
 
-- The Overview dashboard includes only projects related to Online Learning workflow ID `IEACHQK7K4BHMLHM`; status names never determine membership.
-- Dashboard statuses are explicitly classified as **active**, **completed**, **stalled or canceled**, or unresolved. Administrator classifications survive later imports.
-- An unresolved or unclassified Online Learning status remains in Total Projects and the separate Unresolved Status count, never silently in Active.
-- An **overdue** dashboard project is classified active and has a due date before the current date.
-- Completion trends use the Wrike completion timestamp; time trends use each time-entry’s tracked date.
+- The Dashboard includes only projects related to Online Learning workflow ID `IEACHQK7K4BHMLHM`; status names never determine membership.
+- Dashboard statuses use the centralized **active**, **completed**, or **stalled or canceled** classification. Administrator classifications survive later imports, and unresolved statuses remain visibly warned rather than being inferred from their names.
+- Completed Dashboard charts use the explicit completed classification and normalized Reporting value; time is summed from valid synchronized project entries before averaging.
 - Actual effort is the sum of idempotently persisted time-entry minutes. Planned effort uses Wrike effort allocation when available.
 - Shared tasks count once in task totals. Contributors remain visible individually; the application does not silently divide shared work among assignees.
 - Inaccessible or removed records are preserved for history and can be marked deleted rather than hard-deleted.
 
-## Later reporting stages
+## Dashboard and navigation
 
-The current navigation intentionally exposes only Overview, Tasks, and Administration. Task filters are URL-backed and server-paginated. The focused importer now synchronizes all account workflows and statuses, available spaces, timelog categories, folder names, encountered people, LCT custom-field definitions, tasks, and time entries. Broader contacts/account discovery and scheduled synchronization remain disabled.
+The left navigation is organized as Dashboard, Development, SME Collaboration, Other Teams, Projects, and the administrator-only User Management and Data sections. `/projects` is the user-facing project route; existing `/tasks` URLs redirect for compatibility without renaming Wrike or database entities. The persistent footer provides the Lexipol brand and a Supabase-backed Logout action.
+
+The Dashboard calls one RLS-aware database function, `reporting_online_learning_dashboard_v2`, rather than loading raw facts into the browser. It returns the statistics bar, completed projects and average project-level time by validated Reporting year, stacked status classifications, and one-project-per-category Course Type, Authoring Tool, and Vertical distributions. Reporting, Course Type, Authoring Tool, and Vertical use the normalized custom-field layer, so `(M)` and `(L)` sources are merged and conflicts remain available for administrative review.
+
+Apply `202607170005_dashboard_analytics.sql` after the reference-resolution migration. The migration adds the aggregated Dashboard function, a validated reporting-year helper, and indexes for workflow, active timelog, and normalized-field lookups.
 
 ## Scheduling and deployment
 
@@ -171,12 +173,12 @@ npm run build
 
 The unit suite covers metrics, filters, the deterministic question parser, Wrike hosts, pagination, task paths, and effort/time normalization. `supabase/tests/reporting_rls.sql` adds database integration coverage for organization isolation, compatibility access, intersection/union groups, and conversation auditing; run it against a local Supabase stack with `supabase test db`.
 
-No live Wrike access is required for automated tests. Production validation requires applying all migrations through `202607170004_wrike_reference_resolution.sql`, deploying server-side credentials, reconnecting Wrike to grant `amReadOnlyUser`, running the health check, selecting **Import folder tasks and timelogs**, and inspecting unresolved-reference, workflow-classification, custom-field conflict, task-contract, and descendant diagnostics before comparing sampled records with Wrike.
+No live Wrike access is required for automated tests. Production validation requires applying all migrations through `202607170005_dashboard_analytics.sql`, deploying server-side credentials, reconnecting Wrike to grant `amReadOnlyUser`, running the health check, selecting **Import folder tasks and timelogs**, and inspecting unresolved-reference, workflow-classification, custom-field conflict, task-contract, descendant, and Dashboard diagnostics before comparing sampled records with Wrike.
 
 ## Troubleshooting
 
 - **“Wrike OAuth is not configured”**: check client ID, secret, app URL, and token encryption key.
 - **Callback fails**: ensure the callback URL in Wrike exactly matches `NEXT_PUBLIC_APP_URL/api/wrike/callback`, including protocol.
 - **Token refresh fails**: reconnect from Administration; an expired/revoked connection is marked accordingly without exposing the underlying token.
-- **No data after import**: first apply migrations through `202607170004_wrike_reference_resolution.sql`. Then verify the connecting administrator can read workflows, spaces, the Learning folder tree, custom-field definitions, and every configured task/timelog folder before selecting **Import folder tasks and timelogs**. Reconnect if Administration reports that `amReadOnlyUser` is missing. A successful OAuth connection alone does not run the APIs, and the post-migration import is required to populate normalized fields, reference state, and dashboard classifications.
+- **No data after import**: first apply migrations through `202607170005_dashboard_analytics.sql`. Then verify the connecting administrator can read workflows, spaces, the Learning folder tree, custom-field definitions, and every configured task/timelog folder before selecting **Import folder tasks and timelogs**. Reconnect if Data administration reports that `amReadOnlyUser` is missing. A successful OAuth connection alone does not run the APIs, and the post-migration import is required to populate normalized fields, reference state, and dashboard classifications.
 - **User cannot see reports**: make sure their Auth user ID is in `application_users` for the correct organization. RLS intentionally prevents cross-organization reads.

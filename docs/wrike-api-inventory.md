@@ -168,13 +168,17 @@ An unresolved ID is never presented as if it were a meaningful name. The interfa
 
 Administration provides a complete correction workflow for custom fields. An administrator can map an unknown field to an existing normalized field, create a new normalized field, or intentionally ignore it. `wrike_manual_mappings` remains separate from authoritative Wrike metadata and takes precedence during later imports. Saving or removing a mapping claims the organization import lease and rebuilds affected normalized task values from preserved local raw data; it does not call Wrike. Ignored values remain available in raw administrator metadata but are excluded from filters, search, grouping, and Ask DevTrack.
 
-Online Learning dashboard membership uses workflow ID `IEACHQK7K4BHMLHM` from either the task or its synchronized custom-status relationship; status names are never used to infer membership. Status classifications are `active`, `completed`, `stalled_or_canceled`, or unclassified. Automatic initialization uses the Wrike group plus explicit stalled/canceled names, while administrator choices persist across later workflow imports. Projects with unresolved or unclassified statuses remain in Total Projects and a separate Unresolved Status count, preserving:
-
-```text
-Total Projects = Active + Completed + Stalled or Canceled + Unresolved Status
-```
+Online Learning dashboard membership uses workflow ID `IEACHQK7K4BHMLHM` from either the task or its synchronized custom-status relationship; status names are never used to infer membership. Status classifications are `active`, `completed`, `stalled_or_canceled`, or unclassified. Automatic initialization uses Wrike's synchronized status group only. A status such as Stalled or On Hold whose Wrike group remains Active must be explicitly classified by an administrator using its stable status ID; administrator choices persist across later workflow imports. Unclassified statuses remain visibly warned and are never inferred from their titles.
 
 Migration `202607170004_wrike_reference_resolution.sql` and one post-deployment combined import are required to populate reference state, spaces, status classifications, unresolved queues, and dynamic users.
+
+## Dashboard Analytics
+
+The redesigned Dashboard adds no Wrike API calls. Server components call the RLS-aware `reporting_online_learning_dashboard_v2` database function, which aggregates already synchronized tasks, statuses, normalized custom-field values, and valid time entries. Membership is determined only by stable Online Learning workflow ID `IEACHQK7K4BHMLHM` on the task or its synchronized custom status.
+
+Reporting years are derived only when the normalized **Reporting** values contain one unambiguous year in the supported `1900`–`2199` range; malformed or conflicting values remain **Unassigned**. Completed-project time is summed once per project before the yearly average is calculated. Course Type and Authoring Tool values are case/whitespace deduplicated and each project contributes one category; multiple tools become **Multiple Authoring Tools**. Vertical values follow zero → **Unassigned**, one → that value, and more than one → **Cross Vertical**. Source IDs, titles, raw values, and conflict diagnostics remain in the normalized-field persistence layer.
+
+Migration `202607170005_dashboard_analytics.sql` creates the aggregation RPC, reporting-year helper, and supporting indexes. The `/projects` route is presentation-only: legacy `/tasks` routes redirect to it, while Wrike task IDs, API paths, database tables, and synchronization code retain their established names.
 
 ## Active DevTrack entry points
 
