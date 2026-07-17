@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { folderTasksPath, TASK_IMPORT_FOLDER_IDS } from "@/lib/wrike/folder-task-import";
+import { chooseTimelogDescendantStrategy, deduplicateByWrikeId, folderTasksPath, folderTimelogsPath, mapWithConcurrency, TASK_FIELDS, TASK_IMPORT_FOLDER_IDS, verifyTaskRequestContract } from "@/lib/wrike/folder-task-import";
+import { SELECTED_WRIKE_FOLDERS, SELECTED_WRIKE_FOLDER_IDS } from "@/lib/wrike/selected-folders";
 import { allocatedMinutes, entryMinutes, plannedMinutes, taskPath } from "@/lib/wrike/sync";
 
 describe("Wrike synchronization contracts", () => {
@@ -17,18 +18,54 @@ describe("Wrike synchronization contracts", () => {
     expect(allocatedMinutes({ id: "T", title: "Task", status: "Active", effortAllocation: { totalEffort: 125, allocatedEffort: 90 } })).toBe(90);
     expect(entryMinutes({ id: "E", taskId: "T", trackedDate: "2026-07-01", hours: 1.25 })).toBe(75);
   });
-  it("builds the 13 configured folder task GET requests", () => {
+  it("shares the exact 13 selected folder IDs and titles with task and timelog imports", () => {
+    expect(TASK_IMPORT_FOLDER_IDS).toBe(SELECTED_WRIKE_FOLDER_IDS);
+    expect(SELECTED_WRIKE_FOLDERS).toEqual([
+      { id: "IEACHQK7I4UOEPFL", title: "Cordico [New]" },
+      { id: "IEACHQK7I4PGHAIF", title: "Custody [Maint]" },
+      { id: "IEACHQK7I4QUZOFS", title: "Custody [New]" },
+      { id: "IEACHQK7I45QZU3G", title: "Dispatch [New]" },
+      { id: "IEACHQK7I4PGHAD7", title: "EMS [Maint]" },
+      { id: "IEACHQK7I4SCO46Z", title: "EMS [New]" },
+      { id: "IEACHQK7I4PGHBAC", title: "Fire [Maint]" },
+      { id: "IEACHQK7I4N7GGRM", title: "Fire [New]" },
+      { id: "IEACHQK7I4PGHACI", title: "Law Enforcement [Maint]" },
+      { id: "IEACHQK7I4N7GGQ4", title: "Law Enforcement [New]" },
+      { id: "IEACHQK7I4PGG7Z2", title: "Local Gov [Maint]" },
+      { id: "IEACHQK7I4SCPAAB", title: "Local Gov [New]" },
+      { id: "IEACHQK7I4N7GGRB", title: "Non-Vertical Content Projects [Maint]" }
+    ]);
     expect(TASK_IMPORT_FOLDER_IDS).toHaveLength(13);
     expect(new Set(TASK_IMPORT_FOLDER_IDS).size).toBe(13);
     for (const folderId of TASK_IMPORT_FOLDER_IDS) {
-      const path = decodeURIComponent(folderTasksPath(folderId));
-      expect(path).toContain(`/folders/${folderId}/tasks?`);
-      expect(path).toContain("descendants=true");
-      expect(path).toContain("subTasks=true");
-      expect(path).toContain('"description"');
-      expect(path).toContain('"responsibleIds"');
-      expect(path).toContain('"customFields"');
-      expect(path).toContain('"effortAllocation"');
+      const contract = verifyTaskRequestContract(folderId);
+      expect(contract).toMatchObject({ valid: true, descendants: true, plainTextCustomFields: true, subTasks: true });
+      expect(contract.fields).toEqual(TASK_FIELDS);
+      expect(folderTimelogsPath(folderId)).toBe(`/folders/${folderId}/timelogs?plainText=true`);
     }
+  });
+  it("rejects malformed task contracts before a request can be sent", () => {
+    const path = folderTasksPath(TASK_IMPORT_FOLDER_IDS[0]);
+    expect(() => verifyTaskRequestContract(TASK_IMPORT_FOLDER_IDS[0], path.replace("plainTextCustomFields=true", "plainTextCustomFields=false"))).toThrow(/plainTextCustomFields=true/);
+    expect(() => verifyTaskRequestContract(TASK_IMPORT_FOLDER_IDS[0], path.replace(encodeURIComponent(JSON.stringify(TASK_FIELDS)), encodeURIComponent('["customFields"]')))).toThrow(/missing required fields/);
+    expect(() => verifyTaskRequestContract(TASK_IMPORT_FOLDER_IDS[0], path.replace(`/folders/${TASK_IMPORT_FOLDER_IDS[0]}/`, "/folders/WRONG/"))).toThrow(/selected folder ID/);
+  });
+  it("uses recursive evidence once and otherwise keeps the conservative explicit-tree strategy", () => {
+    expect(chooseTimelogDescendantStrategy(undefined, 2)).toBe("folder_recursive");
+    expect(chooseTimelogDescendantStrategy(undefined, 0)).toBe("explicit_tree");
+    expect(chooseTimelogDescendantStrategy("explicit_tree", 99)).toBe("explicit_tree");
+    expect(folderTimelogsPath("CHILD", false)).toBe("/folders/CHILD/timelogs?plainText=true&descendants=false");
+  });
+  it("deduplicates records by Wrike ID and bounds folder-request concurrency to four", async () => {
+    expect(deduplicateByWrikeId([{ id: "A", source: 1 }, { id: "A", source: 2 }, { id: "B", source: 3 }])).toEqual([{ id: "A", source: 2 }, { id: "B", source: 3 }]);
+    let active = 0; let maximum = 0;
+    const results = await mapWithConcurrency(Array.from({ length: 13 }, (_, index) => index), 4, async (value) => {
+      active++; maximum = Math.max(maximum, active);
+      await Promise.resolve();
+      active--;
+      return value * 2;
+    });
+    expect(maximum).toBe(4);
+    expect(results).toEqual(Array.from({ length: 13 }, (_, index) => index * 2));
   });
 });

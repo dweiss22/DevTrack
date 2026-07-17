@@ -3,9 +3,11 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const migration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607160002_reliable_reporting.sql"), "utf8");
+const initialMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607160001_initial_schema.sql"), "utf8");
 const spaceImportMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607160003_one_click_space_import.sql"), "utf8");
 const folderImportMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607160004_folder_task_import.sql"), "utf8");
 const metadataMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607160005_real_wrike_metadata.sql"), "utf8");
+const combinedImportMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170001_folder_task_timelog_import.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -41,5 +43,21 @@ describe("reporting migration contract", () => {
     expect(metadataMigration).toContain("option_values text[]");
     expect(metadataMigration).toContain("metadata_diagnostics jsonb");
     expect(metadataMigration).toContain("'title', coalesce(folder.title, project.title, l.wrike_location_id)");
+  });
+  it("supports reconciled folder tasks, historical timelogs, source mappings, and run diagnostics", () => {
+    expect(combinedImportMigration).toContain("task_wrike_id text");
+    expect(combinedImportMigration).toContain("user_wrike_id text");
+    expect(combinedImportMigration).toContain("hours numeric");
+    expect(combinedImportMigration).toContain("alter column task_id drop not null");
+    expect(combinedImportMigration).toContain("on delete set null");
+    expect(combinedImportMigration).toContain("table public.wrike_folder_timelog_imports");
+    expect(combinedImportMigration).toContain("primary key (organization_id, folder_wrike_id, time_entry_id)");
+    expect(initialMigration).toMatch(/wrike_time_entries[\s\S]*unique\s*\(organization_id,\s*wrike_id\)/);
+    expect(combinedImportMigration).toContain("add column folder_id uuid references public.wrike_folders(id) on delete set null");
+    expect(combinedImportMigration).toContain("task_request_contract jsonb");
+    expect(combinedImportMigration).toContain("timelog_descendant_strategy");
+    expect(combinedImportMigration).toContain("failed_folder_request_count");
+    expect(combinedImportMigration).toContain("enable row level security");
+    expect(combinedImportMigration).toContain("grant all on public.wrike_folder_timelog_imports to service_role");
   });
 });

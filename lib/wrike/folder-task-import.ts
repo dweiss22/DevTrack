@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { WrikeClient } from "@/lib/wrike/client";
+import { logWrikeEvent, WrikeApiError, WrikeClient } from "@/lib/wrike/client";
+import { mapWithConcurrency } from "@/lib/wrike/concurrency";
 import { wrikeEndpoints } from "@/lib/wrike/endpoints";
 import {
   buildCustomFieldDefinitionsById,
@@ -10,29 +11,17 @@ import {
   parseFolderTreeResponse,
   type EnrichedTaskMetadata
 } from "@/lib/wrike/metadata";
-import { wrikeSessionFor } from "@/lib/wrike/oauth";
+import { refreshWrikeSessionFor, wrikeSessionFor } from "@/lib/wrike/oauth";
+import { SELECTED_WRIKE_FOLDERS, SELECTED_WRIKE_FOLDER_BY_ID, SELECTED_WRIKE_FOLDER_IDS, type SelectedWrikeFolder } from "@/lib/wrike/selected-folders";
+import { WRIKE_TASK_FIELDS } from "@/lib/wrike/task-fields";
 import { allocatedMinutes, plannedMinutes } from "@/lib/wrike/sync";
-import type { WrikeCustomFieldDefinition, WrikeFolderDefinition, WrikeTask } from "@/lib/wrike/types";
+import type { WrikeCustomFieldDefinition, WrikeFolderDefinition, WrikeTask, WrikeTimeEntry } from "@/lib/wrike/types";
 
-export const TASK_IMPORT_FOLDER_IDS = [
-  "IEACHQK7I4UOEPFL",
-  "IEACHQK7I4PGHAIF",
-  "IEACHQK7I4QUZOFS",
-  "IEACHQK7I45QZU3G",
-  "IEACHQK7I4PGHAD7",
-  "IEACHQK7I4SCO46Z",
-  "IEACHQK7I4PGHBAC",
-  "IEACHQK7I4N7GGRM",
-  "IEACHQK7I4PGHACI",
-  "IEACHQK7I4N7GGQ4",
-  "IEACHQK7I4PGG7Z2",
-  "IEACHQK7I4SCPAAB",
-  "IEACHQK7I4N7GGRB"
-] as const;
+export const TASK_IMPORT_FOLDER_IDS = SELECTED_WRIKE_FOLDER_IDS;
 
 export const FOLDER_METADATA_ROOT_ID = "IEACHQK7I46YBWEN";
 export const EXPECTED_LCT_FIELD_ID = "IEACHQK7JUAHNWFH";
-const TASK_FIELDS = ["description", "responsibleIds", "parentIds", "superTaskIds", "subTaskIds", "customFields", "authorIds", "effortAllocation"];
+export const TASK_FIELDS = WRIKE_TASK_FIELDS;
 const LCT_MATCHING_RULE = "exact 'lct', prefix 'lct ', or prefix '[lct]'";
 const iso = (value?: string) => value ? new Date(value).toISOString() : null;
 const day = (value?: string) => value ? value.slice(0, 10) : null;
@@ -50,8 +39,35 @@ export type FolderImportMetadataDiagnostics = {
 };
 
 export function folderTasksPath(folderId: string) {
-  const params = new URLSearchParams({ descendants: "true", subTasks: "true", fields: JSON.stringify(TASK_FIELDS) });
+  const params = new URLSearchParams({ descendants: "true", plainTextCustomFields: "true", subTasks: "true", fields: JSON.stringify(TASK_FIELDS) });
   return `/folders/${encodeURIComponent(folderId)}/tasks?${params}`;
+}
+
+export function folderTimelogsPath(folderId: string, descendants?: boolean) {
+  const params = new URLSearchParams({ plainText: "true" });
+  if (descendants !== undefined) params.set("descendants", String(descendants));
+  return `/folders/${encodeURIComponent(folderId)}/timelogs?${params}`;
+}
+
+export type TaskRequestContract = { valid: true; descendants: true; plainTextCustomFields: true; subTasks: true; fields: string[] };
+export type TaskRequestContractDiagnostics = TaskRequestContract & { verifiedFolderCount: number; folderIds: string[] };
+export function verifyTaskRequestContract(folderId: string, path = folderTasksPath(folderId)): TaskRequestContract {
+  const url = new URL(path, "https://wrike.invalid");
+  if (url.pathname !== `/folders/${encodeURIComponent(folderId)}/tasks`) throw new Error(`Task request must use one selected folder ID in the URL path: ${folderId}.`);
+  if (url.searchParams.has("folderId") || folderId.includes(",")) throw new Error("Task request cannot use a folderId query or comma-separated folder IDs.");
+  if (url.searchParams.get("descendants") !== "true") throw new Error(`Task request must include descendants=true for ${folderId}.`);
+  if (url.searchParams.get("plainTextCustomFields") !== "true") throw new Error(`Task request must include plainTextCustomFields=true for ${folderId}.`);
+  if (url.searchParams.get("subTasks") !== "true") throw new Error(`Task request must include subTasks=true for ${folderId}.`);
+  let fields: unknown;
+  try { fields = JSON.parse(url.searchParams.get("fields") ?? "null"); } catch { throw new Error(`Task request fields must be valid JSON for ${folderId}.`); }
+  if (!Array.isArray(fields) || TASK_FIELDS.some((field) => !fields.includes(field))) throw new Error(`Task request is missing required fields for ${folderId}.`);
+  return { valid: true, descendants: true, plainTextCustomFields: true, subTasks: true, fields: [...TASK_FIELDS] };
+}
+
+export { mapWithConcurrency } from "@/lib/wrike/concurrency";
+
+export function deduplicateByWrikeId<T extends { id: string }>(records: readonly T[]) {
+  return [...new Map(records.map((record) => [record.id, record])).values()];
 }
 
 function searchAttempt(query: string | null, path: string, fields: WrikeCustomFieldDefinition[]): SearchAttempt {
@@ -126,55 +142,232 @@ export async function validateBeforeReset<T>(loadAndValidate: () => Promise<T>, 
 export async function importConfiguredFolderTasks(organizationId: string) {
   const db = createAdminClient();
   const leaseToken = crypto.randomUUID();
+  const startedAt = new Date();
+  const tracker: ImportTracker = {
+    taskRequests: 0, taskRecords: 0, uniqueTasks: 0, duplicateTasks: 0,
+    timelogRequests: 0, timelogRecords: 0, uniqueTimelogs: 0, duplicateTimelogs: 0,
+    foldersProcessed: 0, failures: [], descendantStrategy: "unknown", descendantDiagnostics: {}, taskRequestContract: null
+  };
   const { data: claimed, error: leaseError } = await db.rpc("claim_wrike_sync_lease", { target_organization_id: organizationId, target_token: leaseToken, lease_minutes: 30 });
   if (leaseError) throw new Error(`Unable to acquire the import lock: ${leaseError.message}`);
   if (!claimed) throw new Error("Another Wrike import is already running. Wait for it to finish before trying again.");
 
+  const { data: run, error: runStartError } = await db.from("wrike_folder_task_import_runs").insert({
+    organization_id: organizationId,
+    status: "running",
+    started_at: startedAt.toISOString(),
+    selected_folder_count: SELECTED_WRIKE_FOLDERS.length
+  }).select("id").single();
+  if (runStartError || !run) {
+    await db.rpc("release_wrike_sync_lease", { target_organization_id: organizationId, target_token: leaseToken });
+    throw new Error("Unable to start the combined import. Apply migration 202607170001 first.");
+  }
+  logWrikeEvent("info", "folder_import_started", { runId: run.id, organizationId, selectedFolderCount: SELECTED_WRIKE_FOLDERS.length });
   try {
-    return await runFolderTaskImport(db, organizationId);
+    return await runFolderTaskImport(db, organizationId, run.id, startedAt, tracker);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown folder task import failure.";
-    await db.from("wrike_folder_task_import_runs").insert({ organization_id: organizationId, status: "failed", error_summary: message.slice(0, 1000) });
-    throw error;
+    const completedAt = new Date();
+    const message = error instanceof Error ? error.message : "Unknown folder task and timelog import failure.";
+    await db.from("wrike_folder_task_import_runs").update(runSummary(tracker, startedAt, completedAt, {
+      status: "failed",
+      error_summary: message.slice(0, 1000)
+    })).eq("id", run.id);
+    logWrikeEvent("error", "folder_import_failed", { runId: run.id, organizationId, message, failures: tracker.failures });
+    throw tracker.failures.length ? new FolderImportError(message, tracker.failures) : error;
   } finally {
     await db.rpc("release_wrike_sync_lease", { target_organization_id: organizationId, target_token: leaseToken });
   }
 }
 
-async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, organizationId: string) {
+type FolderFailure = { operation: "tasks" | "timelogs"; folderId: string; folderTitle: string; requestFolderId: string; status: number | null; message: string };
+export type DescendantStrategy = "unknown" | "folder_recursive" | "explicit_tree";
+type ImportTracker = {
+  taskRequests: number; taskRecords: number; uniqueTasks: number; duplicateTasks: number;
+  timelogRequests: number; timelogRecords: number; uniqueTimelogs: number; duplicateTimelogs: number;
+  foldersProcessed: number; failures: FolderFailure[]; descendantStrategy: DescendantStrategy;
+  descendantDiagnostics: Record<string, unknown>; taskRequestContract: TaskRequestContractDiagnostics | null;
+};
+
+export class FolderImportError extends Error {
+  constructor(message: string, public folderFailures: FolderFailure[]) { super(message); }
+}
+
+function safeFailure(operation: FolderFailure["operation"], source: SelectedWrikeFolder, requestFolderId: string, error: unknown): FolderFailure {
+  return {
+    operation,
+    folderId: source.id,
+    folderTitle: source.title,
+    requestFolderId,
+    status: error instanceof WrikeApiError ? error.status : null,
+    message: (error instanceof Error ? error.message : "Unknown Wrike error").slice(0, 500)
+  };
+}
+
+function runSummary(tracker: ImportTracker, startedAt: Date, completedAt: Date, extra: Record<string, unknown>) {
+  return {
+    ...extra,
+    completed_at: completedAt.toISOString(),
+    duration_ms: completedAt.getTime() - startedAt.getTime(),
+    processed_folder_count: tracker.foldersProcessed,
+    task_request_count: tracker.taskRequests,
+    task_record_count: tracker.taskRecords,
+    unique_task_count: tracker.uniqueTasks,
+    duplicate_task_count: tracker.duplicateTasks,
+    timelog_request_count: tracker.timelogRequests,
+    timelog_record_count: tracker.timelogRecords,
+    unique_timelog_count: tracker.uniqueTimelogs,
+    duplicate_timelog_count: tracker.duplicateTimelogs,
+    failed_folder_request_count: tracker.failures.length,
+    folder_failures: tracker.failures,
+    task_request_contract: tracker.taskRequestContract ?? {},
+    timelog_descendant_strategy: tracker.descendantStrategy,
+    timelog_descendant_diagnostics: tracker.descendantDiagnostics
+  };
+}
+
+export function descendantFolderIds(rootId: string, definitions: WrikeFolderDefinition[]) {
+  const children = new Map(definitions.map((folder) => [folder.id, folder.childIds ?? []]));
+  const found = new Set<string>();
+  const pending = [...(children.get(rootId) ?? [])];
+  while (pending.length) {
+    const id = pending.pop()!;
+    if (found.has(id)) continue;
+    found.add(id);
+    pending.push(...(children.get(id) ?? []));
+  }
+  return [...found];
+}
+
+export function chooseTimelogDescendantStrategy(saved: unknown, recursiveEvidenceCount: number): DescendantStrategy {
+  if (saved === "folder_recursive" || saved === "explicit_tree") return saved;
+  return recursiveEvidenceCount > 0 ? "folder_recursive" : "explicit_tree";
+}
+
+async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, organizationId: string, runId: string, startedAt: Date, tracker: ImportTracker) {
+  const taskPaths = new Map(SELECTED_WRIKE_FOLDERS.map((source) => [source.id, folderTasksPath(source.id)]));
+  const verifiedContracts = SELECTED_WRIKE_FOLDERS.map((source) => verifyTaskRequestContract(source.id, taskPaths.get(source.id)!));
+  tracker.taskRequestContract = {
+    ...verifiedContracts[0],
+    verifiedFolderCount: verifiedContracts.length,
+    folderIds: SELECTED_WRIKE_FOLDERS.map((source) => source.id)
+  };
   const session = await wrikeSessionFor(organizationId);
-  const client = new WrikeClient(session.accessToken, session.apiBaseUrl);
-  const { metadata, byFolder, tasks, enrichedByTaskId } = await validateBeforeReset(async () => {
-    const metadata = await fetchValidatedMetadata(client);
-    const byFolder = new Map<string, WrikeTask[]>();
-    const uniqueTasks = new Map<string, WrikeTask>();
-    for (const folderId of TASK_IMPORT_FOLDER_IDS) {
-      try {
-        const folderTasks = await client.all<WrikeTask>(folderTasksPath(folderId));
-        byFolder.set(folderId, folderTasks);
-        folderTasks.forEach((task) => uniqueTasks.set(task.id, task));
-      } catch (error) {
-        throw new Error(`Wrike folder ${folderId} failed: ${error instanceof Error ? error.message : "Unknown Wrike error"}`);
-      }
+  const client = new WrikeClient(session.accessToken, session.apiBaseUrl, {
+    onUnauthorized: async () => {
+      const refreshed = await refreshWrikeSessionFor(organizationId);
+      return { accessToken: refreshed.accessToken, apiBaseUrl: refreshed.apiBaseUrl };
+    },
+    onRequest: ({ path }) => {
+      if (/\/tasks(?:\?|$)/.test(path)) tracker.taskRequests++;
+      if (/\/timelogs(?:\?|$)/.test(path)) tracker.timelogRequests++;
     }
-    const tasks = [...uniqueTasks.values()];
-    const enrichedByTaskId = new Map(tasks.map((task) => [task.id, enrichTaskMetadata(task, metadata.folderDefinitionsById, metadata.customFieldDefinitionsById)]));
-    return { metadata, byFolder, tasks, enrichedByTaskId };
-  }, async () => {
-    const { error: resetError } = await db.rpc("reset_wrike_reporting_data", { target_organization_id: organizationId });
-    if (resetError) throw new Error("Unable to reset existing Wrike data. Apply migrations through 202607160005 first.");
   });
+  const metadata = await fetchValidatedMetadata(client);
+
+  type FetchResult = { kind: "tasks"; source: SelectedWrikeFolder; records: WrikeTask[] } | { kind: "timelogs"; source: SelectedWrikeFolder; records: WrikeTimeEntry[] };
+  const jobs = SELECTED_WRIKE_FOLDERS.flatMap((source) => [{ kind: "tasks" as const, source }, { kind: "timelogs" as const, source }]);
+  const fetched = await mapWithConcurrency(jobs, 4, async (job): Promise<FetchResult | null> => {
+    try {
+      if (job.kind === "tasks") {
+        const path = taskPaths.get(job.source.id)!;
+        const { records } = await client.allWithStats<WrikeTask>(path);
+        return { ...job, records };
+      }
+      const { records } = await client.allWithStats<WrikeTimeEntry>(folderTimelogsPath(job.source.id));
+      return { ...job, records };
+    } catch (error) {
+      const failure = safeFailure(job.kind, job.source, job.source.id, error);
+      tracker.failures.push(failure);
+      logWrikeEvent("error", "folder_request_failed", failure);
+      return null;
+    }
+  });
+  if (tracker.failures.length) throw new Error(`${tracker.failures.length} selected-folder Wrike request(s) failed; existing reporting data was not changed.`);
+
+  const taskByFolder = new Map<string, WrikeTask[]>();
+  const timelogByFolder = new Map<string, WrikeTimeEntry[]>();
+  for (const result of fetched) {
+    if (!result) continue;
+    if (result.kind === "tasks") taskByFolder.set(result.source.id, result.records);
+    else timelogByFolder.set(result.source.id, result.records);
+  }
+
+  const topLevelTaskRecords = [...taskByFolder.values()].flat();
+  const topLevelTimelogRecords = [...timelogByFolder.values()].flat();
+  const tasks = deduplicateByWrikeId(topLevelTaskRecords);
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
+  const savedStrategy = session.connection.timelog_descendant_strategy as DescendantStrategy | undefined;
+  let descendantEvidenceCount = 0;
+  for (const source of SELECTED_WRIKE_FOLDERS) {
+    const descendants = new Set(descendantFolderIds(source.id, metadata.folderDefinitions));
+    for (const entry of timelogByFolder.get(source.id) ?? []) {
+      const task = taskById.get(entry.taskId);
+      if ((task?.parentIds ?? []).some((parentId) => descendants.has(parentId))) descendantEvidenceCount++;
+    }
+  }
+  tracker.descendantStrategy = chooseTimelogDescendantStrategy(savedStrategy, descendantEvidenceCount);
+
+  let descendantRecordsReceived = 0;
+  let descendantRecordsMissingFromTop = 0;
+  if (tracker.descendantStrategy === "explicit_tree") {
+    const descendantJobs = SELECTED_WRIKE_FOLDERS.flatMap((source) => descendantFolderIds(source.id, metadata.folderDefinitions).map((requestFolderId) => ({ source, requestFolderId })));
+    const descendantResults = await mapWithConcurrency(descendantJobs, 4, async ({ source, requestFolderId }) => {
+      try {
+        const { records } = await client.allWithStats<WrikeTimeEntry>(folderTimelogsPath(requestFolderId, false));
+        descendantRecordsReceived += records.length;
+        return { source, records };
+      } catch (error) {
+        const failure = safeFailure("timelogs", source, requestFolderId, error);
+        tracker.failures.push(failure);
+        logWrikeEvent("error", "descendant_timelog_request_failed", failure);
+        return null;
+      }
+    });
+    if (tracker.failures.length) throw new Error(`${tracker.failures.length} descendant-folder timelog request(s) failed; existing reporting data was not changed.`);
+    const topIdsBySource = new Map([...timelogByFolder.entries()].map(([folderId, entries]) => [folderId, new Set(entries.map((entry) => entry.id))]));
+    for (const result of descendantResults) {
+      if (!result) continue;
+      descendantRecordsMissingFromTop += result.records.filter((entry) => !topIdsBySource.get(result.source.id)?.has(entry.id)).length;
+      timelogByFolder.set(result.source.id, deduplicateByWrikeId([...(timelogByFolder.get(result.source.id) ?? []), ...result.records]));
+    }
+  }
+  tracker.descendantDiagnostics = {
+    observedAt: new Date().toISOString(),
+    descendantEvidenceCount,
+    descendantRecordsReceived,
+    descendantRecordsMissingFromTop,
+    outcome: tracker.descendantStrategy === "folder_recursive" ? "Actual folder responses included timelogs linked to descendant tasks." : "No conclusive recursive evidence was observed; explicit descendant traversal was used."
+  };
+  const { error: strategyError } = await db.from("wrike_connections").update({
+    timelog_descendant_strategy: tracker.descendantStrategy,
+    timelog_descendant_verified_at: new Date().toISOString(),
+    timelog_descendant_diagnostics: tracker.descendantDiagnostics
+  }).eq("organization_id", organizationId);
+  if (strategyError) throw new Error(`Supabase could not save descendant-timelog verification: ${strategyError.message}`);
+
+  const allTimelogRecords = [...timelogByFolder.values()].flat();
+  const timelogs = deduplicateByWrikeId(allTimelogRecords);
+  tracker.taskRecords = topLevelTaskRecords.length;
+  tracker.uniqueTasks = tasks.length;
+  tracker.duplicateTasks = tracker.taskRecords - tracker.uniqueTasks;
+  tracker.timelogRecords = topLevelTimelogRecords.length + descendantRecordsReceived;
+  tracker.uniqueTimelogs = timelogs.length;
+  tracker.duplicateTimelogs = tracker.timelogRecords - tracker.uniqueTimelogs;
+  tracker.foldersProcessed = SELECTED_WRIKE_FOLDERS.length;
+  const enrichedByTaskId = new Map(tasks.map((task) => [task.id, enrichTaskMetadata(task, metadata.folderDefinitionsById, metadata.customFieldDefinitionsById)]));
 
   const importedAt = new Date().toISOString();
   const parentIdsByFolderId = new Map<string, string[]>();
   for (const parent of metadata.folderDefinitions) for (const childId of parent.childIds) parentIdsByFolderId.set(childId, [...(parentIdsByFolderId.get(childId) ?? []), parent.id]);
 
+  const folderDefinitions = [...metadata.folderDefinitions];
+  for (const source of SELECTED_WRIKE_FOLDERS) if (!folderDefinitions.some((folder) => folder.id === source.id)) folderDefinitions.push({ id: source.id, title: source.title, childIds: [], scope: "Selected" });
   const folderIdMap = new Map<string, string>();
-  for (let offset = 0; offset < metadata.folderDefinitions.length; offset += 250) {
-    const rows = metadata.folderDefinitions.slice(offset, offset + 250).map((folder) => ({
+  for (let offset = 0; offset < folderDefinitions.length; offset += 250) {
+    const rows = folderDefinitions.slice(offset, offset + 250).map((folder) => ({
       organization_id: organizationId,
       wrike_id: folder.id,
-      title: folder.title,
+      title: SELECTED_WRIKE_FOLDER_BY_ID.get(folder.id)?.title ?? folder.title,
       parent_wrike_ids: parentIdsByFolderId.get(folder.id) ?? [],
       child_wrike_ids: folder.childIds,
       scope: folder.scope,
@@ -226,6 +419,8 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
   }
 
   const taskIdMap = new Map<string, string>();
+  const { data: previousMappings, error: previousMappingError } = await db.from("wrike_folder_task_imports").select("task_id").eq("organization_id", organizationId).in("folder_wrike_id", SELECTED_WRIKE_FOLDER_IDS);
+  if (previousMappingError) throw new Error(`Supabase could not load existing task source folders: ${previousMappingError.message}`);
   for (let offset = 0; offset < tasks.length; offset += 250) {
     const batch = tasks.slice(offset, offset + 250);
     const rows = batch.map((task) => ({
@@ -259,6 +454,16 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     (data ?? []).forEach((task) => taskIdMap.set(task.wrike_id, task.id));
   }
 
+  const importedTaskIds = [...taskIdMap.values()];
+  for (let offset = 0; offset < importedTaskIds.length; offset += 250) {
+    const ids = importedTaskIds.slice(offset, offset + 250);
+    const [{ error: locationDeleteError }, { error: customDeleteError }] = await Promise.all([
+      db.from("wrike_task_locations").delete().in("task_id", ids),
+      db.from("wrike_task_custom_field_values").delete().in("task_id", ids)
+    ]);
+    if (locationDeleteError || customDeleteError) throw new Error("Supabase could not reconcile existing task metadata relationships.");
+  }
+
   const locations = tasks.flatMap((task) => (task.parentIds ?? []).flatMap((wrikeLocationId) => {
     const taskId = taskIdMap.get(task.id);
     return taskId ? [{ task_id: taskId, folder_id: folderIdMap.get(wrikeLocationId) ?? null, project_id: projectIdMap.get(wrikeLocationId) ?? null, wrike_location_id: wrikeLocationId }] : [];
@@ -288,7 +493,7 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     if (error) throw new Error(`Supabase could not save readable custom-field values: ${error.message}`);
   }
 
-  const mappings = [...byFolder.entries()].flatMap(([folderId, folderTasks]) => folderTasks.flatMap((task) => {
+  const mappings = [...taskByFolder.entries()].flatMap(([folderId, folderTasks]) => folderTasks.flatMap((task) => {
     const taskId = taskIdMap.get(task.id);
     return taskId ? [{ organization_id: organizationId, folder_wrike_id: folderId, folder_id: folderIdMap.get(folderId) ?? null, task_id: taskId, imported_at: importedAt }] : [];
   }));
@@ -296,22 +501,101 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     const { error } = await db.from("wrike_folder_task_imports").upsert(mappings.slice(offset, offset + 500), { onConflict: "organization_id,folder_wrike_id,task_id" });
     if (error) throw new Error(`Supabase could not save folder membership: ${error.message}`);
   }
+  const { error: staleMappingError } = await db.from("wrike_folder_task_imports").delete().eq("organization_id", organizationId).in("folder_wrike_id", SELECTED_WRIKE_FOLDER_IDS).lt("imported_at", importedAt);
+  if (staleMappingError) throw new Error(`Supabase could not reconcile stale task source folders: ${staleMappingError.message}`);
+  const currentTaskIds = new Set(mappings.map((mapping) => mapping.task_id));
+  const staleTaskIds = [...new Set((previousMappings ?? []).map((mapping) => mapping.task_id))].filter((taskId) => !currentTaskIds.has(taskId));
+  for (let offset = 0; offset < staleTaskIds.length; offset += 250) {
+    const { error } = await db.from("wrike_tasks").update({ is_deleted: true, updated_at: importedAt }).in("id", staleTaskIds.slice(offset, offset + 250));
+    if (error) throw new Error(`Supabase could not mark unreconciled tasks deleted: ${error.message}`);
+  }
 
-  const folderCounts = Object.fromEntries([...byFolder.entries()].map(([folderId, folderTasks]) => [folderId, folderTasks.length]));
-  const { error: runError } = await db.from("wrike_folder_task_import_runs").insert({
-    organization_id: organizationId,
+  const referencedTaskWrikeIds = [...new Set(timelogs.map((entry) => entry.taskId).filter(Boolean))];
+  for (let offset = 0; offset < referencedTaskWrikeIds.length; offset += 250) {
+    const { data, error } = await db.from("wrike_tasks").select("id,wrike_id").eq("organization_id", organizationId).in("wrike_id", referencedTaskWrikeIds.slice(offset, offset + 250));
+    if (error) throw new Error(`Supabase could not resolve timelog tasks: ${error.message}`);
+    (data ?? []).forEach((task) => taskIdMap.set(task.wrike_id, task.id));
+  }
+  const userIdMap = new Map<string, string>();
+  const referencedUserWrikeIds = [...new Set(timelogs.map((entry) => entry.userId).filter((id): id is string => Boolean(id)))];
+  for (let offset = 0; offset < referencedUserWrikeIds.length; offset += 250) {
+    const { data, error } = await db.from("wrike_users").select("id,wrike_id").eq("organization_id", organizationId).in("wrike_id", referencedUserWrikeIds.slice(offset, offset + 250));
+    if (error) throw new Error(`Supabase could not resolve timelog users: ${error.message}`);
+    (data ?? []).forEach((user) => userIdMap.set(user.wrike_id, user.id));
+  }
+  const timeEntryIdMap = new Map<string, string>();
+  for (let offset = 0; offset < timelogs.length; offset += 250) {
+    const rows = timelogs.slice(offset, offset + 250).map((entry) => {
+      const hours = Number(entry.hours ?? ((entry.minutes ?? 0) / 60));
+      return {
+        organization_id: organizationId,
+        wrike_id: entry.id,
+        task_id: taskIdMap.get(entry.taskId) ?? null,
+        task_wrike_id: entry.taskId,
+        user_id: entry.userId ? userIdMap.get(entry.userId) ?? null : null,
+        user_wrike_id: entry.userId ?? null,
+        entry_date: day(entry.trackedDate),
+        hours: Number.isFinite(hours) ? hours : 0,
+        minutes: Number.isFinite(hours) ? Math.max(0, Math.round(hours * 60)) : 0,
+        category: entry.categoryId ?? null,
+        comment: entry.comment ?? null,
+        created_at_wrike: iso(entry.createdDate),
+        updated_at_wrike: iso(entry.updatedDate),
+        raw_data: entry,
+        is_deleted: false,
+        updated_at: importedAt
+      };
+    });
+    const { data, error } = await db.from("wrike_time_entries").upsert(rows, { onConflict: "organization_id,wrike_id" }).select("id,wrike_id");
+    if (error) throw new Error(`Supabase could not save Wrike timelogs: ${error.message}`);
+    (data ?? []).forEach((entry) => timeEntryIdMap.set(entry.wrike_id, entry.id));
+  }
+  const timelogMappings = [...timelogByFolder.entries()].flatMap(([folderId, entries]) => entries.flatMap((entry) => {
+    const timeEntryId = timeEntryIdMap.get(entry.id);
+    return timeEntryId ? [{ organization_id: organizationId, folder_wrike_id: folderId, folder_id: folderIdMap.get(folderId) ?? null, time_entry_id: timeEntryId, imported_at: importedAt }] : [];
+  }));
+  for (let offset = 0; offset < timelogMappings.length; offset += 500) {
+    const { error } = await db.from("wrike_folder_timelog_imports").upsert(timelogMappings.slice(offset, offset + 500), { onConflict: "organization_id,folder_wrike_id,time_entry_id" });
+    if (error) throw new Error(`Supabase could not save timelog source folders: ${error.message}`);
+  }
+
+  const folderCounts = Object.fromEntries([...taskByFolder.entries()].map(([folderId, folderTasks]) => [folderId, folderTasks.length]));
+  const timelogFolderCounts = Object.fromEntries([...timelogByFolder.entries()].map(([folderId, entries]) => [folderId, entries.length]));
+  const completedAt = new Date();
+  const { error: runError } = await db.from("wrike_folder_task_import_runs").update(runSummary(tracker, startedAt, completedAt, {
     status: "succeeded",
     folder_counts: folderCounts,
+    timelog_folder_counts: timelogFolderCounts,
     task_count: tasks.length,
     folder_definition_count: metadata.folderDefinitions.length,
     custom_field_definition_count: metadata.matchedFields.length,
     metadata_diagnostics: metadata.diagnostics
-  });
-  if (runError) throw new Error(`Tasks were saved, but the import summary failed: ${runError.message}`);
+  })).eq("id", runId);
+  if (runError) throw new Error(`Records were saved, but the import summary failed: ${runError.message}`);
+  logWrikeEvent("info", "folder_import_completed", { runId, organizationId, tasks: tasks.length, timelogs: timelogs.length, durationMs: completedAt.getTime() - startedAt.getTime() });
   return {
     taskCount: tasks.length,
+    timelogCount: timelogs.length,
     folderCounts,
-    folderCount: TASK_IMPORT_FOLDER_IDS.length,
+    timelogFolderCounts,
+    folderCount: SELECTED_WRIKE_FOLDERS.length,
+    selectedFolders: SELECTED_WRIKE_FOLDERS,
+    processedFolders: SELECTED_WRIKE_FOLDERS,
+    foldersProcessed: tracker.foldersProcessed,
+    taskRequestCount: tracker.taskRequests,
+    taskRecordsReceived: tracker.taskRecords,
+    duplicateTasksRemoved: tracker.duplicateTasks,
+    timelogRequestCount: tracker.timelogRequests,
+    timelogRecordsReceived: tracker.timelogRecords,
+    duplicateTimelogsRemoved: tracker.duplicateTimelogs,
+    failedFolderRequestCount: tracker.failures.length,
+    folderFailures: tracker.failures,
+    startedAt: startedAt.toISOString(),
+    completedAt: completedAt.toISOString(),
+    durationMs: completedAt.getTime() - startedAt.getTime(),
+    descendantStrategy: tracker.descendantStrategy,
+    descendantDiagnostics: tracker.descendantDiagnostics,
+    taskRequestContract: tracker.taskRequestContract,
     folderDefinitionCount: metadata.folderDefinitions.length,
     customFieldDefinitionCount: metadata.matchedFields.length,
     matchedCustomFieldTitles: metadata.diagnostics.matchedFieldTitles,

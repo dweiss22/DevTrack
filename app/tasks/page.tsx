@@ -31,6 +31,6 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         <td>{task.updated_at_wrike ? new Date(task.updated_at_wrike).toLocaleDateString() : "—"}</td>
       </tr>)}</tbody></table>
       <Pagination filters={filters} total={total} />
-    </> : <p className="card empty">No imported tasks match these filters. If no import has run, go to Administration and select Reset and import folder tasks.</p>}
+    </> : <p className="card empty">No imported tasks match these filters. If no import has run, go to Administration and select Import folder tasks and timelogs.</p>}
   </AppShell>;
 }

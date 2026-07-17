@@ -43,6 +43,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <Metric label="Total planned hours" value={hours(totals.plannedMinutes)} />
     </section>
     <DashboardCharts statusData={statusData} />
-    <section className="card"><h2>Current import scope</h2><p>Task details, effort, parent IDs, readable folder titles, folder/project hierarchy, and LCT custom-field values are stored. People, timelogs, and workflow definitions remain unavailable until their APIs are added in later steps.</p></section>
+    <section className="card"><h2>Current import scope</h2><p>Task details, effort, parent IDs, readable folder titles, folder/project hierarchy, LCT custom-field values, and folder-based timelogs are stored. People and workflow definitions remain unavailable until their APIs are added in later steps.</p></section>
   </AppShell>;
 }

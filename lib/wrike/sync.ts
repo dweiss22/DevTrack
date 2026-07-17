@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { wrikeSessionFor } from "@/lib/wrike/oauth";
 import { WrikeClient } from "@/lib/wrike/client";
+import { WRIKE_TASK_FIELDS } from "@/lib/wrike/task-fields";
 import type { WrikeCustomField, WrikeFolder, WrikeTask, WrikeTimeEntry, WrikeTimelogCategory, WrikeUser, WrikeWorkflow } from "@/lib/wrike/types";
 
 export type SyncMode = "incremental" | "full";
@@ -9,7 +10,6 @@ type Trigger = "manual" | "scheduled" | "backfill";
 type Scope = { id: string; scope_type: "account" | "space" | "folder" | "project" | "task" | "list"; source_ids: string[]; label: string };
 type SyncOptions = { scopeIds?: string[]; mode?: SyncMode; trigger?: Trigger };
 
-const TASK_FIELDS = ["description", "responsibleIds", "parentIds", "superTaskIds", "subTaskIds", "customFields", "authorIds", "effortAllocation"];
 const nowIso = () => new Date().toISOString();
 const date = (value?: string) => value ? new Date(value).toISOString() : null;
 const day = (value?: string) => value ? value.slice(0, 10) : null;
@@ -30,7 +30,7 @@ export function taskPath(scope: Scope, sinceAt?: string) {
     : `/tasks/${scope.source_ids.map(encodeURIComponent).join(",")}`;
   const searchable = ["account", "space", "folder", "project"].includes(scope.scope_type);
   return appendQuery(base, {
-    fields: JSON.stringify(TASK_FIELDS),
+    fields: JSON.stringify(WRIKE_TASK_FIELDS),
     descendants: searchable && scope.scope_type !== "account" ? "true" : undefined,
     subTasks: searchable ? "true" : undefined,
     updatedDate: searchable && sinceAt ? JSON.stringify({ start: sinceAt }) : undefined
@@ -45,7 +45,7 @@ async function fetchTaskTree(client: WrikeClient, rootIds: string[]) {
     const batch = pending.splice(0, 100).filter((id) => !seen.has(id));
     if (!batch.length) continue;
     batch.forEach((id) => seen.add(id));
-    const response = await client.request<{ data: WrikeTask[] }>(appendQuery(`/tasks/${batch.map(encodeURIComponent).join(",")}`, { fields: JSON.stringify(TASK_FIELDS) }));
+    const response = await client.request<{ data: WrikeTask[] }>(appendQuery(`/tasks/${batch.map(encodeURIComponent).join(",")}`, { fields: JSON.stringify(WRIKE_TASK_FIELDS) }));
     tasks.push(...response.data);
     pending.push(...response.data.flatMap((task) => task.subTaskIds ?? []).filter((id) => !seen.has(id)));
   }
@@ -57,7 +57,7 @@ async function fetchExactTasks(client: WrikeClient, taskIds: string[]) {
   for (let offset = 0; offset < taskIds.length; offset += 100) {
     const batch = taskIds.slice(offset, offset + 100);
     if (!batch.length) continue;
-    const response = await client.request<{ data: WrikeTask[] }>(appendQuery(`/tasks/${batch.map(encodeURIComponent).join(",")}`, { fields: JSON.stringify(TASK_FIELDS) }));
+    const response = await client.request<{ data: WrikeTask[] }>(appendQuery(`/tasks/${batch.map(encodeURIComponent).join(",")}`, { fields: JSON.stringify(WRIKE_TASK_FIELDS) }));
     tasks.push(...response.data);
   }
   return tasks;

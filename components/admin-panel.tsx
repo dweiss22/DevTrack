@@ -8,14 +8,24 @@ type FolderRun = {
   id: string;
   status: string;
   folder_counts: Record<string, number>;
+  timelog_folder_counts: Record<string, number>;
   task_count: number;
+  unique_timelog_count: number;
+  task_request_count: number;
+  timelog_request_count: number;
+  failed_folder_request_count: number;
+  folder_failures: FolderFailure[];
+  duration_ms: number | null;
   folder_definition_count: number;
   custom_field_definition_count: number;
   metadata_diagnostics: MetadataDiagnostics;
+  timelog_descendant_strategy: "unknown" | "folder_recursive" | "explicit_tree";
+  timelog_descendant_diagnostics: Record<string, unknown>;
   error_summary: string | null;
   created_at: string;
 };
-type ConfiguredFolder = { id: string; title: string | null };
+type ConfiguredFolder = { id: string; title: string };
+type FolderFailure = { operation: string; folderId: string; folderTitle: string; requestFolderId: string; status: number | null; message: string };
 type Props = { connection: Connection; folderRuns: FolderRun[]; folders: ConfiguredFolder[] };
 
 export function AdminPanel({ connection, folderRuns, folders }: Props) {
@@ -27,17 +37,21 @@ export function AdminPanel({ connection, folderRuns, folders }: Props) {
 
   async function importFolderTasks() {
     setImporting(true); setComplete(false); setError(false);
-    setMessage("Validating the Wrike folder tree, both LCT title searches, and all 13 paginated task endpoints. Existing reporting data remains unchanged until every response succeeds.");
+    setMessage("Validating the Wrike folder tree, LCT fields, and every configured task and timelog endpoint. Existing reporting data remains unchanged until every external response succeeds.");
     try {
       const response = await fetch("/api/wrike/import-folder-tasks", { method: "POST" });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Folder task import failed.");
+      if (!response.ok) {
+        const failures = (payload.folderFailures as FolderFailure[] | undefined) ?? [];
+        const detail = failures.map((failure) => `${failure.folderTitle} ${failure.operation} (${failure.status ?? "network"}): ${failure.message}`).join("; ");
+        throw new Error(`${payload.error ?? "Folder task and timelog import failed."}${detail ? ` ${detail}` : ""}`);
+      }
       setComplete(true);
       const fields = (payload.matchedCustomFieldTitles as string[] | undefined)?.join(", ") || "none";
-      setMessage(`Import complete: ${payload.taskCount} unique tasks, ${payload.folderDefinitionCount} folder definitions, and ${payload.customFieldDefinitionCount} LCT fields (${fields}).`);
+      setMessage(`Import complete: ${payload.taskCount} unique tasks, ${payload.timelogCount} unique timelogs, ${payload.folderDefinitionCount} folder definitions, and ${payload.customFieldDefinitionCount} LCT fields (${fields}). Descendant timelogs: ${payload.descendantStrategy}.`);
     } catch (reason) {
       setError(true);
-      setMessage(reason instanceof Error ? reason.message : "Folder task import failed.");
+      setMessage(reason instanceof Error ? reason.message : "Folder task and timelog import failed.");
     } finally { setImporting(false); }
   }
 
@@ -53,17 +67,22 @@ export function AdminPanel({ connection, folderRuns, folders }: Props) {
   return <div className="admin-stack">
     {message && <p className={error ? "notice error" : "notice"}>{message}</p>}
     <section className="card space-import-card">
-      <div><p className="eyebrow">TASK METADATA — CURRENT STAGE</p><h2>Reset and import folder tasks</h2><p>This single action calls the Learning folder-tree endpoint, the encoded <code>[LCT]</code> and <code>LCT</code> custom-field searches, and the 13 configured folder-task endpoints. It does not call timelogs, contacts, or workflows.</p></div>
-      <div className="space-import-actions"><button onClick={importFolderTasks} disabled={!connected || importing}>{importing ? "Importing and resolving metadata…" : "Reset and import folder tasks"}</button></div>
-      {!connected && <p className="notice error">Connect Wrike before importing tasks.</p>}
+      <div><p className="eyebrow">FOLDER DATA — CURRENT STAGE</p><h2>Import folder tasks and timelogs</h2><p>This action imports tasks and timelogs from all 13 configured folders after validating every external request. It also refreshes folder metadata and LCT custom fields.</p></div>
+      <div className="space-import-actions"><button onClick={importFolderTasks} disabled={!connected || importing}>{importing ? "Importing tasks and timelogs…" : "Import folder tasks and timelogs"}</button></div>
+      {!connected && <p className="notice error">Connect Wrike before importing folder data.</p>}
       {complete && <div className="filter-bar compact"><a className="button" href="/tasks">View imported tasks</a></div>}
     </section>
     <div className="admin-grid">
-      <section className="card"><h2>Wrike connection</h2>{connected ? <><p>Connected to <strong>{connection?.account_name ?? "Wrike"}</strong>.</p><p className="muted">Host: {connection?.api_host}<br />Token expires: {connection?.token_expires_at ? new Date(connection.token_expires_at).toLocaleString() : "unknown"}</p><div className="filter-bar"><button className="secondary" onClick={health}>Run health check</button><button className="secondary" onClick={async () => { await fetch("/api/wrike/disconnect", { method: "POST" }); location.reload(); }}>Disconnect</button></div></> : <><p>Connect Wrike with read-only access before importing tasks.</p><a className="button" href="/api/wrike/connect">Connect Wrike</a></>}</section>
-      <section className="card"><h2>Configured folder allowlist</h2><p className="muted">Only these task-source folders are queried.</p><ol className="detail-list">{folders.map((folder) => <li key={folder.id}>{folder.title ? <><strong>{folder.title}</strong><br /><code>{folder.id}</code></> : <code>{folder.id}</code>}</li>)}</ol></section>
+      <section className="card"><h2>Wrike connection</h2>{connected ? <><p>Connected to <strong>{connection?.account_name ?? "Wrike"}</strong>.</p><p className="muted">Host: {connection?.api_host}<br />Token expires: {connection?.token_expires_at ? new Date(connection.token_expires_at).toLocaleString() : "unknown"}</p><div className="filter-bar"><button className="secondary" onClick={health}>Run health check</button><button className="secondary" onClick={async () => { await fetch("/api/wrike/disconnect", { method: "POST" }); location.reload(); }}>Disconnect</button></div></> : <><p>Connect Wrike with read-only access before importing folder data.</p><a className="button" href="/api/wrike/connect">Connect Wrike</a></>}</section>
+      <section className="card"><h2>Configured folder allowlist</h2><p className="muted">Only these task and timelog source folders are queried.</p><ol className="detail-list">{folders.map((folder) => <li key={folder.id}><strong>{folder.title}</strong><br /><code>{folder.id}</code></li>)}</ol></section>
     </div>
-    <section className="card"><h2>Import history and metadata diagnostics</h2>{folderRuns.length ? <table><thead><tr><th>Imported</th><th>Status</th><th>Tasks</th><th>Metadata</th><th>Search evidence</th></tr></thead><tbody>{folderRuns.map((run) => <tr key={run.id}><td>{new Date(run.created_at).toLocaleString()}</td><td>{run.status}</td><td>{run.task_count}</td><td>{run.folder_definition_count} folders<br />{run.custom_field_definition_count} LCT fields</td><td>{run.error_summary ?? <MetadataEvidence diagnostics={run.metadata_diagnostics} />}</td></tr>)}</tbody></table> : <p className="empty">No folder task and metadata import has completed yet.</p>}</section>
+    <section className="card"><h2>Combined import history</h2>{folderRuns.length ? <table><thead><tr><th>Started</th><th>Status</th><th>Records</th><th>Requests</th><th>Diagnostics</th></tr></thead><tbody>{folderRuns.map((run) => <tr key={run.id}><td>{new Date(run.created_at).toLocaleString()}<br />{run.duration_ms != null ? `${run.duration_ms} ms` : "Running"}</td><td>{run.status}</td><td>{run.task_count} tasks<br />{run.unique_timelog_count} timelogs</td><td>{run.task_request_count} task<br />{run.timelog_request_count} timelog</td><td>{run.error_summary ? <>{run.error_summary}<FailureDetails failures={run.folder_failures} /></> : <><span>Descendants: {run.timelog_descendant_strategy}</span><br /><MetadataEvidence diagnostics={run.metadata_diagnostics} /></>}</td></tr>)}</tbody></table> : <p className="empty">No combined folder import has run yet.</p>}</section>
   </div>;
+}
+
+function FailureDetails({ failures }: { failures: FolderFailure[] }) {
+  if (!failures?.length) return null;
+  return <details><summary>{failures.length} folder request failure(s)</summary>{failures.map((failure, index) => <p key={`${failure.requestFolderId}-${failure.operation}-${index}`}><strong>{failure.folderTitle}:</strong> {failure.operation} request for <code>{failure.requestFolderId}</code> returned {failure.status ?? "a network error"}. {failure.message}</p>)}</details>;
 }
 
 function MetadataEvidence({ diagnostics }: { diagnostics: MetadataDiagnostics }) {
