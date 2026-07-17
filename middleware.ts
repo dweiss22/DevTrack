@@ -18,9 +18,10 @@ export async function middleware(request: NextRequest) {
       }
     }
   });
-  // Middleware only needs to refresh an expiring session and persist its
-  // cookies. Authorization is performed by requireContext() in the route.
-  await supabase.auth.getSession();
+  // Validate and refresh the session through the Auth server. Using
+  // getSession() here can fail in the middleware runtime for cookie-backed
+  // sessions and surface as MIDDLEWARE_INVOCATION_FAILED before a page loads.
+  await supabase.auth.getUser();
   return response;
 }
 
