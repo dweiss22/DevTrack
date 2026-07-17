@@ -86,9 +86,13 @@ reset role;
 insert into public.wrike_custom_fields(id,organization_id,wrike_id,title,field_type) values ('00000000-0000-0000-0000-000000000091','00000000-0000-0000-0000-000000000021','CF1','[LCT]','DropDown');
 insert into public.wrike_enabled_custom_fields(organization_id,custom_field_id) values ('00000000-0000-0000-0000-000000000021','00000000-0000-0000-0000-000000000091');
 insert into public.wrike_task_custom_field_values(task_id,custom_field_id,value,text_value,option_ids) values ('00000000-0000-0000-0000-000000000041','00000000-0000-0000-0000-000000000091','"Course"'::jsonb,'Course',array['OPT1']);
+insert into public.wrike_normalized_custom_fields(id,organization_id,normalized_key,title) values ('00000000-0000-0000-0000-000000000092','00000000-0000-0000-0000-000000000021','course type','Course Type');
+insert into public.wrike_normalized_custom_field_sources(normalized_field_id,custom_field_id,source_designation) values ('00000000-0000-0000-0000-000000000092','00000000-0000-0000-0000-000000000091','M');
+insert into public.wrike_task_normalized_custom_field_values(task_id,normalized_field_id,display_values,source_wrike_field_ids,source_titles,source_values) values ('00000000-0000-0000-0000-000000000041','00000000-0000-0000-0000-000000000092',array['Course'],array['CF1'],array['[LCT] Course Type (M)'],'[]'::jsonb);
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000012',true);
-select is((select count(*) from public.reporting_task_rows('{"customFields":{"00000000-0000-0000-0000-000000000091":"Course"}}'::jsonb,50,0)),1::bigint,'enabled normalized custom fields filter authorized tasks');
+select is((select count(*) from public.reporting_task_rows('{"customFields":{"00000000-0000-0000-0000-000000000092":"Course"}}'::jsonb,50,0)),1::bigint,'logical custom fields filter authorized tasks across raw sources');
+select is((select count(*) from public.reporting_custom_field_options()),1::bigint,'dynamic custom-field options contain only values on visible tasks');
 
 reset role;
 insert into public.reporting_conversations(id,organization_id,user_id,title) values

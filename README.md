@@ -16,9 +16,9 @@ The ingestion layer is deliberately separate from reporting tables, so a transit
 
 1. An administrator signs in with an administrator-created Supabase email/password account and connects Wrike from **Administration**.
 2. The OAuth callback securely exchanges the code and stores AES-256-GCM encrypted access and refresh tokens. OAuth state is signed and expires after 10 minutes.
-3. The administrator selects **Import folder tasks and timelogs**. The importer validates metadata plus task and timelog requests for the 13 configured Wrike folders.
-4. DevTrack retrieves every external response before reconciliation, then upserts tasks and timelogs by Wrike ID, deduplicates shared records, and preserves every selected source-folder association.
-5. The Tasks page and task detail show readable folder/custom-field titles while retaining Wrike IDs internally. Historical timelogs retain raw task/user IDs even when a local relationship cannot be resolved.
+3. The administrator selects **Import folder tasks and timelogs**. The importer first refreshes the selected people, the Online Learning workflow statuses, timelog categories, and folder/custom-field metadata, then validates task and timelog requests for the 13 configured Wrike folders.
+4. DevTrack retrieves every selected-folder response before reconciliation, then upserts tasks and timelogs by Wrike ID, deduplicates shared records, and preserves every selected source-folder association. Reference-data failures are visible warnings because raw-ID fallbacks remain available.
+5. Reports show readable assignees, custom statuses, timelog authors, categories, folder titles, and custom-field titles while retaining their authoritative Wrike IDs for audit and fallback display.
 
 ## Local setup
 
@@ -104,7 +104,7 @@ Never commit `.env.local`, tokens, service-role keys, or OAuth secrets.
 
 ## Wrike OAuth configuration
 
-For a call-by-call review of the enabled integration, see the **[Active Wrike API inventory](docs/wrike-api-inventory.md)**. It maps every current OAuth, health-check, metadata, folder-task, and folder-timelog request to its trigger and implementation source.
+For a call-by-call review of the enabled integration, see the **[Active Wrike API inventory](docs/wrike-api-inventory.md)**. It maps every current OAuth, health-check, workflow, user, category, metadata, folder-task, and folder-timelog request to its trigger and implementation source.
 
 Create a Wrike API application and set its redirect/callback URL exactly to:
 
@@ -112,7 +112,7 @@ Create a Wrike API application and set its redirect/callback URL exactly to:
 <NEXT_PUBLIC_APP_URL>/api/wrike/callback
 ```
 
-For local development this is `http://localhost:3000/api/wrike/callback`. Register the production HTTPS URL separately in Wrike. DevTrack requests the `wsReadOnly` OAuth scope. The connecting account must be able to read all 13 configured folders, descendant tasks, and timelogs. Reconnect connections created before migration `202607160002` so the account-specific API host is stored.
+For local development this is `http://localhost:3000/api/wrike/callback`. Register the production HTTPS URL separately in Wrike. DevTrack requests comma-delimited `wsReadOnly,amReadOnlyUser`: workspace read access covers tasks, timelogs, categories, and workflows; account-management user read access covers `GET /users/{userId}`. Existing `wsReadOnly`-only connections must reconnect after migration `202607170002_wrike_reference_data.sql`. The connecting account must be able to read all 13 configured folders, descendant tasks, and timelogs.
 
 The Administration health check verifies the account endpoint, data-center host, token state, latency, and most recent combined import without returning credentials.
 
@@ -127,7 +127,9 @@ The enabled bulk-import action in Administration is **Import folder tasks and ti
 
 `descendants=true` includes nested task work, `plainTextCustomFields=true` requests readable custom-field text, and the task `fields` JSON explicitly includes `customFields`, `responsibleIds`, and all other DevTrack fields. The importer verifies this contract before making a task request. Custom-field URLs are constructed with `URL` and `URLSearchParams`; dropdown values remain the strings Wrike returns. The application endpoint remains `POST /api/wrike/import-folder-tasks` for compatibility.
 
-The folder tree, custom-field metadata, and every selected-folder task and timelog response must succeed before reporting reconciliation starts. The importer upserts stable task/time-entry IDs, preserves many-to-many source folders, only removes stale task-source associations after successful retrieval, and never deletes historical timelogs merely because a later response omits them. It records request counts, failures, task-contract evidence, metadata evidence, and descendant-timelog diagnostics in `public.wrike_folder_task_import_runs`:
+After resolving each custom-field ID to its original Wrike title, DevTrack removes legacy `[LCT]`, `(M)`, and `(L)` markers for display and reporting. Source fields that normalize to the same title become one logical field, while original IDs, titles, and values remain stored. Conflicting populated sources retain every value and are flagged rather than silently overwritten. Filter choices are generated from values actually observed on visible synchronized tasks.
+
+The importer also requests the configured users, `GET /workflows`, and `GET /timelog_categories` before fact data. Those reference calls populate readable assignees, custom statuses, timelog authors, and category names. A reference failure is recorded as a warning and retains prior data, configured user-name fallbacks, or raw IDs. The folder tree, custom-field metadata, and every selected-folder task and timelog response must succeed before reporting reconciliation starts. The importer upserts stable task/time-entry IDs, preserves many-to-many source folders, only removes stale task-source associations after successful retrieval, and never deletes historical timelogs merely because a later response omits them. It records request counts, warnings, failures, task-contract evidence, metadata evidence, reference resolution, and descendant-timelog diagnostics in `public.wrike_folder_task_import_runs`:
 
 ```sql
 select t.title,t.status,f.wrike_id as folder_id,f.title as folder_title,m.imported_at
@@ -151,9 +153,7 @@ On the first connected deployment run, DevTrack records `folder_recursive` only 
 
 ## Later reporting stages
 
-The current navigation intentionally exposes only Overview, Tasks, and Administration. Task filters are URL-backed and server-paginated. Folder names, LCT custom-field definitions, and time entries are imported; contacts, workflows, reporting-group administration, and Ask DevTrack features remain outside this stage.
-
-They should be enabled one API at a time only after the 13-folder task counts and sample task fields have been checked against Wrike.
+The current navigation intentionally exposes only Overview, Tasks, and Administration. Task filters are URL-backed and server-paginated. The focused importer now synchronizes selected people, the selected workflow's statuses, timelog categories, folder names, LCT custom-field definitions, tasks, and time entries. Broader contacts/account discovery and scheduled synchronization remain disabled.
 
 ## Scheduling and deployment
 
@@ -170,12 +170,12 @@ npm run build
 
 The unit suite covers metrics, filters, the deterministic question parser, Wrike hosts, pagination, task paths, and effort/time normalization. `supabase/tests/reporting_rls.sql` adds database integration coverage for organization isolation, compatibility access, intersection/union groups, and conversation auditing; run it against a local Supabase stack with `supabase test db`.
 
-No live Wrike access is required for automated tests. Production validation requires applying all migrations through `202607170001_folder_task_timelog_import.sql`, deploying server-side credentials, reconnecting Wrike if necessary, running the health check, selecting **Import folder tasks and timelogs**, and inspecting the task-contract and descendant diagnostics before comparing sampled records with Wrike.
+No live Wrike access is required for automated tests. Production validation requires applying all migrations through `202607170003_wrike_custom_field_normalization.sql`, deploying server-side credentials, reconnecting Wrike to grant `amReadOnlyUser`, running the health check, selecting **Import folder tasks and timelogs**, and inspecting the reference, custom-field conflict, task-contract, and descendant diagnostics before comparing sampled records with Wrike.
 
 ## Troubleshooting
 
 - **“Wrike OAuth is not configured”**: check client ID, secret, app URL, and token encryption key.
 - **Callback fails**: ensure the callback URL in Wrike exactly matches `NEXT_PUBLIC_APP_URL/api/wrike/callback`, including protocol.
 - **Token refresh fails**: reconnect from Administration; an expired/revoked connection is marked accordingly without exposing the underlying token.
-- **No data after import**: first apply migrations through `202607170001_folder_task_timelog_import.sql`. Then verify the connecting administrator can read the Learning folder tree, `LCT Reporting`, and every configured task/timelog folder before selecting **Import folder tasks and timelogs**. A successful OAuth connection alone does not run the APIs.
+- **No data after import**: first apply migrations through `202607170003_wrike_custom_field_normalization.sql`. Then verify the connecting administrator can read the Learning folder tree, `LCT Reporting`, and every configured task/timelog folder before selecting **Import folder tasks and timelogs**. Reconnect if Administration reports that `amReadOnlyUser` is missing. A successful OAuth connection alone does not run the APIs, and the post-migration import is required to populate normalized custom fields.
 - **User cannot see reports**: make sure their Auth user ID is in `application_users` for the correct organization. RLS intentionally prevents cross-organization reads.

@@ -6,6 +6,7 @@ import type {
   WrikeFolderTreeResponse,
   WrikeTask
 } from "@/lib/wrike/types";
+import { mergeNormalizedCustomFields, type NormalizedCustomFieldValue } from "@/lib/wrike/custom-field-normalization";
 
 const folderProjectSchema = z.object({
   authorId: z.string().optional(),
@@ -102,7 +103,7 @@ export function resolveCustomFieldDisplayValue(rawValue: unknown, definition?: W
 
 export type ResolvedFolder = { id: string; title: string; scope: string | null; resolved: boolean };
 export type ResolvedCustomField = { id: string; title: string; type: string | null; rawValue: unknown; displayValue: unknown; resolved: boolean };
-export type EnrichedTaskMetadata = { folderIds: string[]; folders: ResolvedFolder[]; folderNames: string[]; customFields: ResolvedCustomField[] };
+export type EnrichedTaskMetadata = { folderIds: string[]; folders: ResolvedFolder[]; folderNames: string[]; customFields: ResolvedCustomField[]; customFieldsNormalized: NormalizedCustomFieldValue[] };
 
 export function enrichTaskMetadata(
   task: WrikeTask,
@@ -125,5 +126,5 @@ export function enrichTaskMetadata(
       resolved: Boolean(definition)
     };
   });
-  return { folderIds, folders, folderNames: folders.filter((folder) => folder.resolved).map((folder) => folder.title), customFields };
+  return { folderIds, folders, folderNames: folders.filter((folder) => folder.resolved).map((folder) => folder.title), customFields, customFieldsNormalized: mergeNormalizedCustomFields(customFields) };
 }

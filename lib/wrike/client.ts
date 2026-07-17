@@ -26,6 +26,9 @@ export function wrikeBaseUrlForHost(host: string) {
 
 export function redactWrikeLogDetails(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redactWrikeLogDetails);
+  if (typeof value === "string") return value
+    .replace(/Bearer\s+[^\s,;]+/gi, "Bearer [REDACTED]")
+    .replace(/((?:access_token|refresh_token|client_secret)=)[^&\s]+/gi, "$1[REDACTED]");
   if (!value || typeof value !== "object") return value;
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [
     key,

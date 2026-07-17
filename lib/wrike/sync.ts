@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { persistNormalizedCustomFieldDefinitions, persistNormalizedTaskCustomFields } from "@/lib/wrike/custom-field-persistence";
+import { mergeNormalizedCustomFields } from "@/lib/wrike/custom-field-normalization";
 import { wrikeSessionFor } from "@/lib/wrike/oauth";
 import { WrikeClient } from "@/lib/wrike/client";
 import { WRIKE_TASK_FIELDS } from "@/lib/wrike/task-fields";
@@ -115,24 +117,25 @@ async function upsertMetadata(organizationId: string, client: WrikeClient, accou
   if (categories.length) { const { error } = await db.from("wrike_timelog_categories").upsert(categories.map((category) => ({ organization_id: organizationId, wrike_id: category.id, title: category.name ?? category.title ?? category.id, raw_data: category, updated_at: nowIso() })), { onConflict: "organization_id,wrike_id" }); if (error) throw error; }
   const { data: savedFields, error: customError } = customFields.length ? await db.from("wrike_custom_fields").upsert(customFields.map((field) => ({ organization_id: organizationId, wrike_id: field.id, title: field.title, field_type: field.type ?? null, raw_data: field, updated_at: nowIso() })), { onConflict: "organization_id,wrike_id" }).select("id,wrike_id,title,field_type") : { data: [], error: null };
   if (customError) throw customError;
+  const normalizedFieldIdByKey = await persistNormalizedCustomFieldDefinitions(db, organizationId, savedFields ?? [], nowIso());
   const { data: enabled } = await db.from("wrike_enabled_custom_fields").select("custom_field_id").eq("organization_id", organizationId);
   if (!(enabled ?? []).length) {
     const lct = (savedFields ?? []).find((field) => field.title.trim().toLowerCase() === "[lct]");
     if (lct) await db.from("wrike_enabled_custom_fields").upsert({ organization_id: organizationId, custom_field_id: lct.id }, { onConflict: "organization_id,custom_field_id" });
   }
   const { data: enabledAfter } = await db.from("wrike_enabled_custom_fields").select("custom_field_id,wrike_custom_fields(id,wrike_id,field_type,raw_data)").eq("organization_id", organizationId);
-  const enabledFieldMap = new Map<string, { id: string; type: string | null; options: Map<string,string> }>();
+  const enabledFieldMap = new Map<string, { id: string; type: string | null; title: string; options: Map<string,string> }>();
   for (const row of enabledAfter ?? []) {
-    const field = row.wrike_custom_fields as unknown as { id: string; wrike_id: string; field_type: string | null; raw_data: WrikeCustomField } | null;
+    const field = row.wrike_custom_fields as unknown as { id: string; wrike_id: string; field_type: string | null; title?: string; raw_data: WrikeCustomField } | null;
     if (field) {
       const readableValues = [
         ...(field.raw_data.settings?.values ?? []),
         ...(field.raw_data.settings?.options ?? []).map((option) => option.value)
       ];
-      enabledFieldMap.set(field.wrike_id, { id: field.id, type: field.field_type, options: new Map(readableValues.map((value) => [value, value])) });
+      enabledFieldMap.set(field.wrike_id, { id: field.id, type: field.field_type, title: field.title ?? field.raw_data.title, options: new Map(readableValues.map((value) => [value, value])) });
     }
   }
-  return { userMap, spaceMap, folderMap, projectMap, enabledFieldMap, userCount: users.length };
+  return { userMap, spaceMap, folderMap, projectMap, enabledFieldMap, normalizedFieldIdByKey, userCount: users.length };
 }
 
 function normalizedCustomValue(value: unknown, type: string | null, options = new Map<string,string>()) {
@@ -169,12 +172,21 @@ async function replaceTaskRelationships(organizationId: string, tasks: WrikeTask
     return field && taskId ? [{ task_id: taskId, custom_field_id: field.id, value: fieldValue.value, ...normalizedCustomValue(fieldValue.value, field.type, field.options), updated_at: nowIso() }] : [];
   }));
   if (values.length) { const { error } = await db.from("wrike_task_custom_field_values").upsert(values, { onConflict: "task_id,custom_field_id" }); if (error) throw error; }
+  await persistNormalizedTaskCustomFields(db, metadata.normalizedFieldIdByKey, tasks.flatMap((task) => {
+    const taskId = taskMap.get(task.id); if (!taskId) return [];
+    const fields = (task.customFields ?? []).flatMap((fieldValue) => {
+      const field = metadata.enabledFieldMap.get(fieldValue.id); if (!field) return [];
+      const normalized = normalizedCustomValue(fieldValue.value, field.type, field.options);
+      return [{ id: fieldValue.id, title: field.title, type: field.type, rawValue: fieldValue.value, displayValue: normalized.display_value, resolved: true }];
+    });
+    return [{ taskId, taskWrikeId: task.id, fields: mergeNormalizedCustomFields(fields) }];
+  }), nowIso());
   return taskIds;
 }
 
 async function saveScopeTasks(organizationId: string, scope: Scope, tasks: WrikeTask[], mode: SyncMode, metadata: Awaited<ReturnType<typeof upsertMetadata>>) {
   const db = createAdminClient();
-  const rows = tasks.map((task) => ({ organization_id: organizationId, wrike_id: task.id, title: task.title, description: task.description ?? null, permalink: task.permalink ?? null, status: task.status, workflow_id: task.workflowId ?? null, custom_status_id: task.customStatusId ?? null, importance: task.importance ?? null, created_at_wrike: date(task.createdDate), updated_at_wrike: date(task.updatedDate), start_date: day(task.dates?.start), due_date: day(task.dates?.due), completed_at: date(task.dates?.completed), parent_wrike_ids: task.parentIds ?? [], super_task_wrike_ids: task.superTaskIds ?? [], task_type: task.dates?.type ?? null, planned_minutes: plannedMinutes(task), allocated_minutes: allocatedMinutes(task), raw_data: task, is_deleted: false, last_seen_at: nowIso(), updated_at: nowIso() }));
+  const rows = tasks.map((task) => ({ organization_id: organizationId, wrike_id: task.id, title: task.title, description: task.description ?? null, permalink: task.permalink ?? null, status: task.status, workflow_id: task.workflowId ?? null, custom_status_id: task.customStatusId ?? null, responsible_wrike_ids: task.responsibleIds ?? [], importance: task.importance ?? null, created_at_wrike: date(task.createdDate), updated_at_wrike: date(task.updatedDate), start_date: day(task.dates?.start), due_date: day(task.dates?.due), completed_at: date(task.dates?.completed), parent_wrike_ids: task.parentIds ?? [], super_task_wrike_ids: task.superTaskIds ?? [], task_type: task.dates?.type ?? null, planned_minutes: plannedMinutes(task), allocated_minutes: allocatedMinutes(task), raw_data: task, is_deleted: false, last_seen_at: nowIso(), updated_at: nowIso() }));
   const { data: saved, error } = rows.length ? await db.from("wrike_tasks").upsert(rows, { onConflict: "organization_id,wrike_id" }).select("id,wrike_id") : { data: [], error: null };
   if (error) throw error;
   const taskMap = new Map((saved ?? []).map((task) => [task.wrike_id, task.id]));

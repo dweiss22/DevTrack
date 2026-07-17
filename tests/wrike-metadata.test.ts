@@ -43,6 +43,7 @@ describe("actual Wrike metadata structures", () => {
     expect(enriched.folderNames).toEqual(["2023 Courses"]);
     expect(enriched.customFields[0]).toEqual({ id: "IEACHQK7JUAHNWFH", title: "LCT Reporting", type: "DropDown", rawValue: "2025 Report", displayValue: "2025 Report", resolved: true });
     expect(enriched.customFields[1]).toEqual({ id: "UNKNOWN", title: "UNKNOWN", type: null, rawValue: ["A", "B"], displayValue: ["A", "B"], resolved: false });
+    expect(enriched.customFieldsNormalized).toMatchObject([{ normalizedTitle: "LCT Reporting", displayValues: ["2025 Report"], sourceFieldIds: ["IEACHQK7JUAHNWFH"], conflict: false }]);
   });
 
   it("builds safely encoded custom-field searches with URLSearchParams", () => {

@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logWrikeEvent, WrikeApiError, WrikeClient } from "@/lib/wrike/client";
 import { mapWithConcurrency } from "@/lib/wrike/concurrency";
+import { persistNormalizedCustomFieldDefinitions, persistNormalizedTaskCustomFields } from "@/lib/wrike/custom-field-persistence";
 import { wrikeEndpoints } from "@/lib/wrike/endpoints";
 import {
   buildCustomFieldDefinitionsById,
@@ -12,6 +13,7 @@ import {
   type EnrichedTaskMetadata
 } from "@/lib/wrike/metadata";
 import { refreshWrikeSessionFor, wrikeSessionFor } from "@/lib/wrike/oauth";
+import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory, syncWrikeReferenceData, type ReferenceSyncDiagnostics } from "@/lib/wrike/reference-data";
 import { SELECTED_WRIKE_FOLDERS, SELECTED_WRIKE_FOLDER_BY_ID, SELECTED_WRIKE_FOLDER_IDS, type SelectedWrikeFolder } from "@/lib/wrike/selected-folders";
 import { WRIKE_TASK_FIELDS } from "@/lib/wrike/task-fields";
 import { allocatedMinutes, plannedMinutes } from "@/lib/wrike/sync";
@@ -146,7 +148,9 @@ export async function importConfiguredFolderTasks(organizationId: string) {
   const tracker: ImportTracker = {
     taskRequests: 0, taskRecords: 0, uniqueTasks: 0, duplicateTasks: 0,
     timelogRequests: 0, timelogRecords: 0, uniqueTimelogs: 0, duplicateTimelogs: 0,
-    foldersProcessed: 0, failures: [], descendantStrategy: "unknown", descendantDiagnostics: {}, taskRequestContract: null
+    foldersProcessed: 0, failures: [], descendantStrategy: "unknown", descendantDiagnostics: {}, taskRequestContract: null,
+    workflowRequests: 0, userRequests: 0, categoryRequests: 0, referenceDiagnostics: null, referenceWarningCount: 0,
+    customFieldConflictCount: 0, customFieldNormalizationDiagnostics: {}
   };
   const { data: claimed, error: leaseError } = await db.rpc("claim_wrike_sync_lease", { target_organization_id: organizationId, target_token: leaseToken, lease_minutes: 30 });
   if (leaseError) throw new Error(`Unable to acquire the import lock: ${leaseError.message}`);
@@ -160,7 +164,7 @@ export async function importConfiguredFolderTasks(organizationId: string) {
   }).select("id").single();
   if (runStartError || !run) {
     await db.rpc("release_wrike_sync_lease", { target_organization_id: organizationId, target_token: leaseToken });
-    throw new Error("Unable to start the combined import. Apply migration 202607170001 first.");
+    throw new Error("Unable to start the combined import. Apply migrations through 202607170003_wrike_custom_field_normalization.sql first.");
   }
   logWrikeEvent("info", "folder_import_started", { runId: run.id, organizationId, selectedFolderCount: SELECTED_WRIKE_FOLDERS.length });
   try {
@@ -186,6 +190,9 @@ type ImportTracker = {
   timelogRequests: number; timelogRecords: number; uniqueTimelogs: number; duplicateTimelogs: number;
   foldersProcessed: number; failures: FolderFailure[]; descendantStrategy: DescendantStrategy;
   descendantDiagnostics: Record<string, unknown>; taskRequestContract: TaskRequestContractDiagnostics | null;
+  workflowRequests: number; userRequests: number; categoryRequests: number;
+  referenceDiagnostics: ReferenceSyncDiagnostics | null; referenceWarningCount: number;
+  customFieldConflictCount: number; customFieldNormalizationDiagnostics: Record<string, unknown>;
 };
 
 export class FolderImportError extends Error {
@@ -221,7 +228,11 @@ function runSummary(tracker: ImportTracker, startedAt: Date, completedAt: Date, 
     folder_failures: tracker.failures,
     task_request_contract: tracker.taskRequestContract ?? {},
     timelog_descendant_strategy: tracker.descendantStrategy,
-    timelog_descendant_diagnostics: tracker.descendantDiagnostics
+    timelog_descendant_diagnostics: tracker.descendantDiagnostics,
+    reference_data_diagnostics: tracker.referenceDiagnostics ?? {},
+    reference_warning_count: tracker.referenceWarningCount,
+    custom_field_conflict_count: tracker.customFieldConflictCount,
+    custom_field_normalization_diagnostics: tracker.customFieldNormalizationDiagnostics
   };
 }
 
@@ -260,8 +271,17 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     onRequest: ({ path }) => {
       if (/\/tasks(?:\?|$)/.test(path)) tracker.taskRequests++;
       if (/\/timelogs(?:\?|$)/.test(path)) tracker.timelogRequests++;
+      if (path === "/workflows") tracker.workflowRequests++;
+      if (/^\/users\//.test(path)) tracker.userRequests++;
+      if (/^\/timelog_categories(?:\?|$)/.test(path)) tracker.categoryRequests++;
     }
   });
+  const references = await syncWrikeReferenceData(db, organizationId, session.connection.wrike_account_id ?? null, client);
+  tracker.referenceDiagnostics = references.diagnostics;
+  tracker.referenceDiagnostics.workflow.requests = tracker.workflowRequests;
+  tracker.referenceDiagnostics.users.requested = tracker.userRequests;
+  tracker.referenceDiagnostics.categories.requests = tracker.categoryRequests;
+  tracker.referenceWarningCount = references.diagnostics.failures.length + references.diagnostics.users.nameMismatches.length;
   const metadata = await fetchValidatedMetadata(client);
 
   type FetchResult = { kind: "tasks"; source: SelectedWrikeFolder; records: WrikeTask[] } | { kind: "timelogs"; source: SelectedWrikeFolder; records: WrikeTimeEntry[] };
@@ -410,9 +430,10 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     field_type: field.type,
     raw_data: field,
     updated_at: importedAt
-  })), { onConflict: "organization_id,wrike_id" }).select("id,wrike_id");
+  })), { onConflict: "organization_id,wrike_id" }).select("id,wrike_id,title");
   if (fieldError) throw new Error(`Supabase could not save Wrike custom-field metadata: ${fieldError.message}`);
   const customFieldIdMap = new Map((savedFields ?? []).map((field) => [field.wrike_id, field.id]));
+  const normalizedFieldIdByKey = await persistNormalizedCustomFieldDefinitions(db, organizationId, savedFields ?? [], importedAt);
   if ((savedFields ?? []).length) {
     const { error } = await db.from("wrike_enabled_custom_fields").upsert((savedFields ?? []).map((field) => ({ organization_id: organizationId, custom_field_id: field.id })), { onConflict: "organization_id,custom_field_id" });
     if (error) throw new Error(`Supabase could not enable LCT custom fields: ${error.message}`);
@@ -432,6 +453,7 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
       status: task.status,
       workflow_id: task.workflowId ?? null,
       custom_status_id: task.customStatusId ?? null,
+      responsible_wrike_ids: task.responsibleIds ?? [],
       importance: task.importance ?? null,
       created_at_wrike: iso(task.createdDate),
       updated_at_wrike: iso(task.updatedDate),
@@ -457,11 +479,22 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
   const importedTaskIds = [...taskIdMap.values()];
   for (let offset = 0; offset < importedTaskIds.length; offset += 250) {
     const ids = importedTaskIds.slice(offset, offset + 250);
-    const [{ error: locationDeleteError }, { error: customDeleteError }] = await Promise.all([
+    const [{ error: locationDeleteError }, { error: customDeleteError }, { error: assigneeDeleteError }] = await Promise.all([
       db.from("wrike_task_locations").delete().in("task_id", ids),
-      db.from("wrike_task_custom_field_values").delete().in("task_id", ids)
+      db.from("wrike_task_custom_field_values").delete().in("task_id", ids),
+      db.from("wrike_task_assignees").delete().in("task_id", ids)
     ]);
-    if (locationDeleteError || customDeleteError) throw new Error("Supabase could not reconcile existing task metadata relationships.");
+    if (locationDeleteError || customDeleteError || assigneeDeleteError) throw new Error("Supabase could not reconcile existing task metadata relationships.");
+  }
+
+  const referenceUserIdMap = new Map(references.userRows.flatMap((user) => user.id ? [[user.wrike_id, user.id] as const] : []));
+  const assignments = tasks.flatMap((task) => (task.responsibleIds ?? []).flatMap((wrikeUserId) => {
+    const taskId = taskIdMap.get(task.id); const userId = referenceUserIdMap.get(wrikeUserId);
+    return taskId && userId ? [{ task_id: taskId, user_id: userId, assignment_type: "assignee" }] : [];
+  }));
+  for (let offset = 0; offset < assignments.length; offset += 500) {
+    const { error } = await db.from("wrike_task_assignees").upsert(assignments.slice(offset, offset + 500), { onConflict: "task_id,user_id,assignment_type" });
+    if (error) throw new Error(`Supabase could not save task assignees: ${error.message}`);
   }
 
   const locations = tasks.flatMap((task) => (task.parentIds ?? []).flatMap((wrikeLocationId) => {
@@ -492,6 +525,18 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     const { error } = await db.from("wrike_task_custom_field_values").upsert(customValues.slice(offset, offset + 500), { onConflict: "task_id,custom_field_id" });
     if (error) throw new Error(`Supabase could not save readable custom-field values: ${error.message}`);
   }
+  const normalizedResult = await persistNormalizedTaskCustomFields(db, normalizedFieldIdByKey, tasks.flatMap((task) => {
+    const taskId = taskIdMap.get(task.id); const fields = enrichedByTaskId.get(task.id)?.customFieldsNormalized;
+    return taskId && fields ? [{ taskId, taskWrikeId: task.id, fields }] : [];
+  }), importedAt);
+  tracker.customFieldConflictCount = normalizedResult.conflictCount;
+  tracker.customFieldNormalizationDiagnostics = {
+    logicalFieldCount: normalizedFieldIdByKey.size,
+    normalizedTaskValueCount: normalizedResult.valueCount,
+    conflictCount: normalizedResult.conflictCount,
+    conflicts: normalizedResult.conflicts.slice(0, 100),
+    conflictsTruncated: normalizedResult.conflicts.length > 100
+  };
 
   const mappings = [...taskByFolder.entries()].flatMap(([folderId, folderTasks]) => folderTasks.flatMap((task) => {
     const taskId = taskIdMap.get(task.id);
@@ -516,7 +561,7 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     if (error) throw new Error(`Supabase could not resolve timelog tasks: ${error.message}`);
     (data ?? []).forEach((task) => taskIdMap.set(task.wrike_id, task.id));
   }
-  const userIdMap = new Map<string, string>();
+  const userIdMap = new Map<string, string>(referenceUserIdMap);
   const referencedUserWrikeIds = [...new Set(timelogs.map((entry) => entry.userId).filter((id): id is string => Boolean(id)))];
   for (let offset = 0; offset < referencedUserWrikeIds.length; offset += 250) {
     const { data, error } = await db.from("wrike_users").select("id,wrike_id").eq("organization_id", organizationId).in("wrike_id", referencedUserWrikeIds.slice(offset, offset + 250));
@@ -559,6 +604,26 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     if (error) throw new Error(`Supabase could not save timelog source folders: ${error.message}`);
   }
 
+  const responsibleIds = tasks.flatMap((task) => task.responsibleIds ?? []);
+  const resolvedResponsible = resolveResponsibleUsers(responsibleIds, references.userRows);
+  const timelogUserResolutions = resolveResponsibleUsers(timelogs.flatMap((entry) => entry.userId ? [entry.userId] : []), references.userRows);
+  const categoryResolutions = timelogs.flatMap((entry) => {
+    const resolved = resolveTimelogCategory(entry.categoryId, references.categoryRows);
+    return resolved ? [resolved] : [];
+  });
+  const statusResolutions = tasks.map((task) => resolveTaskStatus(task.customStatusId, task.status, references.statusRows));
+  references.diagnostics.resolution = {
+    taskResponsibleIds: responsibleIds.length,
+    taskResponsibleResolved: resolvedResponsible.filter((item) => item.resolved).length,
+    taskResponsibleUnresolved: resolvedResponsible.filter((item) => !item.resolved).length,
+    timelogUsersResolved: timelogUserResolutions.filter((item) => item.resolved).length,
+    timelogUsersUnresolved: timelogUserResolutions.filter((item) => !item.resolved).length,
+    timelogCategoriesResolved: categoryResolutions.filter((item) => item.resolved).length,
+    timelogCategoriesUnresolved: categoryResolutions.filter((item) => !item.resolved).length,
+    taskStatusesResolved: statusResolutions.filter((item) => item.resolved).length,
+    taskStatusesUnresolved: statusResolutions.filter((item) => !item.resolved).length
+  };
+
   const folderCounts = Object.fromEntries([...taskByFolder.entries()].map(([folderId, folderTasks]) => [folderId, folderTasks.length]));
   const timelogFolderCounts = Object.fromEntries([...timelogByFolder.entries()].map(([folderId, entries]) => [folderId, entries.length]));
   const completedAt = new Date();
@@ -572,7 +637,7 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     metadata_diagnostics: metadata.diagnostics
   })).eq("id", runId);
   if (runError) throw new Error(`Records were saved, but the import summary failed: ${runError.message}`);
-  logWrikeEvent("info", "folder_import_completed", { runId, organizationId, tasks: tasks.length, timelogs: timelogs.length, durationMs: completedAt.getTime() - startedAt.getTime() });
+  logWrikeEvent("info", "folder_import_completed", { runId, organizationId, tasks: tasks.length, timelogs: timelogs.length, referenceWarnings: tracker.referenceWarningCount, customFieldConflicts: tracker.customFieldConflictCount, durationMs: completedAt.getTime() - startedAt.getTime() });
   return {
     taskCount: tasks.length,
     timelogCount: timelogs.length,
@@ -600,7 +665,11 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     customFieldDefinitionCount: metadata.matchedFields.length,
     matchedCustomFieldTitles: metadata.diagnostics.matchedFieldTitles,
     unfilteredFallbackRequired: metadata.diagnostics.unfilteredFallbackRequired,
-    metadataDiagnostics: metadata.diagnostics
+    metadataDiagnostics: metadata.diagnostics,
+    referenceDataDiagnostics: references.diagnostics,
+    referenceWarningCount: tracker.referenceWarningCount,
+    customFieldConflictCount: tracker.customFieldConflictCount,
+    customFieldNormalizationDiagnostics: tracker.customFieldNormalizationDiagnostics
   };
 }
 

@@ -8,6 +8,8 @@ const spaceImportMigration = fs.readFileSync(path.join(process.cwd(), "supabase/
 const folderImportMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607160004_folder_task_import.sql"), "utf8");
 const metadataMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607160005_real_wrike_metadata.sql"), "utf8");
 const combinedImportMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170001_folder_task_timelog_import.sql"), "utf8");
+const referenceDataMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170002_wrike_reference_data.sql"), "utf8");
+const customFieldNormalizationMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170003_wrike_custom_field_normalization.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -53,11 +55,45 @@ describe("reporting migration contract", () => {
     expect(combinedImportMigration).toContain("table public.wrike_folder_timelog_imports");
     expect(combinedImportMigration).toContain("primary key (organization_id, folder_wrike_id, time_entry_id)");
     expect(initialMigration).toMatch(/wrike_time_entries[\s\S]*unique\s*\(organization_id,\s*wrike_id\)/);
-    expect(combinedImportMigration).toContain("add column folder_id uuid references public.wrike_folders(id) on delete set null");
+    expect(combinedImportMigration).toContain("add column if not exists folder_id uuid references public.wrike_folders(id) on delete set null");
     expect(combinedImportMigration).toContain("task_request_contract jsonb");
     expect(combinedImportMigration).toContain("timelog_descendant_strategy");
     expect(combinedImportMigration).toContain("failed_folder_request_count");
     expect(combinedImportMigration).toContain("enable row level security");
     expect(combinedImportMigration).toContain("grant all on public.wrike_folder_timelog_imports to service_role");
+  });
+  it("stores reference data, raw responsible IDs, OAuth scopes, workflow status fields, and run warnings", () => {
+    expect(referenceDataMigration).toContain("oauth_scopes text[]");
+    expect(referenceDataMigration).toContain("title text");
+    expect(referenceDataMigration).toContain("avatar_url text");
+    expect(referenceDataMigration).toContain("profiles jsonb");
+    expect(referenceDataMigration).toContain("hidden boolean");
+    expect(referenceDataMigration).toContain("sort_order integer");
+    expect(referenceDataMigration).toContain("responsible_wrike_ids text[]");
+    expect(referenceDataMigration).toContain("jsonb_array_elements_text");
+    expect(referenceDataMigration).toContain("table if not exists public.wrike_workflows");
+    expect(referenceDataMigration).toContain("standard boolean");
+    expect(referenceDataMigration).toContain("reference_data_diagnostics jsonb");
+    expect(referenceDataMigration).toContain("reference_warning_count integer");
+    expect(referenceDataMigration).toContain("enable row level security");
+    expect(referenceDataMigration).toContain("grant all on public.wrike_workflows to service_role");
+  });
+  it("stores logical custom fields, raw source mappings, conflict metadata, dynamic options, and scoped access", () => {
+    expect(customFieldNormalizationMigration).toContain("table public.wrike_normalized_custom_fields");
+    expect(customFieldNormalizationMigration).toContain("unique (organization_id, normalized_key)");
+    expect(customFieldNormalizationMigration).toContain("table public.wrike_normalized_custom_field_sources");
+    expect(customFieldNormalizationMigration).toContain("custom_field_id uuid not null unique references public.wrike_custom_fields");
+    expect(customFieldNormalizationMigration).toContain("source_designation text");
+    expect(customFieldNormalizationMigration).toContain("table public.wrike_task_normalized_custom_field_values");
+    expect(customFieldNormalizationMigration).toContain("source_wrike_field_ids text[]");
+    expect(customFieldNormalizationMigration).toContain("source_titles text[]");
+    expect(customFieldNormalizationMigration).toContain("has_conflict boolean");
+    expect(customFieldNormalizationMigration).toContain("conflict_metadata jsonb");
+    expect(customFieldNormalizationMigration).toContain("custom_field_conflict_count integer");
+    expect(customFieldNormalizationMigration).toContain("reporting_custom_field_options");
+    expect(customFieldNormalizationMigration).toContain("wanted.value=any(value.display_values)");
+    expect(customFieldNormalizationMigration).toContain("matches_reporting_normalized_custom_search");
+    expect(customFieldNormalizationMigration).toContain("public.can_access_wrike_task(task.id)");
+    expect(customFieldNormalizationMigration).toContain("enable row level security");
   });
 });

@@ -63,8 +63,9 @@ describe("Wrike client", () => {
     await expect(new WrikeClient("token", "https://www.wrike.com/api/v4").request("/missing")).rejects.toMatchObject({ status: 404 });
   });
   it("redacts credentials from nested structured log details", () => {
-    expect(redactWrikeLogDetails({ accessToken: "secret", nested: { Authorization: "Bearer secret", path: "/account" } })).toEqual({
+    expect(redactWrikeLogDetails({ accessToken: "secret", message: "failed Bearer secret and access_token=abc123", nested: { Authorization: "Bearer secret", path: "/account" } })).toEqual({
       accessToken: "[REDACTED]",
+      message: "failed Bearer [REDACTED] and access_token=[REDACTED]",
       nested: { Authorization: "[REDACTED]", path: "/account" }
     });
   });

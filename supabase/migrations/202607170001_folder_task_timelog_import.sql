@@ -39,7 +39,7 @@ create index wrike_time_entries_task_wrike_idx on public.wrike_time_entries(orga
 create index wrike_time_entries_user_wrike_idx on public.wrike_time_entries(organization_id, user_wrike_id);
 
 alter table public.wrike_folder_task_imports
-  add column folder_id uuid references public.wrike_folders(id) on delete set null;
+  add column if not exists folder_id uuid references public.wrike_folders(id) on delete set null;
 
 update public.wrike_folder_task_imports source
 set folder_id = folder.id
@@ -48,7 +48,7 @@ where folder.organization_id = source.organization_id
   and folder.wrike_id = source.folder_wrike_id
   and source.folder_id is null;
 
-create index wrike_folder_task_imports_folder_idx on public.wrike_folder_task_imports(folder_id, task_id);
+create index if not exists wrike_folder_task_imports_folder_idx on public.wrike_folder_task_imports(folder_id, task_id);
 
 create table public.wrike_folder_timelog_imports (
   organization_id uuid not null references public.organizations(id) on delete cascade,
