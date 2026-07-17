@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { completedReportingYearAverages, dashboardCategory, dashboardMetricCounts, normalizeDashboardValues, normalizeReportingYear, ONLINE_LEARNING_WORKFLOW_ID } from "@/lib/reporting/dashboard";
+import { completedReportingYearAverages, dashboardCategory, dashboardMetricCounts, loadDashboardAnalyticsResult, normalizeDashboardValues, normalizeReportingYear, ONLINE_LEARNING_WORKFLOW_ID } from "@/lib/reporting/dashboard";
 import { APPLICATION_NAVIGATION, navigationForRole } from "@/lib/navigation";
 
 describe("application navigation", () => {
@@ -30,6 +30,13 @@ describe("application navigation", () => {
 });
 
 describe("Online Learning dashboard calculations", () => {
+  it("turns a missing Dashboard RPC into an actionable migration notice", async () => {
+    const rpc = async () => ({ data: null, error: { code: "PGRST202", message: "Could not find public.reporting_online_learning_dashboard_v2" } });
+    const result = await loadDashboardAnalyticsResult({ rpc } as never, { sort: "updated", page: 1, pageSize: 50 });
+    expect(result).toMatchObject({ data: null, error: { kind: "migration_required", diagnosticCode: "PGRST202" } });
+    expect(result.error?.message).toContain("202607170005_dashboard_analytics.sql");
+  });
+
   it("includes only Online Learning projects and classifies metrics from normalized status mappings", () => {
     expect(dashboardMetricCounts([
       { workflowId: ONLINE_LEARNING_WORKFLOW_ID, classification: "active" },

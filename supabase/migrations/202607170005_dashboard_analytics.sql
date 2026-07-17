@@ -24,7 +24,7 @@ set dashboard_classification=case
     classification_updated_at=now()
 where classification_source is distinct from 'manual';
 
-create or replace function public.wrike_reporting_year(values text[])
+create or replace function public.wrike_reporting_year(source_values text[])
 returns integer
 language sql
 immutable
@@ -32,7 +32,7 @@ set search_path=public
 as $$
   with matches as (
     select distinct ((regexp_match(value, '(^|[^0-9])((19[0-9]{2}|20[0-9]{2}|21[0-9]{2}))([^0-9]|$)'))[2])::integer as year
-    from unnest(coalesce(values, '{}'::text[])) value
+    from unnest(coalesce(source_values, '{}'::text[])) value
     where trim(value) <> ''
       and value ~ '(^|[^0-9])(19[0-9]{2}|20[0-9]{2}|21[0-9]{2})([^0-9]|$)'
   )
@@ -187,3 +187,5 @@ grant execute on function public.wrike_reporting_year(text[]) to authenticated,s
 grant execute on function public.reporting_online_learning_dashboard_v2(jsonb) to authenticated,service_role;
 
 comment on function public.reporting_online_learning_dashboard_v2(jsonb) is 'RLS-aware Online Learning project analytics aggregated from synchronized task, status, normalized custom-field, and timelog data.';
+
+select pg_notify('pgrst','reload schema');

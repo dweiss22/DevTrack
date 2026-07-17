@@ -67,6 +67,9 @@ main { max-width: 1500px; width: 100%; padding: 42px; margin: auto; }
 .dashboard-stat strong { display: block; margin: 6px 0 1px; color: var(--navy); font-size: 34px; line-height: 1.15; }
 .dashboard-stat small { font-size: 12px; }
 .dashboard-charts { display: grid; gap: 18px; }
+.dashboard-query-error { max-width: 760px; border-left: 4px solid #d97706; }
+.dashboard-query-error h2 { margin-bottom: 8px; }
+.dashboard-query-error .button { margin-top: 8px; }
 .dashboard-chart { min-width: 0; padding: 24px; }
 .dashboard-chart h2 { margin: 0 0 4px; font-size: 18px; }
 .dashboard-chart > p, .chart-heading p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }

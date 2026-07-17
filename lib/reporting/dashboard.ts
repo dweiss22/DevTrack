@@ -48,10 +48,47 @@ export const EMPTY_DASHBOARD_ANALYTICS: DashboardAnalytics = {
   verticals: []
 };
 
-export async function loadDashboardAnalytics(supabase: SupabaseClient, filters: ReportingFilters): Promise<DashboardAnalytics> {
+export type DashboardAnalyticsFailure = {
+  kind: "migration_required" | "permission_denied" | "query_failed";
+  title: string;
+  message: string;
+  diagnosticCode: string | null;
+};
+
+export type DashboardAnalyticsResult = { data: DashboardAnalytics; error: null } | { data: null; error: DashboardAnalyticsFailure };
+
+export async function loadDashboardAnalyticsResult(supabase: SupabaseClient, filters: ReportingFilters): Promise<DashboardAnalyticsResult> {
   const { data, error } = await supabase.rpc("reporting_online_learning_dashboard_v2", { filters: filtersForRpc(filters) });
-  if (error) throw new Error(`Dashboard analytics could not be loaded: ${error.message}`);
-  return data ? data as DashboardAnalytics : EMPTY_DASHBOARD_ANALYTICS;
+  if (!error) return { data: data ? data as DashboardAnalytics : EMPTY_DASHBOARD_ANALYTICS, error: null };
+  const message = error.message.toLocaleLowerCase();
+  if (error.code === "PGRST202" || error.code === "42883" || (message.includes("reporting_online_learning_dashboard_v2") && (message.includes("not find") || message.includes("does not exist")))) {
+    return { data: null, error: {
+      kind: "migration_required",
+      title: "Dashboard database migration required",
+      message: "Apply Supabase migration 202607170005_dashboard_analytics.sql, then reload the Dashboard. Existing project data has not been replaced with zeroes.",
+      diagnosticCode: error.code ?? null
+    } };
+  }
+  if (error.code === "42501" || message.includes("permission denied")) {
+    return { data: null, error: {
+      kind: "permission_denied",
+      title: "Dashboard reporting access was denied",
+      message: "Confirm the migration grants execute access to authenticated users and that this account belongs to the correct reporting organization.",
+      diagnosticCode: error.code ?? null
+    } };
+  }
+  return { data: null, error: {
+    kind: "query_failed",
+    title: "Dashboard analytics query failed",
+    message: "The database function exists but could not complete. Review the server or Supabase database logs using the diagnostic code below.",
+    diagnosticCode: error.code ?? null
+  } };
+}
+
+export async function loadDashboardAnalytics(supabase: SupabaseClient, filters: ReportingFilters): Promise<DashboardAnalytics> {
+  const result = await loadDashboardAnalyticsResult(supabase, filters);
+  if (result.error) throw new Error(`${result.error.title}: ${result.error.message}`);
+  return result.data;
 }
 
 export function normalizeReportingYear(values: readonly string[]) {
