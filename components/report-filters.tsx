@@ -1,12 +1,13 @@
 import React from "react";
 import type { ReportingFilters } from "@/lib/reporting/filters";
-import type { CustomFieldFilterOption } from "@/lib/reporting/options";
+import type { CustomFieldFilterOption, StatusFilterOption } from "@/lib/reporting/options";
 
 type Option = { id: string; name: string };
-export function ReportFilters({ filters, users = [], scopes = [], folders = [], projects = [], statuses = [], categories = [], customFields = [], includeTime = true, taskOnly = false }: { filters: ReportingFilters; users?: Option[]; scopes?: Option[]; folders?: Option[]; projects?: Option[]; statuses?: string[]; categories?: Option[]; customFields?: CustomFieldFilterOption[]; includeTime?: boolean; taskOnly?: boolean }) {
+export function ReportFilters({ filters, users = [], scopes = [], folders = [], projects = [], statuses = [], categories = [], customFields = [], includeTime = true, taskOnly = false }: { filters: ReportingFilters; users?: Option[]; scopes?: Option[]; folders?: Option[]; projects?: Option[]; statuses?: (string | StatusFilterOption)[]; categories?: Option[]; customFields?: CustomFieldFilterOption[]; includeTime?: boolean; taskOnly?: boolean }) {
+  const statusOptions = statuses.map((status) => typeof status === "string" ? { id: status, name: status } : status);
   return <form className="card report-filters" method="get"><div className="filter-fields">
     <label>Search<input name="q" defaultValue={filters.q ?? ""} placeholder="Task or comment" /></label>
-    <label>Status<select name="statuses" defaultValue={filters.statuses?.[0] ?? ""}><option value="">All statuses</option>{statuses.map((status) => <option value={status} key={status}>{status}</option>)}</select></label>
+    <label>Status<select name="statuses" defaultValue={filters.statuses?.[0] ?? ""}><option value="">All statuses</option>{statusOptions.map((status) => <option value={status.id} key={status.id}>{status.name}</option>)}</select></label>
     <label>State<select name="state" defaultValue={filters.state ?? ""}><option value="">Any state</option><option value="open">Open</option><option value="overdue">Overdue</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>
     {!taskOnly && <label>Person<select name="assigneeIds" defaultValue={filters.assigneeIds?.[0] ?? ""}><option value="">All people</option>{users.map((user) => <option value={user.id} key={user.id}>{user.name}</option>)}</select></label>}
     {!taskOnly && <label>Source<select name="scopeIds" defaultValue={filters.scopeIds?.[0] ?? ""}><option value="">All visible sources</option>{scopes.map((scope) => <option value={scope.id} key={scope.id}>{scope.name}</option>)}</select></label>}

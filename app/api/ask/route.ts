@@ -23,17 +23,17 @@ export async function POST(request: NextRequest) {
     previousFilters = { ...(conversation.last_filters as object), ...previousFilters };
   }
   const [{ data: users }, { data: scopes }, { data: projects }, { data: statusRows }, customFields] = await Promise.all([
-    supabase.from("wrike_users").select("id,display_name").eq("organization_id", profile.organization_id).eq("is_active", true).order("display_name"),
+    supabase.from("wrike_users").select("id,wrike_id,display_name,is_unresolved").eq("organization_id", profile.organization_id).eq("is_active", true).order("display_name"),
     supabase.from("wrike_sync_scopes").select("id,label").eq("organization_id", profile.organization_id).eq("is_active", true),
     supabase.from("wrike_projects").select("id,title").eq("organization_id", profile.organization_id).is("deleted_at", null).order("title"),
-    supabase.from("wrike_workflow_statuses").select("title").eq("organization_id", profile.organization_id),
+    supabase.from("wrike_workflow_statuses").select("wrike_id,title,is_unresolved").eq("organization_id", profile.organization_id),
     loadCustomFieldOptions(supabase)
   ]);
   const references: AskReferences = {
-    users: (users ?? []).map((row) => ({ id: row.id, name: row.display_name })),
+    users: (users ?? []).map((row) => ({ id: row.id, name: row.is_unresolved ? `Unresolved Wrike user ${row.wrike_id}` : row.display_name })),
     scopes: (scopes ?? []).map((row) => ({ id: row.id, name: row.label })),
     projects: (projects ?? []).map((row) => ({ id: row.id, name: row.title })),
-    statuses: [...new Set((statusRows ?? []).map((row) => row.title))],
+    statuses: (statusRows ?? []).map((row) => ({ id: row.wrike_id, name: row.is_unresolved ? `Unresolved Wrike status ${row.wrike_id}` : row.title })),
     customFields: customFields.map((field) => ({ id: field.id, name: field.name })),
     customOptions: customFields.flatMap((field) => field.values.map((name) => ({ fieldId: field.id, fieldName: field.name, name })))
   };
@@ -65,10 +65,12 @@ export async function POST(request: NextRequest) {
     else if (parsed.intent === "compare") answer = tasks.slice(0, 20).map((task) => `${task.title}: ${task.planned_minutes == null ? "no plan" : `${hours(task.planned_minutes)} planned`} / ${hours(task.actual_minutes)} actual hours`).join("\n");
     else if (tasks.length === 1 && parsed.filters.q) {
       const entries = await loadTimeRows(supabase, { ...parsed.filters, q: undefined, taskIds: [tasks[0].task_id], page: 1, pageSize: 20 });
-      const recent = entries.length ? ` Recent time: ${entries.slice(0, 10).map((entry) => `${entry.entry_date} ${hours(entry.minutes)}h by ${entry.user_name ?? "Unknown"}`).join("; ")}.` : " No visible time entries were found.";
-      answer = `${tasks[0].title} is ${tasks[0].status_name}. It has ${tasks[0].planned_minutes == null ? "no planned effort" : `${hours(tasks[0].planned_minutes)} planned hours`} and ${hours(tasks[0].actual_minutes)} visible recorded hours. Due: ${tasks[0].due_date ?? "not set"}. Assignees: ${tasks[0].responsible_users.map((item) => item.fullName).join(", ") || "unassigned"}.${recent}`;
+      const recent = entries.length ? ` Recent time: ${entries.slice(0, 10).map((entry) => `${entry.entry_date} ${hours(entry.minutes)}h by ${entry.user_reference?.resolved ? entry.user_reference.fullName : entry.user_wrike_id ? `unresolved Wrike user ${entry.user_wrike_id}` : "Unknown"}`).join("; ")}.` : " No visible time entries were found.";
+      const status = tasks[0].status_reference.resolved ? tasks[0].status_name : `unresolved Wrike status ${tasks[0].custom_status_id}`;
+      const assignees = tasks[0].responsible_users.map((item) => item.resolved ? item.fullName : `unresolved Wrike user ${item.wrikeUserId}`).join(", ") || "unassigned";
+      answer = `${tasks[0].title} is ${status}. It has ${tasks[0].planned_minutes == null ? "no planned effort" : `${hours(tasks[0].planned_minutes)} planned hours`} and ${hours(tasks[0].actual_minutes)} visible recorded hours. Due: ${tasks[0].due_date ?? "not set"}. Assignees: ${assignees}.${recent}`;
     }
-    else answer = tasks.slice(0, 20).map((task) => `${task.title} — ${task.status_name}, ${hours(task.actual_minutes)} recorded hours`).join("\n");
+    else answer = tasks.slice(0, 20).map((task) => `${task.title} — ${task.status_reference.resolved ? task.status_name : `unresolved Wrike status ${task.custom_status_id}`}, ${hours(task.actual_minutes)} recorded hours`).join("\n");
     referencesOut = tasks.slice(0, 20).map((task) => ({ id: task.task_id, title: task.title, href: `/tasks/${task.task_id}` }));
   }
   await Promise.all([

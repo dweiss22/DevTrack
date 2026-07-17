@@ -67,6 +67,13 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
 .check input { width: auto; }
 .notice { padding: 12px; border-radius: 7px; background: #ecfdf3; color: #067647; margin-bottom: 16px; }
 .error { background: #fef3f2; color: #b42318; }
+.unresolved-reference { position: relative; display: inline-flex; align-items: center; gap: 4px; color: #9a6700; border-bottom: 1px dotted currentColor; cursor: help; outline: none; }
+.unresolved-reference:focus { border-radius: 4px; box-shadow: 0 0 0 3px #fbbf2440; }
+.unresolved-tooltip { position: absolute; z-index: 20; left: 0; top: calc(100% + 7px); width: min(330px, 80vw); padding: 9px 11px; border-radius: 7px; background: #172033; color: #fff; font-size: 12px; font-weight: 400; line-height: 1.4; box-shadow: 0 8px 24px #0003; opacity: 0; visibility: hidden; pointer-events: none; text-transform: none; letter-spacing: 0; }
+.unresolved-reference:hover .unresolved-tooltip, .unresolved-reference:focus .unresolved-tooltip { opacity: 1; visibility: visible; }
+.status-badge { display: inline-flex; align-items: center; gap: 7px; width: max-content; max-width: 100%; padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; background: #fff; font-size: 13px; }
+.status-badge.unresolved { border-color: #f1c76a; background: #fffbeb; }
+.status-color { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; }
 
 .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .admin-stack, .stack { display: grid; gap: 14px; }

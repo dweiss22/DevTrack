@@ -1,7 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logWrikeEvent, WrikeApiError, WrikeClient } from "@/lib/wrike/client";
 import { mapWithConcurrency } from "@/lib/wrike/concurrency";
-import { persistNormalizedCustomFieldDefinitions, persistNormalizedTaskCustomFields } from "@/lib/wrike/custom-field-persistence";
+import { loadCustomFieldManualMappings, persistNormalizedCustomFieldDefinitions, persistNormalizedTaskCustomFields } from "@/lib/wrike/custom-field-persistence";
+import { normalizeWrikeCustomFieldTitle } from "@/lib/wrike/custom-field-normalization";
 import { wrikeEndpoints } from "@/lib/wrike/endpoints";
 import {
   buildCustomFieldDefinitionsById,
@@ -13,10 +14,12 @@ import {
   type EnrichedTaskMetadata
 } from "@/lib/wrike/metadata";
 import { refreshWrikeSessionFor, wrikeSessionFor } from "@/lib/wrike/oauth";
-import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory, syncWrikeReferenceData, type ReferenceSyncDiagnostics } from "@/lib/wrike/reference-data";
+import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory, syncEncounteredWrikeUsers, syncWrikeReferenceData, type ReferenceSyncDiagnostics } from "@/lib/wrike/reference-data";
+import { uniqueWrikeIds, type WrikeUnresolvedReferenceInput } from "@/lib/wrike/reference-resolution";
 import { SELECTED_WRIKE_FOLDERS, SELECTED_WRIKE_FOLDER_BY_ID, SELECTED_WRIKE_FOLDER_IDS, type SelectedWrikeFolder } from "@/lib/wrike/selected-folders";
 import { WRIKE_TASK_FIELDS } from "@/lib/wrike/task-fields";
 import { allocatedMinutes, plannedMinutes } from "@/lib/wrike/sync";
+import { markResolvedWrikeReferences, upsertUnresolvedWrikeReferences } from "@/lib/wrike/unresolved-references";
 import type { WrikeCustomFieldDefinition, WrikeFolderDefinition, WrikeTask, WrikeTimeEntry } from "@/lib/wrike/types";
 
 export const TASK_IMPORT_FOLDER_IDS = SELECTED_WRIKE_FOLDER_IDS;
@@ -38,6 +41,8 @@ export type FolderImportMetadataDiagnostics = {
   matchingRule: string;
   matchedFieldCount: number;
   matchedFieldTitles: string[];
+  referencedFieldCount?: number;
+  unresolvedReferencedFieldIds?: string[];
 };
 
 export function folderTasksPath(folderId: string) {
@@ -70,6 +75,26 @@ export { mapWithConcurrency } from "@/lib/wrike/concurrency";
 
 export function deduplicateByWrikeId<T extends { id: string }>(records: readonly T[]) {
   return [...new Map(records.map((record) => [record.id, record])).values()];
+}
+
+function scalarValues(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value.flatMap(scalarValues);
+  if (value && typeof value === "object") return Object.values(value as Record<string, unknown>).flatMap(scalarValues);
+  return [value];
+}
+
+export function encounteredUserIds(tasks: readonly WrikeTask[], timelogs: readonly WrikeTimeEntry[], folders: readonly WrikeFolderDefinition[], customFields: Map<string, WrikeCustomFieldDefinition>) {
+  const values: unknown[] = [];
+  for (const task of tasks) {
+    values.push(...(task.responsibleIds ?? []), ...(task.authorIds ?? []));
+    for (const field of task.customFields ?? []) {
+      const definition = customFields.get(field.id);
+      if (definition?.type.toLocaleLowerCase() === "contacts") values.push(...scalarValues(field.value));
+    }
+  }
+  for (const entry of timelogs) if (entry.userId) values.push(entry.userId);
+  for (const folder of folders) values.push(...(folder.project?.ownerIds ?? []), folder.project?.authorId);
+  return uniqueWrikeIds(values);
 }
 
 function searchAttempt(query: string | null, path: string, fields: WrikeCustomFieldDefinition[]): SearchAttempt {
@@ -121,7 +146,8 @@ export async function fetchValidatedMetadata(client: WrikeClient) {
 
   const matchedFields = [...fieldsById.values()].filter(isLctCustomField).sort((left, right) => left.title.localeCompare(right.title));
   if (!matchedFields.some((field) => field.id === EXPECTED_LCT_FIELD_ID)) throw new Error(`Wrike custom-field metadata did not include required LCT field ${EXPECTED_LCT_FIELD_ID}.`);
-  const customFieldDefinitionsById = buildCustomFieldDefinitionsById(matchedFields);
+  const allFields = [...fieldsById.values()].sort((left, right) => left.title.localeCompare(right.title));
+  const customFieldDefinitionsById = buildCustomFieldDefinitionsById(allFields);
   const diagnostics: FolderImportMetadataDiagnostics = {
     folderRequest: folderPath,
     folderResponseKind: folderResponse.kind,
@@ -132,7 +158,41 @@ export async function fetchValidatedMetadata(client: WrikeClient) {
     matchedFieldCount: matchedFields.length,
     matchedFieldTitles: matchedFields.map((field) => field.title)
   };
-  return { folderDefinitions: folderResponse.data, folderDefinitionsById, matchedFields, customFieldDefinitionsById, diagnostics };
+  return { folderDefinitions: folderResponse.data, folderDefinitionsById, allFields, matchedFields, customFieldDefinitionsById, diagnostics };
+}
+
+export async function completeReferencedCustomFieldMetadata(
+  client: WrikeClient,
+  metadata: Awaited<ReturnType<typeof fetchValidatedMetadata>>,
+  referencedFieldIds: readonly string[]
+) {
+  const missing = [...new Set(referencedFieldIds)].filter((id) => !metadata.customFieldDefinitionsById.has(id));
+  metadata.diagnostics.referencedFieldCount = new Set(referencedFieldIds).size;
+  if (!missing.length) {
+    metadata.diagnostics.unresolvedReferencedFieldIds = [];
+    return { metadata, warning: null as string | null };
+  }
+  const alreadyUnfiltered = metadata.diagnostics.customFieldSearches.some((attempt) => attempt.query === null);
+  if (!alreadyUnfiltered) {
+    const path = wrikeEndpoints.customFields();
+    try {
+      const response = parseCustomFieldsResponse(await client.request<unknown>(path));
+      response.data.forEach((field) => metadata.customFieldDefinitionsById.set(field.id, field));
+      metadata.diagnostics.customFieldSearches.push(searchAttempt(null, path, response.data));
+      metadata.diagnostics.unfilteredFallbackRequired = true;
+      metadata.allFields = [...metadata.customFieldDefinitionsById.values()].sort((left, right) => left.title.localeCompare(right.title));
+      metadata.matchedFields = metadata.allFields.filter(isLctCustomField).sort((left, right) => left.title.localeCompare(right.title));
+      metadata.diagnostics.matchedFieldCount = metadata.matchedFields.length;
+      metadata.diagnostics.matchedFieldTitles = metadata.matchedFields.map((field) => field.title);
+    } catch (error) {
+      const warning = `Wrike could not retrieve the unfiltered custom-field definitions: ${error instanceof Error ? error.message : "Unknown response error"}`;
+      metadata.diagnostics.unresolvedReferencedFieldIds = missing;
+      return { metadata, warning };
+    }
+  }
+  const unresolved = [...new Set(referencedFieldIds)].filter((id) => !metadata.customFieldDefinitionsById.has(id));
+  metadata.diagnostics.unresolvedReferencedFieldIds = unresolved;
+  return { metadata, warning: null as string | null };
 }
 
 export async function validateBeforeReset<T>(loadAndValidate: () => Promise<T>, reset: () => Promise<void>) {
@@ -150,7 +210,7 @@ export async function importConfiguredFolderTasks(organizationId: string) {
     timelogRequests: 0, timelogRecords: 0, uniqueTimelogs: 0, duplicateTimelogs: 0,
     foldersProcessed: 0, failures: [], descendantStrategy: "unknown", descendantDiagnostics: {}, taskRequestContract: null,
     workflowRequests: 0, userRequests: 0, categoryRequests: 0, referenceDiagnostics: null, referenceWarningCount: 0,
-    customFieldConflictCount: 0, customFieldNormalizationDiagnostics: {}
+    customFieldConflictCount: 0, customFieldNormalizationDiagnostics: {}, unresolvedReferenceCount: 0, referenceResolutionDiagnostics: {}
   };
   const { data: claimed, error: leaseError } = await db.rpc("claim_wrike_sync_lease", { target_organization_id: organizationId, target_token: leaseToken, lease_minutes: 30 });
   if (leaseError) throw new Error(`Unable to acquire the import lock: ${leaseError.message}`);
@@ -164,7 +224,7 @@ export async function importConfiguredFolderTasks(organizationId: string) {
   }).select("id").single();
   if (runStartError || !run) {
     await db.rpc("release_wrike_sync_lease", { target_organization_id: organizationId, target_token: leaseToken });
-    throw new Error("Unable to start the combined import. Apply migrations through 202607170003_wrike_custom_field_normalization.sql first.");
+    throw new Error("Unable to start the combined import. Apply migrations through 202607170004_wrike_reference_resolution.sql first.");
   }
   logWrikeEvent("info", "folder_import_started", { runId: run.id, organizationId, selectedFolderCount: SELECTED_WRIKE_FOLDERS.length });
   try {
@@ -193,6 +253,7 @@ type ImportTracker = {
   workflowRequests: number; userRequests: number; categoryRequests: number;
   referenceDiagnostics: ReferenceSyncDiagnostics | null; referenceWarningCount: number;
   customFieldConflictCount: number; customFieldNormalizationDiagnostics: Record<string, unknown>;
+  unresolvedReferenceCount: number; referenceResolutionDiagnostics: Record<string, unknown>;
 };
 
 export class FolderImportError extends Error {
@@ -232,7 +293,9 @@ function runSummary(tracker: ImportTracker, startedAt: Date, completedAt: Date, 
     reference_data_diagnostics: tracker.referenceDiagnostics ?? {},
     reference_warning_count: tracker.referenceWarningCount,
     custom_field_conflict_count: tracker.customFieldConflictCount,
-    custom_field_normalization_diagnostics: tracker.customFieldNormalizationDiagnostics
+    custom_field_normalization_diagnostics: tracker.customFieldNormalizationDiagnostics,
+    unresolved_reference_count: tracker.unresolvedReferenceCount,
+    reference_resolution_diagnostics: tracker.referenceResolutionDiagnostics
   };
 }
 
@@ -374,7 +437,41 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
   tracker.uniqueTimelogs = timelogs.length;
   tracker.duplicateTimelogs = tracker.timelogRecords - tracker.uniqueTimelogs;
   tracker.foldersProcessed = SELECTED_WRIKE_FOLDERS.length;
-  const enrichedByTaskId = new Map(tasks.map((task) => [task.id, enrichTaskMetadata(task, metadata.folderDefinitionsById, metadata.customFieldDefinitionsById)]));
+  const referencedCustomFieldIds = tasks.flatMap((task) => (task.customFields ?? []).map((field) => field.id));
+  const completedMetadata = await completeReferencedCustomFieldMetadata(client, metadata, referencedCustomFieldIds);
+  if (completedMetadata.warning) {
+    tracker.referenceWarningCount++;
+    logWrikeEvent("warn", "wrike_custom_field_reference_failed", { message: completedMetadata.warning, missingIds: metadata.diagnostics.unresolvedReferencedFieldIds });
+  }
+  const stillMissingFieldIds = [...new Set(referencedCustomFieldIds)].filter((id) => !metadata.customFieldDefinitionsById.has(id));
+  if (stillMissingFieldIds.length) {
+    const { data: priorFields, error } = await db.from("wrike_custom_fields").select("wrike_id,raw_data,is_unresolved").eq("organization_id", organizationId).in("wrike_id", stillMissingFieldIds);
+    if (error) throw new Error(`Supabase could not load previously resolved custom fields: ${error.message}`);
+    for (const field of priorFields ?? []) if (!field.is_unresolved && field.raw_data && typeof field.raw_data === "object") metadata.customFieldDefinitionsById.set(field.wrike_id, field.raw_data as WrikeCustomFieldDefinition);
+    metadata.allFields = [...metadata.customFieldDefinitionsById.values()].sort((left, right) => left.title.localeCompare(right.title));
+    metadata.diagnostics.unresolvedReferencedFieldIds = stillMissingFieldIds.filter((id) => !metadata.customFieldDefinitionsById.has(id));
+  }
+  const encounteredIds = encounteredUserIds(tasks, timelogs, metadata.folderDefinitions, metadata.customFieldDefinitionsById);
+  const dynamicUsers = await syncEncounteredWrikeUsers(db, organizationId, session.connection.wrike_account_id ?? null, client, encounteredIds);
+  const initialUserDiagnostics = references.diagnostics.users;
+  references.userRows = dynamicUsers.rows;
+  references.diagnostics.users = {
+    ...dynamicUsers.diagnostics,
+    requested: tracker.userRequests,
+    received: initialUserDiagnostics.received + dynamicUsers.diagnostics.received,
+    upserted: initialUserDiagnostics.upserted + dynamicUsers.diagnostics.upserted,
+    fallbackCreated: initialUserDiagnostics.fallbackCreated + dynamicUsers.diagnostics.fallbackCreated,
+    placeholderCreated: initialUserDiagnostics.placeholderCreated + dynamicUsers.diagnostics.placeholderCreated,
+    failed: initialUserDiagnostics.failed + dynamicUsers.diagnostics.failed,
+    failedIds: [...new Set([...initialUserDiagnostics.failedIds, ...dynamicUsers.diagnostics.failedIds])],
+    nameMismatches: [...initialUserDiagnostics.nameMismatches, ...dynamicUsers.diagnostics.nameMismatches],
+    durationMs: initialUserDiagnostics.durationMs + dynamicUsers.diagnostics.durationMs
+  };
+  references.diagnostics.failures.push(...dynamicUsers.failures);
+  tracker.referenceWarningCount = references.diagnostics.failures.length + references.diagnostics.users.nameMismatches.length + (completedMetadata.warning ? 1 : 0);
+  const manualMappings = await loadCustomFieldManualMappings(db, organizationId);
+  const enrichmentMappings = new Map([...manualMappings].map(([wrikeId, mapping]) => [wrikeId, { action: mapping.action, normalizedTitle: mapping.normalizedTitle }]));
+  const enrichedByTaskId = new Map(tasks.map((task) => [task.id, enrichTaskMetadata(task, metadata.folderDefinitionsById, metadata.customFieldDefinitionsById, enrichmentMappings)]));
 
   const importedAt = new Date().toISOString();
   const parentIdsByFolderId = new Map<string, string[]>();
@@ -382,17 +479,37 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
 
   const folderDefinitions = [...metadata.folderDefinitions];
   for (const source of SELECTED_WRIKE_FOLDERS) if (!folderDefinitions.some((folder) => folder.id === source.id)) folderDefinitions.push({ id: source.id, title: source.title, childIds: [], scope: "Selected" });
+  const referencedLocationIds = [...new Set(tasks.flatMap((task) => task.parentIds ?? []))];
+  for (const folderId of referencedLocationIds) if (!folderDefinitions.some((folder) => folder.id === folderId)) folderDefinitions.push({ id: folderId, title: folderId, childIds: [], scope: "Unresolved", unresolvedReference: true });
+  const { data: savedSpaces, error: savedSpacesError } = await db.from("wrike_spaces").select("id,wrike_id").eq("organization_id", organizationId);
+  if (savedSpacesError) throw new Error(`Supabase could not load Wrike spaces: ${savedSpacesError.message}`);
+  const spaceIdByWrikeId = new Map((savedSpaces ?? []).map((space) => [space.wrike_id, space.id]));
+  const findSpaceWrikeId = (folderId: string) => {
+    const pending = [folderId]; const visited = new Set<string>();
+    while (pending.length) {
+      const candidate = pending.shift()!;
+      if (spaceIdByWrikeId.has(candidate)) return candidate;
+      if (visited.has(candidate)) continue;
+      visited.add(candidate);
+      pending.push(...(parentIdsByFolderId.get(candidate) ?? []));
+    }
+    return null;
+  };
   const folderIdMap = new Map<string, string>();
   for (let offset = 0; offset < folderDefinitions.length; offset += 250) {
     const rows = folderDefinitions.slice(offset, offset + 250).map((folder) => ({
       organization_id: organizationId,
       wrike_id: folder.id,
+      space_id: spaceIdByWrikeId.get(findSpaceWrikeId(folder.id) ?? "") ?? null,
       title: SELECTED_WRIKE_FOLDER_BY_ID.get(folder.id)?.title ?? folder.title,
       parent_wrike_ids: parentIdsByFolderId.get(folder.id) ?? [],
       child_wrike_ids: folder.childIds,
       scope: folder.scope,
       is_project: Boolean(folder.project),
       raw_data: folder,
+      is_unresolved: Boolean(folder.unresolvedReference),
+      synced_at: folder.unresolvedReference ? null : importedAt,
+      last_resolution_error: folder.unresolvedReference ? "Folder metadata was not returned by Wrike." : null,
       deleted_at: null,
       updated_at: importedAt
     }));
@@ -423,19 +540,58 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     (data ?? []).forEach((project) => projectIdMap.set(project.wrike_id, project.id));
   }
 
-  const { data: savedFields, error: fieldError } = await db.from("wrike_custom_fields").upsert(metadata.matchedFields.map((field) => ({
-    organization_id: organizationId,
-    wrike_id: field.id,
-    title: field.title,
-    field_type: field.type,
-    raw_data: field,
-    updated_at: importedAt
-  })), { onConflict: "organization_id,wrike_id" }).select("id,wrike_id,title");
-  if (fieldError) throw new Error(`Supabase could not save Wrike custom-field metadata: ${fieldError.message}`);
+  const knownDefinitionRows = metadata.allFields.map((field) => {
+    const normalized = normalizeWrikeCustomFieldTitle(field.title);
+    return {
+      organization_id: organizationId,
+      wrike_id: field.id,
+      title: field.title,
+      original_title: field.title,
+      field_type: field.type,
+      allowed_values: [...(field.settings?.values ?? []), ...(field.settings?.options ?? []).map((option) => option.value)],
+      source_designation: normalized.sourceDesignation,
+      is_unresolved: false,
+      has_manual_mapping: manualMappings.has(field.id),
+      resolved_at: importedAt,
+      synced_at: importedAt,
+      last_resolution_attempt_at: importedAt,
+      last_resolution_error: null,
+      raw_data: field,
+      updated_at: importedAt
+    };
+  });
+  if (knownDefinitionRows.length) {
+    const { error } = await db.from("wrike_custom_fields").upsert(knownDefinitionRows, { onConflict: "organization_id,wrike_id" });
+    if (error) throw new Error(`Supabase could not save Wrike custom-field metadata: ${error.message}`);
+  }
+  const unresolvedFieldIds = [...new Set(referencedCustomFieldIds)].filter((id) => !metadata.customFieldDefinitionsById.has(id));
+  if (unresolvedFieldIds.length) {
+    const { error } = await db.from("wrike_custom_fields").upsert(unresolvedFieldIds.map((wrikeId) => ({
+      organization_id: organizationId,
+      wrike_id: wrikeId,
+      title: wrikeId,
+      original_title: null,
+      is_unresolved: !manualMappings.has(wrikeId),
+      has_manual_mapping: manualMappings.has(wrikeId),
+      last_resolution_attempt_at: importedAt,
+      last_resolution_error: completedMetadata.warning ?? "The custom-field definition was not returned by Wrike.",
+      raw_data: { referenceSource: "unresolved_placeholder" },
+      updated_at: importedAt
+    })), { onConflict: "organization_id,wrike_id", ignoreDuplicates: true });
+    if (error) throw new Error(`Supabase could not preserve unresolved Wrike custom fields: ${error.message}`);
+  }
+  const fieldIdsToLoad = [...new Set([...metadata.allFields.map((field) => field.id), ...referencedCustomFieldIds])];
+  const { data: savedFields, error: fieldError } = fieldIdsToLoad.length
+    ? await db.from("wrike_custom_fields").select("id,wrike_id,title,is_unresolved").eq("organization_id", organizationId).in("wrike_id", fieldIdsToLoad)
+    : { data: [], error: null };
+  if (fieldError) throw new Error(`Supabase could not load saved Wrike custom-field metadata: ${fieldError.message}`);
   const customFieldIdMap = new Map((savedFields ?? []).map((field) => [field.wrike_id, field.id]));
-  const normalizedFieldIdByKey = await persistNormalizedCustomFieldDefinitions(db, organizationId, savedFields ?? [], importedAt);
-  if ((savedFields ?? []).length) {
-    const { error } = await db.from("wrike_enabled_custom_fields").upsert((savedFields ?? []).map((field) => ({ organization_id: organizationId, custom_field_id: field.id })), { onConflict: "organization_id,custom_field_id" });
+  const normalizedSources = (savedFields ?? []).filter((field) => !field.is_unresolved || manualMappings.has(field.wrike_id));
+  const normalizedFieldIdByKey = await persistNormalizedCustomFieldDefinitions(db, organizationId, normalizedSources, importedAt);
+  const matchedIds = new Set(metadata.matchedFields.map((field) => field.id));
+  const enabledLctFields = (savedFields ?? []).filter((field) => matchedIds.has(field.wrike_id));
+  if (enabledLctFields.length) {
+    const { error } = await db.from("wrike_enabled_custom_fields").upsert(enabledLctFields.map((field) => ({ organization_id: organizationId, custom_field_id: field.id })), { onConflict: "organization_id,custom_field_id" });
     if (error) throw new Error(`Supabase could not enable LCT custom fields: ${error.message}`);
   }
 
@@ -508,7 +664,7 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
 
   const customValues = tasks.flatMap((task) => (enrichedByTaskId.get(task.id)?.customFields ?? []).flatMap((field) => {
     const taskId = taskIdMap.get(task.id); const customFieldId = customFieldIdMap.get(field.id);
-    if (!taskId || !customFieldId || !field.resolved || field.rawValue == null) return [];
+    if (!taskId || !customFieldId || field.rawValue == null) return [];
     return [{
       task_id: taskId,
       custom_field_id: customFieldId,
@@ -517,7 +673,7 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
       text_value: displayText(field.displayValue),
       option_ids: [],
       option_values: optionValues(field),
-      resolved: true,
+      resolved: field.resolved,
       updated_at: importedAt
     }];
   }));
@@ -624,6 +780,81 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     taskStatusesUnresolved: statusResolutions.filter((item) => !item.resolved).length
   };
 
+  const unresolvedInputs: WrikeUnresolvedReferenceInput[] = [];
+  for (const task of tasks) {
+    const enriched = enrichedByTaskId.get(task.id);
+    for (const field of enriched?.customFields ?? []) if (!field.resolved && !field.ignored) unresolvedInputs.push({
+      referenceType: "custom_field",
+      wrikeId: field.id,
+      sampleValues: [field.rawValue],
+      relatedRecords: [{ type: "task", id: task.id }],
+      attempted: true,
+      lastError: completedMetadata.warning ?? "The custom-field definition was not returned by Wrike."
+    });
+    for (const folder of enriched?.folders ?? []) if (!folder.resolved) unresolvedInputs.push({
+      referenceType: "folder",
+      wrikeId: folder.id,
+      relatedRecords: [{ type: "task", id: task.id }],
+      attempted: true,
+      lastError: "Folder metadata was not returned by Wrike."
+    });
+    if (task.customStatusId && !resolveTaskStatus(task.customStatusId, task.status, references.statusRows).resolved) unresolvedInputs.push({
+      referenceType: "custom_status",
+      wrikeId: task.customStatusId,
+      relatedRecords: [{ type: "task", id: task.id }],
+      attempted: true,
+      lastError: "The custom status was not returned by the workflow response."
+    });
+  }
+  const userRowsByWrikeId = new Map(references.userRows.map((user) => [user.wrike_id, user]));
+  const userFailuresById = new Map(references.diagnostics.failures.filter((failure) => failure.operation === "user" && failure.wrikeId).map((failure) => [failure.wrikeId!, failure.message]));
+  for (const userId of encounteredIds) if (userRowsByWrikeId.get(userId)?.is_unresolved || !userRowsByWrikeId.has(userId)) unresolvedInputs.push({
+    referenceType: "user",
+    wrikeId: userId,
+    attempted: true,
+    lastError: userFailuresById.get(userId) ?? "The Wrike user could not be identified."
+  });
+  for (const entry of timelogs) if (entry.categoryId && !resolveTimelogCategory(entry.categoryId, references.categoryRows)?.resolved) unresolvedInputs.push({
+    referenceType: "timelog_category",
+    wrikeId: entry.categoryId,
+    relatedRecords: [{ type: "timelog", id: entry.id }],
+    attempted: true,
+    lastError: "The timelog category was not returned by Wrike."
+  });
+  const { data: storedWorkflows, error: storedWorkflowError } = await db.from("wrike_workflows").select("wrike_id,is_unresolved").eq("organization_id", organizationId);
+  if (storedWorkflowError) throw new Error(`Supabase could not load workflow references: ${storedWorkflowError.message}`);
+  const knownWorkflowIds = new Set((storedWorkflows ?? []).filter((workflow) => !workflow.is_unresolved).map((workflow) => workflow.wrike_id));
+  for (const task of tasks) if (task.workflowId && !knownWorkflowIds.has(task.workflowId)) unresolvedInputs.push({
+    referenceType: "workflow",
+    wrikeId: task.workflowId,
+    relatedRecords: [{ type: "task", id: task.id }],
+    attempted: true,
+    lastError: "The workflow was not returned by Wrike."
+  });
+  const unresolvedResult = await upsertUnresolvedWrikeReferences(db, organizationId, unresolvedInputs, importedAt);
+  tracker.unresolvedReferenceCount = unresolvedResult.unresolvedCount;
+
+  const resolvedReferences = [
+    ...metadata.allFields.map((field) => ({ referenceType: "custom_field" as const, wrikeId: field.id })),
+    ...references.userRows.filter((user) => !user.is_unresolved).map((user) => ({ referenceType: "user" as const, wrikeId: user.wrike_id })),
+    ...references.statusRows.filter((status) => !status.is_unresolved).map((status) => ({ referenceType: "custom_status" as const, wrikeId: status.wrike_id })),
+    ...references.categoryRows.filter((category) => !category.is_unresolved).map((category) => ({ referenceType: "timelog_category" as const, wrikeId: category.wrike_id })),
+    ...folderDefinitions.filter((folder) => !folder.unresolvedReference).map((folder) => ({ referenceType: "folder" as const, wrikeId: folder.id })),
+    ...(storedWorkflows ?? []).filter((workflow) => !workflow.is_unresolved).map((workflow) => ({ referenceType: "workflow" as const, wrikeId: workflow.wrike_id })),
+    ...references.spaces.map((space) => ({ referenceType: "space" as const, wrikeId: space.id })),
+    ...[...manualMappings.values()].map((mapping) => ({ referenceType: "custom_field" as const, wrikeId: mapping.wrikeId, ignored: mapping.action === "ignore", manualMappingId: mapping.id }))
+  ];
+  await markResolvedWrikeReferences(db, organizationId, resolvedReferences, importedAt);
+  const unresolvedByType = Object.fromEntries([...new Set(unresolvedInputs.map((input) => input.referenceType))].map((type) => [type, new Set(unresolvedInputs.filter((input) => input.referenceType === type).map((input) => input.wrikeId)).size]));
+  tracker.referenceResolutionDiagnostics = {
+    encounteredUsers: encounteredIds.length,
+    referencedCustomFields: new Set(referencedCustomFieldIds).size,
+    unresolvedByType,
+    unresolvedUniqueCount: tracker.unresolvedReferenceCount,
+    manualMappings: manualMappings.size,
+    ignoredCustomFields: [...manualMappings.values()].filter((mapping) => mapping.action === "ignore").length
+  };
+
   const folderCounts = Object.fromEntries([...taskByFolder.entries()].map(([folderId, folderTasks]) => [folderId, folderTasks.length]));
   const timelogFolderCounts = Object.fromEntries([...timelogByFolder.entries()].map(([folderId, entries]) => [folderId, entries.length]));
   const completedAt = new Date();
@@ -633,7 +864,7 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     timelog_folder_counts: timelogFolderCounts,
     task_count: tasks.length,
     folder_definition_count: metadata.folderDefinitions.length,
-    custom_field_definition_count: metadata.matchedFields.length,
+    custom_field_definition_count: metadata.allFields.length,
     metadata_diagnostics: metadata.diagnostics
   })).eq("id", runId);
   if (runError) throw new Error(`Records were saved, but the import summary failed: ${runError.message}`);
@@ -662,14 +893,16 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     descendantDiagnostics: tracker.descendantDiagnostics,
     taskRequestContract: tracker.taskRequestContract,
     folderDefinitionCount: metadata.folderDefinitions.length,
-    customFieldDefinitionCount: metadata.matchedFields.length,
+    customFieldDefinitionCount: metadata.allFields.length,
     matchedCustomFieldTitles: metadata.diagnostics.matchedFieldTitles,
     unfilteredFallbackRequired: metadata.diagnostics.unfilteredFallbackRequired,
     metadataDiagnostics: metadata.diagnostics,
     referenceDataDiagnostics: references.diagnostics,
     referenceWarningCount: tracker.referenceWarningCount,
     customFieldConflictCount: tracker.customFieldConflictCount,
-    customFieldNormalizationDiagnostics: tracker.customFieldNormalizationDiagnostics
+    customFieldNormalizationDiagnostics: tracker.customFieldNormalizationDiagnostics,
+    unresolvedReferenceCount: tracker.unresolvedReferenceCount,
+    referenceResolutionDiagnostics: tracker.referenceResolutionDiagnostics
   };
 }
 

@@ -1,6 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type CustomFieldFilterOption = { id: string; name: string; values: string[] };
+export type StatusFilterOption = { id: string; name: string; color: string | null; resolved: boolean };
+
+export async function loadStatusOptions(supabase: SupabaseClient, organizationId?: string): Promise<StatusFilterOption[]> {
+  let query = supabase.from("wrike_workflow_statuses").select("wrike_id,title,color,is_unresolved").order("title");
+  if (organizationId) query = query.eq("organization_id", organizationId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []).map((row) => ({ id: row.wrike_id, name: row.is_unresolved ? `Unresolved Wrike status ${row.wrike_id}` : row.title, color: row.color ?? null, resolved: !row.is_unresolved }));
+}
 
 export async function loadCustomFieldOptions(supabase: SupabaseClient): Promise<CustomFieldFilterOption[]> {
   const { data, error } = await supabase.rpc("reporting_custom_field_options");
@@ -17,20 +26,20 @@ export async function loadCustomFieldOptions(supabase: SupabaseClient): Promise<
 
 export async function loadReportingOptions(supabase: SupabaseClient, organizationId: string) {
   const [users, scopes, statuses, categories, folders, projects, customFields] = await Promise.all([
-    supabase.from("wrike_users").select("id,display_name").eq("organization_id", organizationId).eq("is_active", true).order("display_name"),
+    supabase.from("wrike_users").select("id,wrike_id,display_name,is_unresolved").eq("organization_id", organizationId).eq("is_active", true).order("display_name"),
     supabase.from("wrike_sync_scopes").select("id,label").eq("organization_id", organizationId).eq("is_active", true).order("label"),
-    supabase.from("wrike_workflow_statuses").select("title").eq("organization_id", organizationId).order("title"),
-    supabase.from("wrike_timelog_categories").select("wrike_id,title").eq("organization_id", organizationId).order("title"),
-    supabase.from("wrike_folders").select("id,title").eq("organization_id", organizationId).is("deleted_at", null).order("title"),
+    loadStatusOptions(supabase, organizationId),
+    supabase.from("wrike_timelog_categories").select("wrike_id,title,is_unresolved").eq("organization_id", organizationId).order("title"),
+    supabase.from("wrike_folders").select("id,wrike_id,title,is_unresolved").eq("organization_id", organizationId).is("deleted_at", null).order("title"),
     supabase.from("wrike_projects").select("id,title").eq("organization_id", organizationId).is("deleted_at", null).order("title"),
     loadCustomFieldOptions(supabase)
   ]);
   return {
-    users: (users.data ?? []).map((row) => ({ id: row.id, name: row.display_name })),
+    users: (users.data ?? []).map((row) => ({ id: row.id, name: row.is_unresolved ? `Unresolved Wrike user ${row.wrike_id}` : row.display_name, wrikeId: row.wrike_id, resolved: !row.is_unresolved })),
     scopes: (scopes.data ?? []).map((row) => ({ id: row.id, name: row.label })),
-    statuses: [...new Set((statuses.data ?? []).map((row) => row.title))],
-    categories: (categories.data ?? []).map((row) => ({ id: row.wrike_id, name: row.title })),
-    folders: (folders.data ?? []).map((row) => ({ id: row.id, name: row.title })),
+    statuses,
+    categories: (categories.data ?? []).map((row) => ({ id: row.wrike_id, name: row.is_unresolved ? `Unresolved Wrike category ${row.wrike_id}` : row.title })),
+    folders: (folders.data ?? []).map((row) => ({ id: row.id, name: row.is_unresolved ? `Unresolved Wrike folder ${row.wrike_id}` : row.title })),
     projects: (projects.data ?? []).map((row) => ({ id: row.id, name: row.title })),
     customFields
   };

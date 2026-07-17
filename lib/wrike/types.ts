@@ -31,6 +31,7 @@ export interface WrikeFolderTreeResponse {
 export type WrikeFolder = WrikeFolderDefinition & { parentIds?: string[]; space?: boolean };
 export type WrikeWorkflowStatus = { id: string; name: string; group?: string; standard?: boolean; hidden?: boolean; color?: string; [key: string]: unknown };
 export type WrikeWorkflow = { id: string; name?: string; description?: string; hidden?: boolean; customStatuses?: WrikeWorkflowStatus[]; [key: string]: unknown };
+export type WrikeSpace = { id: string; title: string; archived?: boolean; accessType?: string; [key: string]: unknown };
 export interface WrikeCustomFieldOption {
   value: string;
   color?: string;

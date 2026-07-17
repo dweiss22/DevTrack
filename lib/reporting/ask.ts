@@ -6,7 +6,7 @@ export type AskReferences = {
   users: AskReference[];
   scopes: AskReference[];
   projects: AskReference[];
-  statuses: string[];
+  statuses: (string | AskReference)[];
   customFields: AskReference[];
   customOptions: AskCustomOption[];
 };
@@ -51,7 +51,7 @@ export function parseAsk(message: string, references: AskReferences, timeZone: s
   if (!text || text.length > 2000) throw new Error("Questions must contain between 1 and 2,000 characters.");
   const lower = text.toLowerCase();
   const users = referenced(text, references.users); const scopes = referenced(text, references.scopes); const projects = referenced(text, references.projects);
-  const statusMatches = referenced(text, references.statuses.map((name) => ({ id: name, name })));
+  const statusMatches = referenced(text, references.statuses.map((status) => typeof status === "string" ? { id: status, name: status } : status));
   const optionMatches = referenced(text, references.customOptions.map((option, index) => ({ id: String(index), name: option.name }))).map((match) => references.customOptions[Number(match.id)]);
   const groupedCustomFields = references.customFields.filter((field) => lower.includes(`by ${field.name.toLowerCase()}`));
   const ambiguous = users.length > 1 ? users.map((user) => user.name)
@@ -60,7 +60,7 @@ export function parseAsk(message: string, references: AskReferences, timeZone: s
     : statusMatches.length > 1 ? statusMatches.map((status) => status.name)
     : optionMatches.length > 1 ? optionMatches.map((option) => `${option.fieldName}: ${option.name}`) : [];
   const clarification = ambiguous.length ? ambiguous : undefined;
-  const statuses = statusMatches.map((status) => status.name);
+  const statuses = statusMatches.map((status) => status.id);
   const quoted = text.match(/["\u201c]([^"\u201d]+)["\u201d]/)?.[1];
   const dates = relativeDateRange(text, timeZone, now);
   const groupBy = /\bby (person|people|employee|user|team member)\b/.test(lower) ? "person"

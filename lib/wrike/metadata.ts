@@ -102,13 +102,14 @@ export function resolveCustomFieldDisplayValue(rawValue: unknown, definition?: W
 }
 
 export type ResolvedFolder = { id: string; title: string; scope: string | null; resolved: boolean };
-export type ResolvedCustomField = { id: string; title: string; type: string | null; rawValue: unknown; displayValue: unknown; resolved: boolean };
+export type ResolvedCustomField = { id: string; title: string; type: string | null; rawValue: unknown; displayValue: unknown; resolved: boolean; ignored?: boolean; normalizedTitleOverride?: string | null; resolutionSource?: "database" | "manual_mapping" | "unresolved" };
 export type EnrichedTaskMetadata = { folderIds: string[]; folders: ResolvedFolder[]; folderNames: string[]; customFields: ResolvedCustomField[]; customFieldsNormalized: NormalizedCustomFieldValue[] };
 
 export function enrichTaskMetadata(
   task: WrikeTask,
   folderDefinitionsById: Map<string, WrikeFolderDefinition>,
-  customFieldDefinitionsById: Map<string, WrikeCustomFieldDefinition>
+  customFieldDefinitionsById: Map<string, WrikeCustomFieldDefinition>,
+  manualMappings: Map<string, { action: "map_existing" | "create_new" | "ignore"; normalizedTitle: string | null }> = new Map()
 ): EnrichedTaskMetadata {
   const folderIds = task.parentIds ?? [];
   const folders = folderIds.map((id) => {
@@ -117,13 +118,17 @@ export function enrichTaskMetadata(
   });
   const customFields = (task.customFields ?? []).map((field) => {
     const definition = customFieldDefinitionsById.get(field.id);
+    const mapping = manualMappings.get(field.id);
     return {
       id: field.id,
       title: definition?.title ?? field.id,
       type: definition?.type ?? null,
       rawValue: field.value,
       displayValue: resolveCustomFieldDisplayValue(field.value, definition),
-      resolved: Boolean(definition)
+      resolved: Boolean(definition) || Boolean(mapping && mapping.action !== "ignore"),
+      ignored: mapping?.action === "ignore",
+      normalizedTitleOverride: mapping?.normalizedTitle ?? null,
+      resolutionSource: mapping ? "manual_mapping" as const : definition ? "database" as const : "unresolved" as const
     };
   });
   return { folderIds, folders, folderNames: folders.filter((folder) => folder.resolved).map((folder) => folder.title), customFields, customFieldsNormalized: mergeNormalizedCustomFields(customFields) };

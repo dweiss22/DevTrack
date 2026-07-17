@@ -19,6 +19,8 @@ export type CustomFieldNormalizationSource = {
   rawValue: unknown;
   displayValue: unknown;
   resolved: boolean;
+  ignored?: boolean;
+  normalizedTitleOverride?: string | null;
 };
 
 export type NormalizedCustomFieldSource = {
@@ -72,8 +74,8 @@ function valueSetSignature(values: string[]) {
 
 export function mergeNormalizedCustomFields(fields: readonly CustomFieldNormalizationSource[]): NormalizedCustomFieldValue[] {
   const grouped = new Map<string, { title: string; sources: NormalizedCustomFieldSource[] }>();
-  for (const field of fields.filter((item) => item.resolved)) {
-    const title = normalizeWrikeCustomFieldTitle(field.title);
+  for (const field of fields.filter((item) => item.resolved && !item.ignored)) {
+    const title = normalizeWrikeCustomFieldTitle(field.normalizedTitleOverride ?? field.title);
     const source: NormalizedCustomFieldSource = {
       wrikeFieldId: field.id,
       originalTitle: field.title,

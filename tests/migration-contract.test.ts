@@ -10,6 +10,7 @@ const metadataMigration = fs.readFileSync(path.join(process.cwd(), "supabase/mig
 const combinedImportMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170001_folder_task_timelog_import.sql"), "utf8");
 const referenceDataMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170002_wrike_reference_data.sql"), "utf8");
 const customFieldNormalizationMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170003_wrike_custom_field_normalization.sql"), "utf8");
+const referenceResolutionMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170004_wrike_reference_resolution.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -95,5 +96,18 @@ describe("reporting migration contract", () => {
     expect(customFieldNormalizationMigration).toContain("matches_reporting_normalized_custom_search");
     expect(customFieldNormalizationMigration).toContain("public.can_access_wrike_task(task.id)");
     expect(customFieldNormalizationMigration).toContain("enable row level security");
+  });
+  it("tracks unresolved references, manual mappings, status classifications, and Online Learning dashboard integrity", () => {
+    expect(referenceResolutionMigration).toContain("table if not exists public.wrike_unresolved_references");
+    expect(referenceResolutionMigration).toContain("unique (organization_id,reference_type,wrike_id)");
+    expect(referenceResolutionMigration).toContain("table if not exists public.wrike_manual_mappings");
+    expect(referenceResolutionMigration).toContain("dashboard_classification text");
+    expect(referenceResolutionMigration).toContain("classification_source text");
+    expect(referenceResolutionMigration).toContain("workflow_record_id uuid references public.wrike_workflows");
+    expect(referenceResolutionMigration).toContain("reporting_online_learning_dashboard");
+    expect(referenceResolutionMigration).toContain("reporting_online_learning_status_summary");
+    expect(referenceResolutionMigration).toContain("custom_status_value in (select jsonb_array_elements_text(requested))");
+    expect(referenceResolutionMigration).toContain("unresolved reference admin access");
+    expect(referenceResolutionMigration).toContain("manual mapping admin access");
   });
 });
