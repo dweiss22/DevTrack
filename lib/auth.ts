@@ -3,10 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function requireContext() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  const { data: profile, error } = await supabase.from("application_users").select("organization_id, role, display_name").eq("id", user.id).single();
+  const { data, error: claimsError } = await supabase.auth.getClaims();
+  const claims = data?.claims;
+  const userId = typeof claims?.sub === "string" ? claims.sub : null;
+  if (claimsError || !userId) redirect("/login");
+  const { data: profile, error } = await supabase.from("application_users").select("organization_id, role, display_name").eq("id", userId).single();
   if (error || !profile) throw new Error("Your account is not assigned to an organization. Ask an administrator for access.");
+  const user = { id: userId, email: typeof claims?.email === "string" ? claims.email : null };
   return { user, profile, supabase };
 }
 export async function requireAdmin() {

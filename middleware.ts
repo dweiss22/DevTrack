@@ -18,7 +18,9 @@ export async function middleware(request: NextRequest) {
       }
     }
   });
-  await supabase.auth.getUser();
+  // Middleware only needs to refresh an expiring session and persist its
+  // cookies. Authorization is performed by requireContext() in the route.
+  await supabase.auth.getSession();
   return response;
 }
 

@@ -15,9 +15,10 @@ type FolderRun = {
   error_summary: string | null;
   created_at: string;
 };
-type Props = { connection: Connection; folderRuns: FolderRun[]; folderIds: readonly string[] };
+type ConfiguredFolder = { id: string; title: string | null };
+type Props = { connection: Connection; folderRuns: FolderRun[]; folders: ConfiguredFolder[] };
 
-export function AdminPanel({ connection, folderRuns, folderIds }: Props) {
+export function AdminPanel({ connection, folderRuns, folders }: Props) {
   const connected = connection?.status === "connected";
   const [message, setMessage] = useState("");
   const [error, setError] = useState(false);
@@ -59,7 +60,7 @@ export function AdminPanel({ connection, folderRuns, folderIds }: Props) {
     </section>
     <div className="admin-grid">
       <section className="card"><h2>Wrike connection</h2>{connected ? <><p>Connected to <strong>{connection?.account_name ?? "Wrike"}</strong>.</p><p className="muted">Host: {connection?.api_host}<br />Token expires: {connection?.token_expires_at ? new Date(connection.token_expires_at).toLocaleString() : "unknown"}</p><div className="filter-bar"><button className="secondary" onClick={health}>Run health check</button><button className="secondary" onClick={async () => { await fetch("/api/wrike/disconnect", { method: "POST" }); location.reload(); }}>Disconnect</button></div></> : <><p>Connect Wrike with read-only access before importing tasks.</p><a className="button" href="/api/wrike/connect">Connect Wrike</a></>}</section>
-      <section className="card"><h2>Configured folder allowlist</h2><p className="muted">Only these task-source folder IDs are queried.</p><ol className="detail-list">{folderIds.map((folderId) => <li key={folderId}><code>{folderId}</code></li>)}</ol></section>
+      <section className="card"><h2>Configured folder allowlist</h2><p className="muted">Only these task-source folders are queried.</p><ol className="detail-list">{folders.map((folder) => <li key={folder.id}>{folder.title ? <><strong>{folder.title}</strong><br /><code>{folder.id}</code></> : <code>{folder.id}</code>}</li>)}</ol></section>
     </div>
     <section className="card"><h2>Import history and metadata diagnostics</h2>{folderRuns.length ? <table><thead><tr><th>Imported</th><th>Status</th><th>Tasks</th><th>Metadata</th><th>Search evidence</th></tr></thead><tbody>{folderRuns.map((run) => <tr key={run.id}><td>{new Date(run.created_at).toLocaleString()}</td><td>{run.status}</td><td>{run.task_count}</td><td>{run.folder_definition_count} folders<br />{run.custom_field_definition_count} LCT fields</td><td>{run.error_summary ?? <MetadataEvidence diagnostics={run.metadata_diagnostics} />}</td></tr>)}</tbody></table> : <p className="empty">No folder task and metadata import has completed yet.</p>}</section>
   </div>;

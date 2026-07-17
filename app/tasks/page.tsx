@@ -10,12 +10,12 @@ import { parseReportingFilters } from "@/lib/reporting/filters";
 
 export default async function TasksPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const filters = parseReportingFilters(await searchParams);
-  const { supabase, profile } = await requireContext();
+  const { supabase } = await requireContext();
   const [tasks, statusOptionsResult] = await Promise.all([
     loadTaskRows(supabase, filters),
-    supabase.from("wrike_tasks").select("status").eq("organization_id", profile.organization_id).eq("is_deleted", false).limit(5000)
+    supabase.rpc("reporting_task_status_summary", { filters: {} })
   ]);
-  const statuses = [...new Set((statusOptionsResult.data ?? []).map((row) => row.status).filter(Boolean))].sort();
+  const statuses = ((statusOptionsResult.data ?? []) as { name: string }[]).map((row) => row.name).filter(Boolean).sort();
   const total = tasks[0]?.total_count ?? 0;
 
   return <AppShell>

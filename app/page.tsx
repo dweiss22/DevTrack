@@ -22,14 +22,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const filters = parseReportingFilters(await searchParams);
   const { supabase, profile } = await requireContext();
   const rpcFilters = filtersForRpc(filters);
-  const [metricsResult, statusResult, statusOptionsResult, lastRunResult] = await Promise.all([
+  const [metricsResult, statusResult, lastRunResult] = await Promise.all([
     supabase.rpc("reporting_task_metrics", { filters: rpcFilters }),
     supabase.rpc("reporting_task_status_summary", { filters: rpcFilters }),
-    supabase.from("wrike_tasks").select("status").eq("organization_id", profile.organization_id).eq("is_deleted", false).limit(5000),
     supabase.from("wrike_folder_task_import_runs").select("created_at").eq("organization_id", profile.organization_id).eq("status", "succeeded").order("created_at", { ascending: false }).limit(1).maybeSingle()
   ]);
   const totals = (metricsResult.data ?? { trackedTasks: 0, completedTasks: 0, cancelledTasks: 0, openTasks: 0, overdueTasks: 0, plannedMinutes: 0 }) as Metrics;
-  const statuses = [...new Set((statusOptionsResult.data ?? []).map((row) => row.status).filter(Boolean))].sort();
+  const statusData = (statusResult.data ?? []) as { name: string; tasks: number }[];
+  const statuses = statusData.map((row) => row.name).filter(Boolean).sort();
 
   return <AppShell lastSynced={lastRunResult.data?.created_at}>
     <header className="page-header"><div><p className="eyebrow">TASK IMPORT OVERVIEW</p><h1>Wrike tasks at a glance</h1><p>These results combine the configured task endpoints with validated folder and LCT metadata.</p></div><a className="button" href="/admin">Import folder tasks</a></header>
@@ -42,7 +42,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <Metric label="Overdue" value={totals.overdueTasks} />
       <Metric label="Total planned hours" value={hours(totals.plannedMinutes)} />
     </section>
-    <DashboardCharts statusData={(statusResult.data ?? []) as { name: string; tasks: number }[]} />
+    <DashboardCharts statusData={statusData} />
     <section className="card"><h2>Current import scope</h2><p>Task details, effort, parent IDs, readable folder titles, folder/project hierarchy, and LCT custom-field values are stored. People, timelogs, and workflow definitions remain unavailable until their APIs are added in later steps.</p></section>
   </AppShell>;
 }
