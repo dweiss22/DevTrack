@@ -104,6 +104,8 @@ Never commit `.env.local`, tokens, service-role keys, or OAuth secrets.
 
 ## Wrike OAuth configuration
 
+For a call-by-call review of the enabled integration, see the **[Active Wrike API inventory](docs/wrike-api-inventory.md)**. It maps every current OAuth, health-check, metadata, and folder-task request to its trigger and implementation source.
+
 Create a Wrike API application and set its redirect/callback URL exactly to:
 
 ```text
