@@ -39,12 +39,14 @@ describe("Development reporting dashboard", () => {
     expect(resolved.customValues["instructional designer"].values).toEqual(["Alex Smith", "Unresolved field value (KUMISSING)"]);
   });
 
-  it("renders only relevant normalized custom-field filters and active controls", () => {
+  it("renders Reporting Year as the only Development filter control", () => {
     const markup = renderToStaticMarkup(<DevelopmentFiltersForm filters={parseDevelopmentFilters({}, 2026)} years={{ years: [{ year: 2026, label: "2026 Courses", projects: 8 }], missingProjects: 2, defaultYear: 2026 }} options={options} />);
-    expect(markup).toContain("Instructional Designer");
-    expect(markup).not.toContain("Unrelated Field");
-    expect(markup).toContain("Missing/Unresolved (2)");
-    expect(markup).toContain("2026 Courses (8)");
+    expect(markup).toContain('name="reportingSelection"');
+    expect(markup).toContain("Missing/Unresolved");
+    expect(markup).toContain("2026 Courses");
+    expect(markup).not.toContain("Instructional Designer");
+    expect(markup).not.toContain('name="q"');
+    expect((markup.match(/<select/g) ?? [])).toHaveLength(1);
   });
 
   it("keeps the column chooser and historical-status disclosure in the UI source", () => {

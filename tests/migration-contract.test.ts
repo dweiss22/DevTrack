@@ -17,6 +17,8 @@ const dashboardDrilldownMigration = fs.readFileSync(path.join(process.cwd(), "su
 const developmentDashboardMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200002_development_reporting_dashboard.sql"), "utf8");
 const verticalNormalizationMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200003_controlled_vertical_normalization.sql"), "utf8");
 const reportingPerformanceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200004_reporting_course_dashboard_performance.sql"), "utf8");
+const allYearsDashboardMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200005_dashboard_all_reporting_years.sql"), "utf8");
+const allYearsDrilldownMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200006_all_years_dashboard_drilldown.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -172,5 +174,20 @@ describe("reporting migration contract", () => {
     expect(reportingPerformanceMigration).toContain("with completed as materialized");
     expect(reportingPerformanceMigration).toContain("with candidates as materialized");
     expect(reportingPerformanceMigration).toContain("reload schema");
+  });
+  it("aggregates the main Dashboard across all valid Reporting Years", () => {
+    expect(allYearsDashboardMigration).toContain("reporting_online_learning_dashboard_tasks()");
+    expect(allYearsDashboardMigration).toContain("reporting.reporting_year is not null and not reporting.has_conflict");
+    expect(allYearsDashboardMigration).toContain("reporting_online_learning_dashboard_overview_v4()");
+    expect(allYearsDashboardMigration).toContain("group by reporting_year");
+    expect(allYearsDashboardMigration).toContain("reporting_online_learning_dashboard_time_v4()");
+    expect(allYearsDashboardMigration).toContain("with completed as materialized");
+    expect(allYearsDashboardMigration).toContain("reload schema");
+  });
+  it("keeps all-years Dashboard drill-downs scoped to valid Reporting values", () => {
+    expect(allYearsDrilldownMigration).toContain("validReportingYearOnly");
+    expect(allYearsDrilldownMigration).toContain("reporting.reporting_year is not null and not reporting.has_conflict");
+    expect(allYearsDrilldownMigration).toContain("reporting_filtered_tasks_without_dashboard_drilldown");
+    expect(allYearsDrilldownMigration).toContain("reload schema");
   });
 });

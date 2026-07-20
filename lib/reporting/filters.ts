@@ -29,6 +29,7 @@ export const reportingFiltersSchema = z.object({
   maxPlannedMinutes: optionalInteger,
   customFields: z.record(z.string(), z.string().max(200)).optional(),
   reportingYear: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1900).max(2199).optional()),
+  validReportingYearOnly: optionalBoolean,
   dashboardClassification: optionalEnum(["active", "completed", "stalled_or_canceled"]),
   dashboardField: optionalEnum(["course type", "authoring tool"]),
   dashboardValue: z.preprocess(emptyToUndefined, z.string().trim().max(200).optional()),

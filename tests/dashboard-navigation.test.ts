@@ -40,6 +40,7 @@ describe("Online Learning dashboard calculations", () => {
     const url = new URL(href, "https://devtrack.test");
     expect(url.pathname).toBe("/projects");
     expect(url.searchParams.get("reportingYear")).toBe("2026");
+    expect(url.searchParams.get("validReportingYearOnly")).toBe("true");
     expect(url.searchParams.get("dashboardClassification")).toBe("completed");
     expect(url.searchParams.get("workflowIds")).toBe(ONLINE_LEARNING_WORKFLOW_ID);
     expect(url.searchParams.get("returnTo")).toContain("q=academy");

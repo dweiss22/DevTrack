@@ -13,7 +13,8 @@ export function dashboardDrilldownHref(filters: ReportingFilters, drilldown: Das
   const target: Partial<ReportingFilters> = {
     ...filters,
     page: 1,
-    workflowIds: [ONLINE_LEARNING_WORKFLOW_ID]
+    workflowIds: [ONLINE_LEARNING_WORKFLOW_ID],
+    validReportingYearOnly: true
   };
   if (drilldown.kind === "year") {
     target.reportingYear = drilldown.year;

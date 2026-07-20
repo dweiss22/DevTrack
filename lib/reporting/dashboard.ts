@@ -77,7 +77,7 @@ function dashboardFailure(error: { message?: string; code?: string | null } | un
   const message = candidate.message?.toLocaleLowerCase() ?? "";
   if (candidate.code === "PGRST202" || candidate.code === "42883" || message.includes("schema cache") || message.includes("could not find the function")) return {
     kind: "migration_required", title: "Dashboard database migration required",
-    message: "Apply all Supabase migrations through 202607200004, reload the PostgREST schema cache, and retry. Existing reporting data has not been replaced with zeroes.", diagnosticCode: candidate.code ?? null
+    message: "Apply all Supabase migrations through 202607200006, reload the PostgREST schema cache, and retry. Existing reporting data has not been replaced with zeroes.", diagnosticCode: candidate.code ?? null
   };
   if (candidate.code === "42501" || message.includes("permission denied")) return {
     kind: "permission_denied", title: "Dashboard reporting access was denied",
@@ -113,12 +113,12 @@ export async function loadDashboardYearOptions(supabase: SupabaseClient): Promis
   return { data: (result.data ?? []).map((row) => ({ year: Number(row.year), label: row.label, projectCount: Number(row.project_count) })), error: null };
 }
 
-export function loadDashboardOverview(supabase: SupabaseClient, year: number) {
-  return timedRpc<DashboardOverview>(supabase, "reporting_online_learning_dashboard_overview_v3", { target_year: year });
+export function loadDashboardOverview(supabase: SupabaseClient) {
+  return timedRpc<DashboardOverview>(supabase, "reporting_online_learning_dashboard_overview_v4");
 }
 
-export function loadDashboardTimeAnalytics(supabase: SupabaseClient, year: number) {
-  return timedRpc<DashboardTimeAnalytics>(supabase, "reporting_online_learning_dashboard_time_v3", { target_year: year });
+export function loadDashboardTimeAnalytics(supabase: SupabaseClient) {
+  return timedRpc<DashboardTimeAnalytics>(supabase, "reporting_online_learning_dashboard_time_v4");
 }
 
 export async function loadDashboardAnalyticsResult(supabase: SupabaseClient, filters: ReportingFilters): Promise<DashboardAnalyticsResult> {
