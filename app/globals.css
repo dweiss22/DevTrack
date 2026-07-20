@@ -87,6 +87,46 @@ main { max-width: 1500px; width: 100%; padding: 42px; margin: auto; }
 .dashboard-chart .recharts-bar-rectangle, .dashboard-chart .recharts-line-dot, .dashboard-chart .recharts-pie-sector { cursor: pointer; }
 .dashboard-donut-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; }
 .donut-card { min-width: 0; }
+.development-overview { margin-bottom: 18px; padding: 26px; }
+.development-section-heading, .project-list-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.development-section-heading h2, .project-list-toolbar h2 { margin: 3px 0 0; font-size: 20px; }
+.development-section-heading > strong { color: var(--navy); font-size: 18px; }
+.completion-totals { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 22px 0 12px; }
+.completion-total { display: flex; align-items: center; justify-content: space-between; min-height: 76px; border: 1px solid var(--line); background: #fff; color: var(--ink); text-align: left; }
+.completion-total.completed { border-left: 6px solid var(--green); }
+.completion-total.incomplete { border-right: 6px solid #d97706; }
+.completion-total strong { font-size: 28px; color: var(--navy); }
+.completion-gauge { display: flex; width: 100%; min-height: 42px; overflow: hidden; border: 1px solid #afc3d8; border-radius: 999px; background: #eef3f8; }
+.completion-gauge button { min-width: 0; min-height: 42px; padding: 0; border-radius: 0; box-shadow: none; }
+.completion-gauge .gauge-completed { background: linear-gradient(90deg,#0c8f78,#26ad91); }
+.completion-gauge .gauge-incomplete { background: linear-gradient(90deg,#f2a51a,#d97706); }
+.completion-gauge.empty:after { content: "No courses"; width: 100%; align-self: center; color: var(--muted); text-align: center; }
+.completion-percentages { display: flex; justify-content: space-between; margin: 9px 4px 18px; color: var(--muted); }
+.completion-percentages strong { color: var(--ink); }
+.development-analysis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+.development-analysis-card { min-width: 0; }
+.development-analysis-card h2 { margin-bottom: 4px; font-size: 18px; }
+.development-analysis-card > p { color: var(--muted); font-size: 13px; }
+.development-analysis-card .recharts-bar-rectangle { cursor: pointer; }
+.development-filters .filter-fields { grid-template-columns: repeat(4,minmax(150px,1fr)); }
+.development-check { align-content: center; padding-top: 24px; }
+.active-filter-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 18px; }
+.active-filter-chips a { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid #b9d0e7; border-radius: 999px; background: var(--blue-soft); color: var(--navy); font-size: 12px; font-weight: 650; }
+.active-filter-chips span { font-size: 17px; line-height: 1; }
+.development-project-list { min-width: 0; }
+.project-list-toolbar { margin-bottom: 16px; }
+.project-list-toolbar p { margin: 3px 0 0; color: var(--muted); }
+.column-picker { position: relative; }
+.column-picker > summary { list-style: none; cursor: pointer; }
+.column-picker > div { position: absolute; z-index: 25; top: calc(100% + 8px); right: 0; display: grid; gap: 7px; width: 230px; max-height: 360px; overflow: auto; padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: #fff; box-shadow: 0 12px 30px #0b244229; }
+.development-table-wrap { overflow-x: auto; }
+.development-project-table { min-width: 1180px; }
+.development-project-table th a, .development-project-table td > a { color: var(--blue); font-weight: 650; }
+.classification-badge { display: inline-flex; width: max-content; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.classification-badge.completed { background: #dff8ef; color: #08725f; }
+.classification-badge.incomplete { background: #fff3d6; color: #8a5800; }
+.development-loading { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; margin-bottom: 18px; }
+.development-loading > :first-child { grid-column: 1 / -1; }
 .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
 .loading-chart { min-height: 320px; }
 .loading-pulse { border-radius: 8px; background: linear-gradient(90deg,#edf3f9 25%,#f8fbfe 50%,#edf3f9 75%); background-size: 200% 100%; animation: loading-shimmer 1.5s infinite; }
@@ -163,6 +203,7 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
   .filter-fields { grid-template-columns: repeat(3, minmax(130px, 1fr)); }
   .dashboard-donut-grid { grid-template-columns: 1fr 1fr; }
   .dashboard-donut-grid > :last-child { grid-column: 1 / -1; }
+  .development-filters .filter-fields { grid-template-columns: repeat(3,minmax(140px,1fr)); }
 }
 @media (max-width: 900px) {
   .app-shell { grid-template-columns: 1fr; }
@@ -174,6 +215,8 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
   main { padding: 72px 24px 24px; }
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .chart-grid, .admin-grid, .ask-layout { grid-template-columns: 1fr; }
+  .development-analysis-grid, .development-loading { grid-template-columns: 1fr; }
+  .development-loading > :first-child { grid-column: auto; }
   .conversation-list { order: 2; }
 }
 @media (max-width: 620px) {
@@ -186,5 +229,10 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
   .dashboard-donut-grid { grid-template-columns: 1fr; }
   .dashboard-donut-grid > :last-child { grid-column: auto; }
   .page-header { flex-direction: column; }
+  .completion-totals, .development-filters .filter-fields { grid-template-columns: 1fr 1fr; }
+  .development-section-heading, .project-list-toolbar { flex-direction: column; }
   table { display: block; overflow-x: auto; }
+}
+@media (max-width: 430px) {
+  .completion-totals, .development-filters .filter-fields { grid-template-columns: 1fr; }
 }

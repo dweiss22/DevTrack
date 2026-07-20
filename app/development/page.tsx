@@ -1,8 +1,38 @@
-import Link from "next/link";
+import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
+import { DevelopmentAnalyticsView } from "@/components/development-analytics";
+import { developmentContactKeys, developmentCustomFields, DevelopmentFiltersForm } from "@/components/development-filters";
+import { DevelopmentProjectTable } from "@/components/development-project-table";
 import { requireContext } from "@/lib/auth";
+import { loadDevelopmentAnalytics, loadDevelopmentOptions, loadDevelopmentProjects, loadDevelopmentYearOptions, parseDevelopmentFilters, resolveDevelopmentContactValues, type DevelopmentOptions } from "@/lib/reporting/development";
 
-export default async function DevelopmentPage() {
-  const { profile } = await requireContext();
-  return <AppShell isAdmin={profile.role === "admin"}><header className="page-header"><div><p className="eyebrow">DEVELOPMENT</p><h1>Development</h1><p>Move from portfolio-level trends into synchronized project work and recorded effort.</p></div></header><section className="chart-grid"><article className="card"><h2>Project workspace</h2><p>Review current statuses, assignees, due dates, folders, and normalized custom fields.</p><Link className="button" href="/projects">View projects</Link></article><article className="card"><h2>Recorded effort</h2><p>Inspect valid Wrike time entries associated with visible projects.</p><Link className="button secondary" href="/time-entries">View time entries</Link></article></section></AppShell>;
+type SearchValues = Record<string, string | string[] | undefined>;
+export default async function DevelopmentPage({ searchParams }: { searchParams: Promise<SearchValues> }) {
+  const query = await searchParams;
+  const { supabase, profile } = await requireContext();
+  const [yearsResult, optionsResult, lastRunResult] = await Promise.all([
+    loadDevelopmentYearOptions(supabase), loadDevelopmentOptions(supabase, profile.organization_id),
+    supabase.from("wrike_folder_task_import_runs").select("created_at").eq("organization_id", profile.organization_id).eq("status", "succeeded").order("created_at", { ascending: false }).limit(1).maybeSingle()
+  ]);
+  if (yearsResult.error) return <AppShell isAdmin={profile.role === "admin"} lastSynced={lastRunResult.data?.created_at}><DevelopmentHeader /><QueryError title={yearsResult.error.title} message={yearsResult.error.message} code={yearsResult.error.code} /></AppShell>;
+  const years = yearsResult.data;
+  const normalizedQuery = !query.reportingSelection && years.defaultYear == null && years.missingProjects > 0 ? { ...query, reportingSelection: "missing" } : query;
+  const filters = parseDevelopmentFilters(normalizedQuery, years.defaultYear);
+  const options = optionsResult.data ?? EMPTY_OPTIONS;
+  const analyticsPromise = loadDevelopmentAnalytics(supabase, filters);
+  const projectsPromise = loadDevelopmentProjects(supabase, filters);
+  return <AppShell isAdmin={profile.role === "admin"} lastSynced={lastRunResult.data?.created_at}>
+    <DevelopmentHeader />
+    {optionsResult.error && <p className="notice error" role="status">Analytics remain available, but some filter and reference options could not be loaded. Unresolved values will remain identified.</p>}
+    <DevelopmentFiltersForm filters={filters} years={years} options={options} />
+    <Suspense fallback={<DevelopmentSectionSkeleton label="Loading completion and status analytics" cards={3} />}><AnalyticsSection promise={analyticsPromise} filters={filters} /></Suspense>
+    <Suspense fallback={<DevelopmentSectionSkeleton label="Loading reporting-year projects" cards={1} />}><ProjectsSection promise={projectsPromise} filters={filters} options={options} /></Suspense>
+  </AppShell>;
 }
+
+function DevelopmentHeader() { return <header className="page-header dashboard-header"><div><p className="eyebrow">DEVELOPMENT</p><h1>Course-development dashboard</h1><p>Completion, current workflow status, recorded effort, and project details by normalized Reporting year.</p></div></header>; }
+async function AnalyticsSection({ promise, filters }: { promise: ReturnType<typeof loadDevelopmentAnalytics>; filters: ReturnType<typeof parseDevelopmentFilters> }) { const result=await promise; return result.error ? <QueryError title={result.error.title} message={result.error.message} code={result.error.code} /> : <DevelopmentAnalyticsView analytics={result.data} filters={filters} />; }
+async function ProjectsSection({ promise, filters, options }: { promise: ReturnType<typeof loadDevelopmentProjects>; filters: ReturnType<typeof parseDevelopmentFilters>; options: DevelopmentOptions }) { const result=await promise; if (result.error) return <QueryError title={result.error.title} message={result.error.message} code={result.error.code} />; const fields=developmentCustomFields(options); const rows=resolveDevelopmentContactValues(result.data.rows,options.users,developmentContactKeys(options)); return <section className="card development-project-list"><DevelopmentProjectTable rows={rows} total={result.data.total} filters={filters} customColumns={fields.map((field)=>({key:field.name.toLocaleLowerCase(),label:field.name}))} /></section>; }
+function QueryError({ title, message, code }: { title: string; message: string; code: string | null }) { return <section className="card dashboard-query-error" role="alert"><p className="eyebrow">REPORTING QUERY</p><h2>{title}</h2><p>{message}</p>{code&&<p><strong>Diagnostic code:</strong> <code>{code}</code></p>}</section>; }
+function DevelopmentSectionSkeleton({ label, cards }: { label: string; cards: number }) { return <section className="development-loading" aria-label={label} aria-busy="true">{Array.from({length:cards},(_,index)=><article className="card loading-chart loading-pulse" key={index}><span className="sr-only">{label}</span></article>)}</section>; }
+const EMPTY_OPTIONS: DevelopmentOptions = { statuses: [],users: [],folders: [],projects: [],customFields: [] };

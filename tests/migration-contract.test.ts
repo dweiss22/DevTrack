@@ -14,6 +14,7 @@ const referenceResolutionMigration = fs.readFileSync(path.join(process.cwd(), "s
 const dashboardAnalyticsMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170005_dashboard_analytics.sql"), "utf8");
 const dashboardPerformanceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170006_dashboard_query_performance.sql"), "utf8");
 const dashboardDrilldownMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200001_dashboard_chart_drilldown.sql"), "utf8");
+const developmentDashboardMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200002_development_reporting_dashboard.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -138,5 +139,15 @@ describe("reporting migration contract", () => {
     expect(dashboardDrilldownMigration).toContain("'Multiple Authoring Tools'");
     expect(dashboardDrilldownMigration).toContain("'Cross Vertical'");
     expect(dashboardDrilldownMigration).toContain("reporting_filtered_tasks_without_dashboard_drilldown");
+  });
+  it("provides indexed, centralized Development reporting-year analytics and rows", () => {
+    expect(developmentDashboardMigration).toContain("generated always as (public.wrike_reporting_year(display_values)) stored");
+    expect(developmentDashboardMigration).toContain("reporting_development_filtered_tasks");
+    expect(developmentDashboardMigration).toContain("reporting_development_year_options");
+    expect(developmentDashboardMigration).toContain("reporting_development_analytics");
+    expect(developmentDashboardMigration).toContain("reporting_development_project_rows");
+    expect(developmentDashboardMigration).toContain("IEACHQK7K4BHMLHM");
+    expect(developmentDashboardMigration).toContain("current status until status-at-entry is persisted");
+    expect(developmentDashboardMigration).toContain("grant execute on function public.reporting_development_analytics(jsonb) to authenticated,service_role");
   });
 });
