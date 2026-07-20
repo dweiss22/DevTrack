@@ -46,6 +46,16 @@ describe("actual Wrike metadata structures", () => {
     expect(enriched.customFieldsNormalized).toMatchObject([{ normalizedTitle: "LCT Reporting", displayValues: ["2025 Report"], sourceFieldIds: ["IEACHQK7JUAHNWFH"], conflict: false }]);
   });
 
+  it("does not enrich tasks with configured out-of-scope ancestor folders", () => {
+    const enriched = enrichTaskMetadata(
+      { id: "T1", title: "Course", status: "Active", parentIds: ["IEACHQK7I47EB6XE", "IEACHQK7I4PFONLA"] },
+      buildFolderDefinitionsById(actualFolderTreeFixture.data),
+      new Map()
+    );
+    expect(enriched.folderIds).toEqual(["IEACHQK7I47EB6XE"]);
+    expect(enriched.folders).toHaveLength(1);
+  });
+
   it("builds safely encoded custom-field searches with URLSearchParams", () => {
     expect(buildCustomFieldsPath("[LCT]")).toBe("/customfields?title=%5BLCT%5D");
     expect(buildCustomFieldsPath("[LCT] & Review")).toBe("/customfields?title=%5BLCT%5D+%26+Review");

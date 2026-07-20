@@ -5,6 +5,7 @@ import { mergeNormalizedCustomFields } from "@/lib/wrike/custom-field-normalizat
 import { wrikeSessionFor } from "@/lib/wrike/oauth";
 import { WrikeClient } from "@/lib/wrike/client";
 import { WRIKE_TASK_FIELDS } from "@/lib/wrike/task-fields";
+import { isOutOfScopeWrikeFolder, scopedWrikeFolderIds } from "@/lib/wrike/selected-folders";
 import type { WrikeCustomField, WrikeFolder, WrikeTask, WrikeTimeEntry, WrikeTimelogCategory, WrikeUser, WrikeWorkflow } from "@/lib/wrike/types";
 
 export type SyncMode = "incremental" | "full";
@@ -105,7 +106,8 @@ async function upsertMetadata(organizationId: string, client: WrikeClient, accou
   const { data: savedSpaces, error: spaceError } = spaces.length ? await db.from("wrike_spaces").upsert(spaces.map((space) => ({ organization_id: organizationId, wrike_id: space.id, title: space.title, raw_data: space, updated_at: nowIso() })), { onConflict: "organization_id,wrike_id" }).select("id,wrike_id") : { data: [], error: null };
   if (spaceError) throw spaceError;
   const spaceMap = new Map((savedSpaces ?? []).map((space) => [space.wrike_id, space.id]));
-  const { data: savedFolders, error: folderError } = folders.length ? await db.from("wrike_folders").upsert(folders.map((folder) => ({ organization_id: organizationId, wrike_id: folder.id, space_id: spaceMap.get(folder.id) ?? (folder.parentIds ?? []).map((parentId) => spaceMap.get(parentId)).find(Boolean) ?? null, title: folder.title, parent_wrike_ids: folder.parentIds ?? [], is_project: Boolean(folder.project), raw_data: folder, updated_at: nowIso() })), { onConflict: "organization_id,wrike_id" }).select("id,wrike_id,is_project") : { data: [], error: null };
+  const scopedFolders = folders.filter((folder) => !isOutOfScopeWrikeFolder(folder.id));
+  const { data: savedFolders, error: folderError } = scopedFolders.length ? await db.from("wrike_folders").upsert(scopedFolders.map((folder) => ({ organization_id: organizationId, wrike_id: folder.id, space_id: spaceMap.get(folder.id) ?? (folder.parentIds ?? []).map((parentId) => spaceMap.get(parentId)).find(Boolean) ?? null, title: folder.title, parent_wrike_ids: scopedWrikeFolderIds(folder.parentIds), is_project: Boolean(folder.project), raw_data: folder, updated_at: nowIso() })), { onConflict: "organization_id,wrike_id" }).select("id,wrike_id,is_project") : { data: [], error: null };
   if (folderError) throw folderError;
   const folderMap = new Map((savedFolders ?? []).map((folder) => [folder.wrike_id, folder.id]));
   const projectFolders = folders.filter((folder) => folder.project);
@@ -165,7 +167,7 @@ async function replaceTaskRelationships(organizationId: string, tasks: WrikeTask
   ]);
   const assignments = tasks.flatMap((task) => (task.responsibleIds ?? []).flatMap((wrikeUserId) => metadata.userMap.get(wrikeUserId) ? [{ task_id: taskMap.get(task.id), user_id: metadata.userMap.get(wrikeUserId), assignment_type: "assignee" }] : []));
   if (assignments.length) { const { error } = await db.from("wrike_task_assignees").insert(assignments); if (error) throw error; }
-  const locations = tasks.flatMap((task) => (task.parentIds ?? []).map((parentId) => ({ task_id: taskMap.get(task.id), folder_id: metadata.folderMap.get(parentId) ?? null, project_id: metadata.projectMap.get(parentId) ?? null, wrike_location_id: parentId })));
+  const locations = tasks.flatMap((task) => scopedWrikeFolderIds(task.parentIds).map((parentId) => ({ task_id: taskMap.get(task.id), folder_id: metadata.folderMap.get(parentId) ?? null, project_id: metadata.projectMap.get(parentId) ?? null, wrike_location_id: parentId })));
   if (locations.length) { const { error } = await db.from("wrike_task_locations").upsert(locations, { onConflict: "task_id,wrike_location_id" }); if (error) throw error; }
   const values = tasks.flatMap((task) => (task.customFields ?? []).flatMap((fieldValue) => {
     const field = metadata.enabledFieldMap.get(fieldValue.id); const taskId = taskMap.get(task.id);
@@ -186,7 +188,7 @@ async function replaceTaskRelationships(organizationId: string, tasks: WrikeTask
 
 async function saveScopeTasks(organizationId: string, scope: Scope, tasks: WrikeTask[], mode: SyncMode, metadata: Awaited<ReturnType<typeof upsertMetadata>>) {
   const db = createAdminClient();
-  const rows = tasks.map((task) => ({ organization_id: organizationId, wrike_id: task.id, title: task.title, description: task.description ?? null, permalink: task.permalink ?? null, status: task.status, workflow_id: task.workflowId ?? null, custom_status_id: task.customStatusId ?? null, responsible_wrike_ids: task.responsibleIds ?? [], importance: task.importance ?? null, created_at_wrike: date(task.createdDate), updated_at_wrike: date(task.updatedDate), start_date: day(task.dates?.start), due_date: day(task.dates?.due), completed_at: date(task.dates?.completed), parent_wrike_ids: task.parentIds ?? [], super_task_wrike_ids: task.superTaskIds ?? [], task_type: task.dates?.type ?? null, planned_minutes: plannedMinutes(task), allocated_minutes: allocatedMinutes(task), raw_data: task, is_deleted: false, last_seen_at: nowIso(), updated_at: nowIso() }));
+  const rows = tasks.map((task) => ({ organization_id: organizationId, wrike_id: task.id, title: task.title, description: task.description ?? null, permalink: task.permalink ?? null, status: task.status, workflow_id: task.workflowId ?? null, custom_status_id: task.customStatusId ?? null, responsible_wrike_ids: task.responsibleIds ?? [], importance: task.importance ?? null, created_at_wrike: date(task.createdDate), updated_at_wrike: date(task.updatedDate), start_date: day(task.dates?.start), due_date: day(task.dates?.due), completed_at: date(task.dates?.completed), parent_wrike_ids: scopedWrikeFolderIds(task.parentIds), super_task_wrike_ids: task.superTaskIds ?? [], task_type: task.dates?.type ?? null, planned_minutes: plannedMinutes(task), allocated_minutes: allocatedMinutes(task), raw_data: task, is_deleted: false, last_seen_at: nowIso(), updated_at: nowIso() }));
   const { data: saved, error } = rows.length ? await db.from("wrike_tasks").upsert(rows, { onConflict: "organization_id,wrike_id" }).select("id,wrike_id") : { data: [], error: null };
   if (error) throw error;
   const taskMap = new Map((saved ?? []).map((task) => [task.wrike_id, task.id]));

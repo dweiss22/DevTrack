@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { chooseTimelogDescendantStrategy, deduplicateByWrikeId, folderTasksPath, folderTimelogsPath, mapWithConcurrency, TASK_FIELDS, TASK_IMPORT_FOLDER_IDS, verifyTaskRequestContract } from "@/lib/wrike/folder-task-import";
-import { SELECTED_WRIKE_FOLDERS, SELECTED_WRIKE_FOLDER_IDS } from "@/lib/wrike/selected-folders";
+import { OUT_OF_SCOPE_WRIKE_FOLDER_IDS, scopedWrikeFolderIds, SELECTED_WRIKE_FOLDERS, SELECTED_WRIKE_FOLDER_IDS } from "@/lib/wrike/selected-folders";
 import { allocatedMinutes, entryMinutes, plannedMinutes, taskPath } from "@/lib/wrike/sync";
 
 describe("Wrike synchronization contracts", () => {
@@ -43,6 +43,15 @@ describe("Wrike synchronization contracts", () => {
       expect(contract.fields).toEqual(TASK_FIELDS);
       expect(folderTimelogsPath(folderId)).toBe(`/folders/${folderId}/timelogs?plainText=true`);
     }
+  });
+  it("excludes known higher-level Wrike ancestors from reporting locations", () => {
+    expect(OUT_OF_SCOPE_WRIKE_FOLDER_IDS).toEqual([
+      "IEACHQK7I4PFONLA",
+      "IEACHQK7I4PFONKX",
+      "IEACHQK7I4PFONKR",
+      "IEACHQK7I7777777",
+    ]);
+    expect(scopedWrikeFolderIds([SELECTED_WRIKE_FOLDER_IDS[0], ...OUT_OF_SCOPE_WRIKE_FOLDER_IDS])).toEqual([SELECTED_WRIKE_FOLDER_IDS[0]]);
   });
   it("rejects malformed task contracts before a request can be sent", () => {
     const path = folderTasksPath(TASK_IMPORT_FOLDER_IDS[0]);

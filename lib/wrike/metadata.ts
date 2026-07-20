@@ -7,6 +7,7 @@ import type {
   WrikeTask
 } from "@/lib/wrike/types";
 import { mergeNormalizedCustomFields, type NormalizedCustomFieldValue } from "@/lib/wrike/custom-field-normalization";
+import { scopedWrikeFolderIds } from "@/lib/wrike/selected-folders";
 
 const folderProjectSchema = z.object({
   authorId: z.string().optional(),
@@ -111,7 +112,7 @@ export function enrichTaskMetadata(
   customFieldDefinitionsById: Map<string, WrikeCustomFieldDefinition>,
   manualMappings: Map<string, { action: "map_existing" | "create_new" | "ignore"; normalizedTitle: string | null }> = new Map()
 ): EnrichedTaskMetadata {
-  const folderIds = task.parentIds ?? [];
+  const folderIds = scopedWrikeFolderIds(task.parentIds);
   const folders = folderIds.map((id) => {
     const definition = folderDefinitionsById.get(id);
     return { id, title: definition?.title ?? id, scope: definition?.scope ?? null, resolved: Boolean(definition) };

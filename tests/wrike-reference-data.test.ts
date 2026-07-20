@@ -13,7 +13,7 @@ describe("Wrike reference-data contracts", () => {
   it("uses the exact configured 13-person allowlist and one safe path per ID", () => {
     expect(SELECTED_WRIKE_USERS).toEqual([
       { wrikeUserId: "KUALR6DZ", expectedName: "Devin Weiss" },
-      { wrikeUserId: "KUANTWID", expectedName: "Koco Budo" },
+      { wrikeUserId: "KUANTWID", expectedName: "Koço Budo" },
       { wrikeUserId: "KUAPO5G4", expectedName: "Greg Rogers" },
       { wrikeUserId: "KUAOGSL5", expectedName: "Natalie Nelson" },
       { wrikeUserId: "KUATPQK3", expectedName: "Melissa Maurath" },
@@ -23,7 +23,7 @@ describe("Wrike reference-data contracts", () => {
       { wrikeUserId: "KUAE45X3", expectedName: "Meena Kishnani" },
       { wrikeUserId: "KUAKTTA2", expectedName: "Emlyn Storrs" },
       { wrikeUserId: "KUAQCO2V", expectedName: "Mallory Lozoya" },
-      { wrikeUserId: "KUAQCQMG", expectedName: "Jeff Dino" },
+      { wrikeUserId: "KUAQCQMG", expectedName: "Jeffrey Dino" },
       { wrikeUserId: "KUAG3N3I", expectedName: "Lawson Coke" }
     ]);
     expect(SELECTED_WRIKE_USERS.map((user) => wrikeUserPath(user.wrikeUserId))).toHaveLength(13);
@@ -66,7 +66,7 @@ describe("Wrike reference-data contracts", () => {
 
   it("preserves responsible-user order and applies authoritative, configured, then raw fallbacks", () => {
     const resolved = resolveResponsibleUsers(["KUALR6DZ", "KUANTWID", "UNKNOWN1"], [{ wrike_id: "KUALR6DZ", display_name: "Authoritative Name", email: "a@example.com", avatar_url: null, synced_at: "2026-07-17T00:00:00Z" }]);
-    expect(resolved.map((user) => user.fullName)).toEqual(["Authoritative Name", "Koco Budo", "UNKNOWN1"]);
+    expect(resolved.map((user) => user.fullName)).toEqual(["Authoritative Name", "Koço Budo", "UNKNOWN1"]);
     expect(resolved.map((user) => user.fallbackSource)).toEqual(["wrike", "configured", "raw_id"]);
   });
 

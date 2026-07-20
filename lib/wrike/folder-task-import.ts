@@ -16,7 +16,7 @@ import {
 import { refreshWrikeSessionFor, wrikeSessionFor } from "@/lib/wrike/oauth";
 import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory, syncEncounteredWrikeUsers, syncWrikeReferenceData, type ReferenceSyncDiagnostics } from "@/lib/wrike/reference-data";
 import { uniqueWrikeIds, type WrikeUnresolvedReferenceInput } from "@/lib/wrike/reference-resolution";
-import { SELECTED_WRIKE_FOLDERS, SELECTED_WRIKE_FOLDER_BY_ID, SELECTED_WRIKE_FOLDER_IDS, type SelectedWrikeFolder } from "@/lib/wrike/selected-folders";
+import { isOutOfScopeWrikeFolder, scopedWrikeFolderIds, SELECTED_WRIKE_FOLDERS, SELECTED_WRIKE_FOLDER_BY_ID, SELECTED_WRIKE_FOLDER_IDS, type SelectedWrikeFolder } from "@/lib/wrike/selected-folders";
 import { WRIKE_TASK_FIELDS } from "@/lib/wrike/task-fields";
 import { allocatedMinutes, plannedMinutes } from "@/lib/wrike/sync";
 import { markResolvedWrikeReferences, upsertUnresolvedWrikeReferences } from "@/lib/wrike/unresolved-references";
@@ -477,9 +477,9 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
   const parentIdsByFolderId = new Map<string, string[]>();
   for (const parent of metadata.folderDefinitions) for (const childId of parent.childIds) parentIdsByFolderId.set(childId, [...(parentIdsByFolderId.get(childId) ?? []), parent.id]);
 
-  const folderDefinitions = [...metadata.folderDefinitions];
+  const folderDefinitions = metadata.folderDefinitions.filter((folder) => !isOutOfScopeWrikeFolder(folder.id));
   for (const source of SELECTED_WRIKE_FOLDERS) if (!folderDefinitions.some((folder) => folder.id === source.id)) folderDefinitions.push({ id: source.id, title: source.title, childIds: [], scope: "Selected" });
-  const referencedLocationIds = [...new Set(tasks.flatMap((task) => task.parentIds ?? []))];
+  const referencedLocationIds = [...new Set(tasks.flatMap((task) => scopedWrikeFolderIds(task.parentIds)))];
   for (const folderId of referencedLocationIds) if (!folderDefinitions.some((folder) => folder.id === folderId)) folderDefinitions.push({ id: folderId, title: folderId, childIds: [], scope: "Unresolved", unresolvedReference: true });
   const { data: savedSpaces, error: savedSpacesError } = await db.from("wrike_spaces").select("id,wrike_id").eq("organization_id", organizationId);
   if (savedSpacesError) throw new Error(`Supabase could not load Wrike spaces: ${savedSpacesError.message}`);
@@ -518,7 +518,7 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     (data ?? []).forEach((folder) => folderIdMap.set(folder.wrike_id, folder.id));
   }
 
-  const projectDefinitions = metadata.folderDefinitions.filter((folder): folder is WrikeFolderDefinition & { project: NonNullable<WrikeFolderDefinition["project"]> } => Boolean(folder.project));
+  const projectDefinitions = folderDefinitions.filter((folder): folder is WrikeFolderDefinition & { project: NonNullable<WrikeFolderDefinition["project"]> } => Boolean(folder.project));
   const projectIdMap = new Map<string, string>();
   for (let offset = 0; offset < projectDefinitions.length; offset += 250) {
     const rows = projectDefinitions.slice(offset, offset + 250).map((folder) => ({
@@ -616,7 +616,7 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
       start_date: day(task.dates?.start),
       due_date: day(task.dates?.due),
       completed_at: iso(task.dates?.completed),
-      parent_wrike_ids: task.parentIds ?? [],
+      parent_wrike_ids: scopedWrikeFolderIds(task.parentIds),
       super_task_wrike_ids: task.superTaskIds ?? [],
       task_type: task.dates?.type ?? null,
       planned_minutes: plannedMinutes(task),
@@ -653,7 +653,7 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     if (error) throw new Error(`Supabase could not save task assignees: ${error.message}`);
   }
 
-  const locations = tasks.flatMap((task) => (task.parentIds ?? []).flatMap((wrikeLocationId) => {
+  const locations = tasks.flatMap((task) => scopedWrikeFolderIds(task.parentIds).flatMap((wrikeLocationId) => {
     const taskId = taskIdMap.get(task.id);
     return taskId ? [{ task_id: taskId, folder_id: folderIdMap.get(wrikeLocationId) ?? null, project_id: projectIdMap.get(wrikeLocationId) ?? null, wrike_location_id: wrikeLocationId }] : [];
   }));

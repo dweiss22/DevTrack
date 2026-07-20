@@ -19,6 +19,8 @@ const verticalNormalizationMigration = fs.readFileSync(path.join(process.cwd(), 
 const reportingPerformanceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200004_reporting_course_dashboard_performance.sql"), "utf8");
 const allYearsDashboardMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200005_dashboard_all_reporting_years.sql"), "utf8");
 const allYearsDrilldownMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200006_all_years_dashboard_drilldown.sql"), "utf8");
+const currentWrikeUserNamesMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200007_current_wrike_user_names.sql"), "utf8");
+const ignoredFolderReferencesMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200008_ignore_out_of_scope_folder_references.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -189,5 +191,18 @@ describe("reporting migration contract", () => {
     expect(allYearsDrilldownMigration).toContain("reporting.reporting_year is not null and not reporting.has_conflict");
     expect(allYearsDrilldownMigration).toContain("reporting_filtered_tasks_without_dashboard_drilldown");
     expect(allYearsDrilldownMigration).toContain("reload schema");
+  });
+  it("aligns persisted selected-user names with current Wrike responses", () => {
+    expect(currentWrikeUserNamesMigration).toContain("wrike_id='KUANTWID'");
+    expect(currentWrikeUserNamesMigration).toContain("display_name='Koço Budo'");
+    expect(currentWrikeUserNamesMigration).toContain("wrike_id='KUAQCQMG'");
+    expect(currentWrikeUserNamesMigration).toContain("display_name='Jeffrey Dino'");
+    expect(currentWrikeUserNamesMigration).toContain("Raw API payloads remain unchanged");
+  });
+  it("removes and ignores configured out-of-scope folder references", () => {
+    for (const id of ["IEACHQK7I4PFONLA", "IEACHQK7I4PFONKX", "IEACHQK7I4PFONKR", "IEACHQK7I7777777"]) expect(ignoredFolderReferencesMigration).toContain(id);
+    expect(ignoredFolderReferencesMigration).toContain("delete from public.wrike_task_locations");
+    expect(ignoredFolderReferencesMigration).toContain("Original task raw_data is preserved");
+    expect(ignoredFolderReferencesMigration).toContain("resolution_status='ignored'");
   });
 });

@@ -99,7 +99,7 @@ fields=%5B%22description%22%2C%22responsibleIds%22%2C%22parentIds%22%2C%22superT
 | Wrike user ID | Expected fallback name |
 | --- | --- |
 | `KUALR6DZ` | Devin Weiss |
-| `KUANTWID` | Koco Budo |
+| `KUANTWID` | Koço Budo |
 | `KUAPO5G4` | Greg Rogers |
 | `KUAOGSL5` | Natalie Nelson |
 | `KUATPQK3` | Melissa Maurath |
@@ -109,7 +109,7 @@ fields=%5B%22description%22%2C%22responsibleIds%22%2C%22parentIds%22%2C%22superT
 | `KUAE45X3` | Meena Kishnani |
 | `KUAKTTA2` | Emlyn Storrs |
 | `KUAQCO2V` | Mallory Lozoya |
-| `KUAQCQMG` | Jeff Dino |
+| `KUAQCQMG` | Jeffrey Dino |
 | `KUAG3N3I` | Lawson Coke |
 
 `GET /users/{userId}` requires `amReadOnlyUser`, so connections authorized only with `wsReadOnly` must reconnect. Wrike's returned name is authoritative. If it differs from the configured expected name, DevTrack retains Wrike's value and records both values as a warning. A configured fallback row is created only when no row exists and never overwrites previously synchronized data.
