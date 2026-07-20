@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { filtersForRpc, type ReportingFilters } from "@/lib/reporting/filters";
 import { ONLINE_LEARNING_WORKFLOW_ID } from "@/lib/reporting/constants";
+import { normalizeReportingCourseYear, reportingCourseYearLabel } from "@/lib/reporting/reporting-year";
 
 export { ONLINE_LEARNING_WORKFLOW_ID } from "@/lib/reporting/constants";
 
@@ -40,6 +41,17 @@ export type DashboardAnalytics = {
   verticals: DashboardCategory[];
 };
 
+export type DashboardYearOption = { year: number; label: string; projectCount: number };
+export type DashboardOverview = {
+  metrics: Omit<DashboardMetrics, "timeDataSynchronized">;
+  projectsByReportingYear: ReportingYearCount[];
+  projectsByStatus: ReportingYearStatus[];
+  courseTypes: DashboardCategory[];
+  authoringTools: DashboardCategory[];
+  verticals: DashboardCategory[];
+};
+export type DashboardTimeAnalytics = { averageTimeByReportingYear: ReportingYearTime[]; timeDataSynchronized: boolean };
+
 export const EMPTY_DASHBOARD_ANALYTICS: DashboardAnalytics = {
   metrics: { totalProjects: 0, activeProjects: 0, completedProjects: 0, stalledOrCanceledProjects: 0, unresolvedStatusProjects: 0, customFieldConflictProjects: 0, unresolvedVerticalProjects: 0, timeDataSynchronized: false },
   projectsByReportingYear: [],
@@ -58,6 +70,56 @@ export type DashboardAnalyticsFailure = {
 };
 
 export type DashboardAnalyticsResult = { data: DashboardAnalytics; error: null } | { data: null; error: DashboardAnalyticsFailure };
+export type DashboardLoadResult<T> = { data: T; error: null } | { data: null; error: DashboardAnalyticsFailure };
+
+function dashboardFailure(error: { message?: string; code?: string | null } | unknown, rpc: string): DashboardAnalyticsFailure {
+  const candidate = error && typeof error === "object" ? error as { message?: string; code?: string | null } : {};
+  const message = candidate.message?.toLocaleLowerCase() ?? "";
+  if (candidate.code === "PGRST202" || candidate.code === "42883" || message.includes("schema cache") || message.includes("could not find the function")) return {
+    kind: "migration_required", title: "Dashboard database migration required",
+    message: "Apply all Supabase migrations through 202607200004, reload the PostgREST schema cache, and retry. Existing reporting data has not been replaced with zeroes.", diagnosticCode: candidate.code ?? null
+  };
+  if (candidate.code === "42501" || message.includes("permission denied")) return {
+    kind: "permission_denied", title: "Dashboard reporting access was denied",
+    message: "Confirm this account belongs to the reporting organization and can execute the reporting RPC.", diagnosticCode: candidate.code ?? null
+  };
+  const timeout = candidate.code === "57014" || message.includes("timeout") || message.includes("timed out") || message.includes("abort");
+  return { kind: "query_failed", title: timeout ? "Dashboard query timed out" : "Dashboard reporting query failed", message: timeout
+    ? `${rpc} exceeded the database or network time limit. Other Dashboard sections can still load; retry this section after reviewing server timing logs.`
+    : `${rpc} could not complete. Review server timing logs using the diagnostic code. No zero values have been substituted.`, diagnosticCode: candidate.code ?? null };
+}
+
+async function timedRpc<T>(supabase: SupabaseClient, rpc: string, args?: Record<string, unknown>): Promise<DashboardLoadResult<T>> {
+  const started = Date.now();
+  try {
+    const { data, error } = await supabase.rpc(rpc, args);
+    const elapsedMs = Date.now() - started;
+    if (error) {
+      console.error("reporting_rpc_failed", { rpc, elapsedMs, code: error.code });
+      return { data: null, error: dashboardFailure(error, rpc) };
+    }
+    console.info("reporting_rpc_completed", { rpc, elapsedMs });
+    return { data: data as T, error: null };
+  } catch (error) {
+    const elapsedMs = Date.now() - started;
+    console.error("reporting_rpc_exception", { rpc, elapsedMs, message: error instanceof Error ? error.message : "Unknown error" });
+    return { data: null, error: dashboardFailure(error, rpc) };
+  }
+}
+
+export async function loadDashboardYearOptions(supabase: SupabaseClient): Promise<DashboardLoadResult<DashboardYearOption[]>> {
+  const result = await timedRpc<{ year: number; label: string; project_count: number }[]>(supabase, "reporting_dashboard_year_options");
+  if (result.error) return result;
+  return { data: (result.data ?? []).map((row) => ({ year: Number(row.year), label: row.label, projectCount: Number(row.project_count) })), error: null };
+}
+
+export function loadDashboardOverview(supabase: SupabaseClient, year: number) {
+  return timedRpc<DashboardOverview>(supabase, "reporting_online_learning_dashboard_overview_v3", { target_year: year });
+}
+
+export function loadDashboardTimeAnalytics(supabase: SupabaseClient, year: number) {
+  return timedRpc<DashboardTimeAnalytics>(supabase, "reporting_online_learning_dashboard_time_v3", { target_year: year });
+}
 
 export async function loadDashboardAnalyticsResult(supabase: SupabaseClient, filters: ReportingFilters): Promise<DashboardAnalyticsResult> {
   const { data, error } = await supabase.rpc("reporting_online_learning_dashboard_v2", { filters: filtersForRpc(filters) });
@@ -94,13 +156,10 @@ export async function loadDashboardAnalytics(supabase: SupabaseClient, filters: 
 }
 
 export function normalizeReportingYear(values: readonly string[]) {
-  const years = new Set<number>();
-  for (const value of values) {
-    const match = value.match(/(?:^|\D)((?:19|20|21)\d{2})(?:\D|$)/);
-    if (match) years.add(Number(match[1]));
-  }
-  return years.size === 1 ? [...years][0] : null;
+  return normalizeReportingCourseYear(values);
 }
+
+export { reportingCourseYearLabel };
 
 export function normalizeDashboardValues(values: readonly string[]) {
   const byKey = new Map<string, string>();

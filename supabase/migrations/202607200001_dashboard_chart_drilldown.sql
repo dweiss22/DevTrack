@@ -48,13 +48,15 @@ begin
 
   -- The Dashboard defines state from its administrative status classification,
   -- whereas the general report historically uses Wrike's raw task state.
-  if filters ? 'state' and case filters->>'state'
-    when 'completed' then effective_classification <> 'completed'
-    when 'cancelled' then effective_classification <> 'stalled_or_canceled'
-    when 'open' then effective_classification <> 'active'
-    when 'overdue' then effective_classification <> 'active' or task_due_date >= current_date or task_due_date is null
-    else false end
-  then return false; end if;
+  if filters ? 'state' then
+    if (case filters->>'state'
+      when 'completed' then effective_classification <> 'completed'
+      when 'cancelled' then effective_classification <> 'stalled_or_canceled'
+      when 'open' then effective_classification <> 'active'
+      when 'overdue' then effective_classification <> 'active' or task_due_date >= current_date or task_due_date is null
+      else false end)
+    then return false; end if;
+  end if;
 
   if filters ? 'reportingYear' then
     select array_agg(display_value order by canonical_value)

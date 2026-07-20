@@ -154,9 +154,9 @@ On the first connected deployment run, DevTrack records `folder_recursive` only 
 
 The left navigation is organized as Dashboard, Development, SME Collaboration, Other Teams, Projects, and the administrator-only User Management and Data sections. `/projects` is the user-facing project route; existing `/tasks` URLs redirect for compatibility without renaming Wrike or database entities. The persistent footer provides the Lexipol brand and a Supabase-backed Logout action.
 
-The Dashboard calls one RLS-aware database function, `reporting_online_learning_dashboard_v2`, rather than loading raw facts into the browser. It returns the statistics bar, completed projects and average project-level time by validated Reporting year, stacked status classifications, and one-project-per-category Course Type, Authoring Tool, and Vertical distributions. Reporting, Course Type, Authoring Tool, and Vertical use the normalized custom-field layer, so `(M)` and `(L)` sources are merged and conflicts remain available for administrative review.
+The Dashboard uses year-first, RLS-aware overview and time RPCs rather than loading raw facts into the browser. Its only manual filter is Reporting Year, displayed in the synchronized `YYYY Courses` format. Overview metrics and categorical charts stream independently from recorded-time analytics so a slow time query does not blank the page. Reporting, Course Type, Authoring Tool, and Vertical use the normalized custom-field layer, so `(M)` and `(L)` sources are merged and conflicts remain available for administrative review.
 
-Apply `202607170005_dashboard_analytics.sql` after the reference-resolution migration. The migration adds the aggregated Dashboard function, a validated reporting-year helper, and indexes for workflow, active timelog, and normalized-field lookups.
+Apply all migrations through `202607200004_reporting_course_dashboard_performance.sql`. The latest migration requires Reporting values to match `YYYY Courses`, recomputes stored years, and adds workflow/year-first Dashboard and Development queries.
 
 ## Scheduling and deployment
 
@@ -173,12 +173,12 @@ npm run build
 
 The unit suite covers metrics, filters, the deterministic question parser, Wrike hosts, pagination, task paths, and effort/time normalization. `supabase/tests/reporting_rls.sql` adds database integration coverage for organization isolation, compatibility access, intersection/union groups, and conversation auditing; run it against a local Supabase stack with `supabase test db`.
 
-No live Wrike access is required for automated tests. Production validation requires applying all migrations through `202607170005_dashboard_analytics.sql`, deploying server-side credentials, reconnecting Wrike to grant `amReadOnlyUser`, running the health check, selecting **Import folder tasks and timelogs**, and inspecting unresolved-reference, workflow-classification, custom-field conflict, task-contract, descendant, and Dashboard diagnostics before comparing sampled records with Wrike.
+No live Wrike access is required for automated tests. Production validation requires applying all migrations through `202607200004_reporting_course_dashboard_performance.sql`, deploying server-side credentials, reconnecting Wrike to grant `amReadOnlyUser`, running the health check, selecting **Import folder tasks and timelogs**, and inspecting unresolved-reference, workflow-classification, custom-field conflict, task-contract, descendant, and Dashboard diagnostics before comparing sampled records with Wrike.
 
 ## Troubleshooting
 
 - **“Wrike OAuth is not configured”**: check client ID, secret, app URL, and token encryption key.
 - **Callback fails**: ensure the callback URL in Wrike exactly matches `NEXT_PUBLIC_APP_URL/api/wrike/callback`, including protocol.
 - **Token refresh fails**: reconnect from Administration; an expired/revoked connection is marked accordingly without exposing the underlying token.
-- **No data after import**: first apply migrations through `202607170005_dashboard_analytics.sql`. Then verify the connecting administrator can read workflows, spaces, the Learning folder tree, custom-field definitions, and every configured task/timelog folder before selecting **Import folder tasks and timelogs**. Reconnect if Data administration reports that `amReadOnlyUser` is missing. A successful OAuth connection alone does not run the APIs, and the post-migration import is required to populate normalized fields, reference state, and dashboard classifications.
+- **No data after import**: first apply migrations through `202607200004_reporting_course_dashboard_performance.sql`. Then verify Reporting values use `YYYY Courses` and that the connecting administrator can read workflows, spaces, the Learning folder tree, custom-field definitions, and every configured task/timelog folder before selecting **Import folder tasks and timelogs**. Reconnect if Data administration reports that `amReadOnlyUser` is missing. A successful OAuth connection alone does not run the APIs.
 - **User cannot see reports**: make sure their Auth user ID is in `application_users` for the correct organization. RLS intentionally prevents cross-organization reads.

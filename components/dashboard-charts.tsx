@@ -2,26 +2,20 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { DashboardAnalytics, DashboardCategory, ReportingYearCount, ReportingYearStatus, ReportingYearTime } from "@/lib/reporting/dashboard";
+import type { DashboardCategory, DashboardOverview, DashboardTimeAnalytics, ReportingYearCount, ReportingYearStatus, ReportingYearTime } from "@/lib/reporting/dashboard";
 import { assignedDashboardRows, dashboardDrilldownHref, type DashboardClassification, type DashboardField } from "@/lib/reporting/dashboard-navigation";
 import type { ReportingFilters } from "@/lib/reporting/filters";
 
 const CATEGORY_COLORS = ["#145b9e", "#0c8f78", "#7c3aed", "#d97706", "#dc4c64", "#64748b", "#0891b2", "#65a30d"];
 
-export function DashboardCharts({ analytics, filters }: { analytics: DashboardAnalytics; filters: ReportingFilters }) {
+export function DashboardOverviewCharts({ analytics, filters }: { analytics: DashboardOverview; filters: ReportingFilters }) {
   const router = useRouter();
   const projectsByReportingYear = assignedDashboardRows(analytics.projectsByReportingYear, "label");
-  const averageTimeByReportingYear = assignedDashboardRows(analytics.averageTimeByReportingYear, "label");
   const projectsByStatus = assignedDashboardRows(analytics.projectsByStatus, "label");
   return <div className="dashboard-charts">
     <ChartCard title="Projects by Reporting Year" description="Completed Online Learning projects grouped by the normalized Reporting field. Select a bar to view its projects." empty={!projectsByReportingYear.length}>
       <ResponsiveContainer width="100%" height={300}><BarChart data={projectsByReportingYear} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" /><YAxis allowDecimals={false} /><Tooltip formatter={(value) => [`${value} completed projects`, "Projects"]} /><Bar dataKey="projects" name="Completed projects" fill="#145b9e" radius={[6,6,0,0]} onClick={(entry) => navigateToYear(router.push, filters, chartRow<ReportingYearCount>(entry)?.label, "completed")} /></BarChart></ResponsiveContainer>
       <AccessibleTable caption="Completed projects by reporting year" headers={["Reporting year", "Completed projects"]} rows={projectsByReportingYear.map((row) => [<DrilldownLink href={yearHref(filters, row.label, "completed")} label={row.label} />, row.projects])} />
-    </ChartCard>
-
-    <ChartCard title="Average Time Spent by Reporting Year" description="Each completed project contributes one total-time value before the yearly average is calculated. Select a point to view its projects." empty={!averageTimeByReportingYear.length} notice={!analytics.metrics.timeDataSynchronized ? "Time-entry synchronization has not completed, so averages are not shown as zero." : undefined}>
-      {analytics.metrics.timeDataSynchronized && <ResponsiveContainer width="100%" height={300}><LineChart data={averageTimeByReportingYear} margin={{ top: 12, right: 22, left: 8, bottom: 4 }} onClick={(state) => navigateToYear(router.push, filters, state?.activeLabel, "completed")}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" /><YAxis tickFormatter={(minutes) => `${Math.round(Number(minutes) / 60)}h`} /><Tooltip content={<AverageTimeTooltip />} /><Line type="monotone" dataKey="averageMinutes" name="Average hours per project" stroke="#0c8f78" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} /></LineChart></ResponsiveContainer>}
-      <AccessibleTable caption="Average project time by reporting year" headers={["Reporting year", "Projects", "Average hours", "Combined hours"]} rows={averageTimeByReportingYear.map((row) => [<DrilldownLink href={yearHref(filters, row.label, "completed")} label={row.label} />, row.projectCount, row.averageMinutes == null ? "Not synchronized" : hours(row.averageMinutes), hours(row.totalMinutes)])} />
     </ChartCard>
 
     <ChartCard title="Projects by Status" description="Current project status classification by reporting year. Select a segment to view its projects." empty={!projectsByStatus.length}>
@@ -35,6 +29,15 @@ export function DashboardCharts({ analytics, filters }: { analytics: DashboardAn
       <DonutChart title="Projects by Vertical" field="verticalReportingCategory" data={analytics.verticals} filters={filters} />
     </section>
   </div>;
+}
+
+export function DashboardTimeChart({ analytics, filters }: { analytics: DashboardTimeAnalytics; filters: ReportingFilters }) {
+  const router = useRouter();
+  const rows = assignedDashboardRows(analytics.averageTimeByReportingYear, "label");
+  return <div className="dashboard-charts"><ChartCard title="Average Time Spent by Reporting Year" description="Each completed project contributes one total-time value before the yearly average is calculated. Select a point to view its projects." empty={!rows.length} notice={!analytics.timeDataSynchronized ? "Time-entry synchronization has not completed, so averages are not shown as zero." : undefined}>
+    {analytics.timeDataSynchronized && <ResponsiveContainer width="100%" height={300}><LineChart data={rows} margin={{ top: 12, right: 22, left: 8, bottom: 4 }} onClick={(state) => navigateToYear(router.push, filters, state?.activeLabel, "completed")}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" /><YAxis tickFormatter={(minutes) => `${Math.round(Number(minutes) / 60)}h`} /><Tooltip content={<AverageTimeTooltip />} /><Line type="monotone" dataKey="averageMinutes" name="Average hours per project" stroke="#0c8f78" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} /></LineChart></ResponsiveContainer>}
+    <AccessibleTable caption="Average project time by reporting year" headers={["Reporting year", "Projects", "Average hours", "Combined hours"]} rows={rows.map((row) => [<DrilldownLink href={yearHref(filters, row.label, "completed")} label={row.label} />, row.projectCount, row.averageMinutes == null ? "Not synchronized" : hours(row.averageMinutes), hours(row.totalMinutes)])} />
+  </ChartCard></div>;
 }
 
 function ChartCard({ title, description, empty, notice, children }: { title: string; description: string; empty: boolean; notice?: string; children: React.ReactNode }) {

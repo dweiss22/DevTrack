@@ -67,19 +67,23 @@ describe("Online Learning dashboard calculations", () => {
   });
 
   it("validates and chronologically sorts reporting years", () => {
-    expect(normalizeReportingYear(["2025"])).toBe(2025);
-    expect(normalizeReportingYear(["FY2026"])).toBe(2026);
-    expect(normalizeReportingYear(["2027 Reporting Year"])).toBe(2027);
+    expect(normalizeReportingYear(["2025 Courses"])).toBe(2025);
+    expect(normalizeReportingYear([" 2026   courses "])).toBe(2026);
+    expect(normalizeReportingYear(["2027 Courses", "2027 COURSES"])).toBe(2027);
+    expect(normalizeReportingYear(["2025"])).toBeNull();
+    expect(normalizeReportingYear(["FY2026"])).toBeNull();
+    expect(normalizeReportingYear(["2027 Reporting Year"])).toBeNull();
     expect(normalizeReportingYear(["not a year"])).toBeNull();
-    expect(normalizeReportingYear(["FY2025", "FY2026"])).toBeNull();
+    expect(normalizeReportingYear(["2025 Courses", "bad value"])).toBeNull();
+    expect(normalizeReportingYear(["2025 Courses", "2026 Courses"])).toBeNull();
   });
 
   it("averages project totals rather than individual timelog rows", () => {
     const result = completedReportingYearAverages([
-      { workflowId: ONLINE_LEARNING_WORKFLOW_ID, classification: "completed", reportingValues: ["FY2025"], actualMinutes: 180 },
-      { workflowId: ONLINE_LEARNING_WORKFLOW_ID, classification: "completed", reportingValues: ["2025 Reporting Year"], actualMinutes: 60 },
-      { workflowId: ONLINE_LEARNING_WORKFLOW_ID, classification: "completed", reportingValues: ["2024"], actualMinutes: 30 },
-      { workflowId: ONLINE_LEARNING_WORKFLOW_ID, classification: "active", reportingValues: ["2025"], actualMinutes: 999 }
+      { workflowId: ONLINE_LEARNING_WORKFLOW_ID, classification: "completed", reportingValues: ["2025 Courses"], actualMinutes: 180 },
+      { workflowId: ONLINE_LEARNING_WORKFLOW_ID, classification: "completed", reportingValues: ["2025 COURSES"], actualMinutes: 60 },
+      { workflowId: ONLINE_LEARNING_WORKFLOW_ID, classification: "completed", reportingValues: ["2024 Courses"], actualMinutes: 30 },
+      { workflowId: ONLINE_LEARNING_WORKFLOW_ID, classification: "active", reportingValues: ["2025 Courses"], actualMinutes: 999 }
     ]);
     expect(result).toEqual([
       { label: "2024", sortYear: 2024, projectCount: 1, totalMinutes: 30, averageMinutes: 30 },

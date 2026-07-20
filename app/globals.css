@@ -162,6 +162,9 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
 pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px; background: #f8fafc; padding: 12px; border-radius: 7px; }
 .muted, small { color: var(--muted); }
 .report-filters { margin-bottom: 18px; }
+.dashboard-year-filter { margin-bottom: 18px; display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.dashboard-year-filter label { min-width: min(280px, 100%); }
+.dashboard-year-filter select { margin-top: 6px; }
 .drilldown-context { margin: 0 0 14px; padding: 10px 12px; border-radius: 8px; background: var(--blue-soft); color: var(--navy); }
 .filter-fields { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .report-filters .filter-bar { margin: 0; }

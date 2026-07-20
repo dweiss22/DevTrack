@@ -68,7 +68,7 @@ export function filtersForDevelopmentRpc(filters: DevelopmentFilters) {
   return Object.fromEntries(Object.entries(rpc).filter(([, value]) => value !== undefined && value !== "" && value !== false && (!Array.isArray(value) || value.length)));
 }
 
-export type DevelopmentYearOption = { year: number; projects: number };
+export type DevelopmentYearOption = { year: number; label: string; projects: number };
 export type DevelopmentYearOptions = { years: DevelopmentYearOption[]; missingProjects: number; defaultYear?: number };
 export type DevelopmentStatusMetric = { statusId: string; name: string; color: string | null; resolved: boolean; projects: number };
 export type DevelopmentTimeMetric = { statusId: string; name: string; color: string | null; resolved: boolean; minutes: number; projectCount: number };
@@ -113,20 +113,25 @@ export async function loadDevelopmentOptions(supabase: SupabaseClient, organizat
 }
 
 export async function loadDevelopmentYearOptions(supabase: SupabaseClient): Promise<DevelopmentLoadResult<DevelopmentYearOptions>> {
-  const { data, error } = await supabase.rpc("reporting_development_year_options");
-  if (error) return failure("Reporting years could not be loaded", error);
-  const rows = (data ?? []) as { reporting_year: number | null; project_count: number; missing_count: number }[];
-  const years = rows.filter((row): row is typeof row & { reporting_year: number } => row.reporting_year != null).map((row) => ({ year: Number(row.reporting_year), projects: Number(row.project_count) }));
-  return { data: { years, missingProjects: Number(rows[0]?.missing_count ?? 0), defaultYear: years[0]?.year }, error: null };
+  try {
+    const { data, error } = await supabase.rpc("reporting_development_year_options");
+    if (error) return failure("Reporting years could not be loaded", error);
+    const rows = (data ?? []) as { reporting_year: number | null; project_count: number; missing_count: number }[];
+    const years = rows.filter((row): row is typeof row & { reporting_year: number } => row.reporting_year != null).map((row) => ({ year: Number(row.reporting_year), label: `${row.reporting_year} Courses`, projects: Number(row.project_count) }));
+    return { data: { years, missingProjects: Number(rows[0]?.missing_count ?? 0), defaultYear: years[0]?.year }, error: null };
+  } catch (error) { return failure("Reporting years could not be loaded", errorFromUnknown(error)); }
 }
 
 export async function loadDevelopmentAnalytics(supabase: SupabaseClient, filters: DevelopmentFilters): Promise<DevelopmentLoadResult<DevelopmentAnalytics>> {
-  const { data, error } = await supabase.rpc("reporting_development_analytics", { filters: analyticsFilters(filters) });
-  if (error) return failure("Development analytics could not be loaded", error);
-  return { data: data as DevelopmentAnalytics, error: null };
+  try {
+    const { data, error } = await supabase.rpc("reporting_development_analytics", { filters: analyticsFilters(filters) });
+    if (error) return failure("Development analytics could not be loaded", error);
+    return { data: data as DevelopmentAnalytics, error: null };
+  } catch (error) { return failure("Development analytics could not be loaded", errorFromUnknown(error)); }
 }
 
 export async function loadDevelopmentProjects(supabase: SupabaseClient, filters: DevelopmentFilters): Promise<DevelopmentLoadResult<DevelopmentProjectResult>> {
+  try {
   const { data, error } = await supabase.rpc("reporting_development_project_rows", { filters: filtersForDevelopmentRpc(filters), result_limit: filters.pageSize, result_offset: (filters.page - 1) * filters.pageSize });
   if (error) return failure("Development projects could not be loaded", error);
   const result = data as DevelopmentProjectResult | null;
@@ -148,6 +153,7 @@ export async function loadDevelopmentProjects(supabase: SupabaseClient, filters:
       hasUnresolvedVertical: value?.has_unresolved_vertical ?? true, unresolvedVerticalTokens: value?.unresolved_vertical_tokens ?? []
     } } };
   }), total: Number(result?.total ?? 0) }, error: null };
+  } catch (error) { return failure("Development projects could not be loaded", errorFromUnknown(error)); }
 }
 
 export function resolveDevelopmentContactValues(rows: DevelopmentProjectRow[], users: { wrikeId?: string; name: string; resolved?: boolean }[], contactKeys: Set<string>) {
@@ -176,5 +182,9 @@ function analyticsFilters(filters: DevelopmentFilters) {
 }
 function first(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] : value; }
 function failure<T>(title: string, error: { message: string; code?: string | null }): DevelopmentLoadResult<T> {
-  return { data: null, error: { title, message: error.message, code: error.code ?? null } };
+  const missingMigration = error.code === "PGRST202" || error.code === "42883" || error.message.toLocaleLowerCase().includes("schema cache");
+  return { data: null, error: { title: missingMigration ? "Development reporting migration required" : title, message: missingMigration
+    ? "Apply all Supabase migrations through 202607200004 and reload the PostgREST schema cache. Existing reporting data has not been replaced with zeroes."
+    : error.message, code: error.code ?? null } };
 }
+function errorFromUnknown(error: unknown) { return error instanceof Error ? { message: error.message } : { message: "The reporting request failed before the database returned a response." }; }

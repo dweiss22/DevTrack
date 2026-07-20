@@ -16,6 +16,7 @@ const dashboardPerformanceMigration = fs.readFileSync(path.join(process.cwd(), "
 const dashboardDrilldownMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200001_dashboard_chart_drilldown.sql"), "utf8");
 const developmentDashboardMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200002_development_reporting_dashboard.sql"), "utf8");
 const verticalNormalizationMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200003_controlled_vertical_normalization.sql"), "utf8");
+const reportingPerformanceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200004_reporting_course_dashboard_performance.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -162,5 +163,14 @@ describe("reporting migration contract", () => {
     expect(verticalNormalizationMigration).toContain("associatedVertical");
     expect(verticalNormalizationMigration).toContain("verticalReportingCategory");
     expect(verticalNormalizationMigration).toContain("unresolvedVerticalOnly");
+  });
+  it("strictly parses Reporting course years and scopes dashboard work before time aggregation", () => {
+    expect(reportingPerformanceMigration).toContain("Courses$','i'");
+    expect(reportingPerformanceMigration).toContain("reporting_dashboard_year_options");
+    expect(reportingPerformanceMigration).toContain("reporting_online_learning_dashboard_overview_v3");
+    expect(reportingPerformanceMigration).toContain("reporting_online_learning_dashboard_time_v3");
+    expect(reportingPerformanceMigration).toContain("with completed as materialized");
+    expect(reportingPerformanceMigration).toContain("with candidates as materialized");
+    expect(reportingPerformanceMigration).toContain("reload schema");
   });
 });

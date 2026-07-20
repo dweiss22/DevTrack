@@ -40,10 +40,11 @@ describe("Development reporting dashboard", () => {
   });
 
   it("renders only relevant normalized custom-field filters and active controls", () => {
-    const markup = renderToStaticMarkup(<DevelopmentFiltersForm filters={parseDevelopmentFilters({}, 2026)} years={{ years: [{ year: 2026, projects: 8 }], missingProjects: 2, defaultYear: 2026 }} options={options} />);
+    const markup = renderToStaticMarkup(<DevelopmentFiltersForm filters={parseDevelopmentFilters({}, 2026)} years={{ years: [{ year: 2026, label: "2026 Courses", projects: 8 }], missingProjects: 2, defaultYear: 2026 }} options={options} />);
     expect(markup).toContain("Instructional Designer");
     expect(markup).not.toContain("Unrelated Field");
     expect(markup).toContain("Missing/Unresolved (2)");
+    expect(markup).toContain("2026 Courses (8)");
   });
 
   it("keeps the column chooser and historical-status disclosure in the UI source", () => {
