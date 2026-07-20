@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { developmentFiltersToQuery, type DevelopmentFilters, type DevelopmentOptions, type DevelopmentYearOptions } from "@/lib/reporting/development";
+import { APPROVED_VERTICALS, VERTICAL_REPORTING_FILTER_OPTIONS } from "@/lib/wrike/vertical-normalization";
 
 const DEVELOPMENT_FIELD_PATTERN = /(instructional designer|course owner|subject.?matter|\bsme\b|authoring tool|course type|product type)/i;
 export function developmentCustomFields(options: DevelopmentOptions) { return options.customFields.filter((field) => DEVELOPMENT_FIELD_PATTERN.test(field.name)); }
@@ -18,6 +19,8 @@ export function DevelopmentFiltersForm({ filters, years, options }: { filters: D
         <label>Custom status<select name="developmentStatus" defaultValue={filters.developmentStatus ?? ""}><option value="">All statuses</option><option value="__unknown__">Unknown Status</option>{options.statuses.map((status) => <option key={status.id} value={status.id}>{status.name}</option>)}</select></label>
         <label>Assigned user<select name="assigneeIds" defaultValue={filters.assigneeIds?.[0] ?? ""}><option value="">All assigned users</option>{options.users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
         {customFields.map((field) => <label key={field.id}>{field.name}<select name={`cf_${field.id}`} defaultValue={filters.customFields?.[field.id] ?? ""}><option value="">All values</option>{field.values.map((value) => <option key={value} value={value}>{resolveOptionLabel(value, options)}</option>)}</select></label>)}
+        <label>Vertical Reporting Category<select name="verticalReportingCategory" defaultValue={filters.verticalReportingCategory ?? ""}><option value="">All reporting categories</option>{VERTICAL_REPORTING_FILTER_OPTIONS.map((value) => <option key={value}>{value}</option>)}</select></label>
+        <label>Associated Vertical<select name="associatedVertical" defaultValue={filters.associatedVertical ?? ""}><option value="">All associated Verticals</option>{APPROVED_VERTICALS.map((value) => <option key={value}>{value}</option>)}</select></label>
         <label>Priority<select name="priority" defaultValue={filters.priority ?? ""}><option value="">All priorities</option><option>High</option><option>Normal</option><option>Low</option></select></label>
         <label>Folder<select name="folderIds" defaultValue={filters.folderIds?.[0] ?? ""}><option value="">All folders</option>{options.folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>
         <label>Project location<select name="projectIds" defaultValue={filters.projectIds?.[0] ?? ""}><option value="">All projects</option>{options.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
@@ -25,6 +28,7 @@ export function DevelopmentFiltersForm({ filters, years, options }: { filters: D
         <label>Completed from<input type="date" name="completedFrom" defaultValue={filters.completedFrom ?? ""} /></label><label>Completed to<input type="date" name="completedTo" defaultValue={filters.completedTo ?? ""} /></label>
         <label>Recorded time<select name="timeState" defaultValue={filters.timeState ?? ""}><option value="">Any amount</option><option value="with-time">With time</option><option value="no-time">Without time</option></select></label>
         <label className="check development-check"><input type="checkbox" name="unresolvedOnly" value="true" defaultChecked={filters.unresolvedOnly} />Only unresolved records</label>
+        <label className="check development-check"><input type="checkbox" name="unresolvedVerticalOnly" value="true" defaultChecked={filters.unresolvedVerticalOnly} />Missing or unrecognized Vertical</label>
         <label>Sort<select name="sort" defaultValue={filters.sort}><option value="updated">Recently updated</option><option value="title">Title</option><option value="status">Status</option><option value="priority">Priority</option><option value="start">Start date</option><option value="due">Due date</option><option value="completed">Completion date</option><option value="actual">Recorded hours</option></select></label>
         <label>Rows<select name="pageSize" defaultValue={String(filters.pageSize)}><option>25</option><option>50</option><option>100</option><option>200</option></select></label>
       </div><div className="filter-bar"><button type="submit">Apply filters</button><Link className="button secondary" href="/development">Clear all filters</Link></div>
@@ -43,6 +47,9 @@ function activeChips(filters: DevelopmentFilters, options: DevelopmentOptions, f
   if (filters.priority) chips.push({ key: "priority", label: `Priority: ${filters.priority}` });
   if (filters.timeState) chips.push({ key: "timeState", label: filters.timeState === "with-time" ? "With recorded time" : "Without recorded time" });
   if (filters.unresolvedOnly) chips.push({ key: "unresolvedOnly", label: "Unresolved records" });
+  if (filters.verticalReportingCategory) chips.push({ key: "verticalReportingCategory", label: `Vertical Reporting Category: ${filters.verticalReportingCategory}` });
+  if (filters.associatedVertical) chips.push({ key: "associatedVertical", label: `Associated Vertical: ${filters.associatedVertical}` });
+  if (filters.unresolvedVerticalOnly) chips.push({ key: "unresolvedVerticalOnly", label: "Missing or unrecognized Vertical" });
   for (const key of ["dueFrom","dueTo","completedFrom","completedTo"] as const) if (filters[key]) chips.push({ key, label: `${labelFor(key)}: ${filters[key]}` });
   for (const [id, value] of Object.entries(filters.customFields ?? {})) chips.push({ key: `cf_${id}`, label: `${fields.find((field) => field.id === id)?.name ?? "Field"}: ${resolveOptionLabel(value, options)}` });
   return chips;

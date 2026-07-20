@@ -5,6 +5,7 @@ import { requireContext } from "@/lib/auth";
 import { loadDashboardAnalyticsResult, type DashboardAnalytics } from "@/lib/reporting/dashboard";
 import { parseReportingFilters } from "@/lib/reporting/filters";
 import { loadCustomFieldOptions, loadStatusOptions } from "@/lib/reporting/options";
+import { dashboardDrilldownHref } from "@/lib/reporting/dashboard-navigation";
 
 function Metric({ label, value, detail }: { label: string; value: number; detail: string }) {
   return <article className="dashboard-stat"><p>{label}</p><strong>{value.toLocaleString()}</strong><small>{detail}</small></article>;
@@ -45,9 +46,14 @@ function DashboardContent({ analytics, filters, statuses, customFields, filterOp
       <Metric label="Completed" value={metrics.completedProjects} detail="Explicit completed classification" />
     </section>
     {filterOptionsUnavailable && <p className="notice error" role="status">Dashboard analytics loaded, but one or more filter option lists are temporarily unavailable. Reload to retry those options.</p>}
-    <ReportFilters filters={filters} statuses={statuses} customFields={customFields} taskOnly />
+    <ReportFilters filters={filters} statuses={statuses} customFields={customFields} taskOnly verticalMode="reporting" />
     {metrics.unresolvedStatusProjects > 0 && <p className="notice error">{metrics.unresolvedStatusProjects} project{metrics.unresolvedStatusProjects === 1 ? " has" : "s have"} an unclassified or unresolved Wrike status. Review status classifications in Data administration.</p>}
     {metrics.customFieldConflictProjects > 0 && <p className="notice error">{metrics.customFieldConflictProjects} project{metrics.customFieldConflictProjects === 1 ? " has" : "s have"} conflicting Dashboard custom-field sources. Preserved values are visible for administrative review.</p>}
+    {metrics.unresolvedVerticalProjects > 0 && <p className="notice error">{metrics.unresolvedVerticalProjects} project{metrics.unresolvedVerticalProjects === 1 ? " has" : "s have"} a missing or unrecognized Vertical. <a href={unresolvedVerticalHref(filters)}>Review affected projects</a>.</p>}
     <DashboardCharts analytics={analytics} filters={filters} />
   </>;
+}
+
+function unresolvedVerticalHref(filters: ReturnType<typeof parseReportingFilters>) {
+  return dashboardDrilldownHref(filters, { kind: "unresolvedVertical" });
 }

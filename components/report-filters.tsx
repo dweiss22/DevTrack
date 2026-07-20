@@ -1,9 +1,10 @@
 import React from "react";
 import type { ReportingFilters } from "@/lib/reporting/filters";
 import type { CustomFieldFilterOption, StatusFilterOption } from "@/lib/reporting/options";
+import { APPROVED_VERTICALS, VERTICAL_REPORTING_FILTER_OPTIONS } from "@/lib/wrike/vertical-normalization";
 
 type Option = { id: string; name: string };
-export function ReportFilters({ filters, users = [], scopes = [], folders = [], projects = [], statuses = [], categories = [], customFields = [], includeTime = true, taskOnly = false, returnTo }: { filters: ReportingFilters; users?: Option[]; scopes?: Option[]; folders?: Option[]; projects?: Option[]; statuses?: (string | StatusFilterOption)[]; categories?: Option[]; customFields?: CustomFieldFilterOption[]; includeTime?: boolean; taskOnly?: boolean; returnTo?: string }) {
+export function ReportFilters({ filters, users = [], scopes = [], folders = [], projects = [], statuses = [], categories = [], customFields = [], includeTime = true, taskOnly = false, returnTo, verticalMode = "associated" }: { filters: ReportingFilters; users?: Option[]; scopes?: Option[]; folders?: Option[]; projects?: Option[]; statuses?: (string | StatusFilterOption)[]; categories?: Option[]; customFields?: CustomFieldFilterOption[]; includeTime?: boolean; taskOnly?: boolean; returnTo?: string; verticalMode?: "reporting" | "associated" }) {
   const statusOptions = statuses.map((status) => typeof status === "string" ? { id: status, name: status } : status);
   const chartSelection = dashboardSelectionLabel(filters);
   const clearHref = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : "?";
@@ -31,7 +32,9 @@ export function ReportFilters({ filters, users = [], scopes = [], folders = [], 
     <label>Min planned hours<input type="number" min="0" step="0.25" name="minPlannedHours" defaultValue={filters.minPlannedMinutes == null ? "" : filters.minPlannedMinutes / 60} /></label>
     <label>Max planned hours<input type="number" min="0" step="0.25" name="maxPlannedHours" defaultValue={filters.maxPlannedMinutes == null ? "" : filters.maxPlannedMinutes / 60} /></label>
     {!taskOnly && categories.length > 0 && <label>Category<select name="categoryIds" defaultValue={filters.categoryIds?.[0] ?? ""}><option value="">All categories</option>{categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>}
-    {customFields.map((field) => <label key={field.id}>{field.name}<select name={`cf_${field.id}`} defaultValue={filters.customFields?.[field.id] ?? ""}><option value="">All values</option>{field.values.map((value) => <option value={value} key={value}>{value}</option>)}</select></label>)}
+    {verticalMode === "reporting" ? <label>Vertical Reporting Category<select name="verticalReportingCategory" defaultValue={filters.verticalReportingCategory ?? ""}><option value="">All reporting categories</option>{VERTICAL_REPORTING_FILTER_OPTIONS.map((value) => <option value={value} key={value}>{value}</option>)}</select></label> : <label>Associated Vertical<select name="associatedVertical" defaultValue={filters.associatedVertical ?? ""}><option value="">All associated Verticals</option>{APPROVED_VERTICALS.map((value) => <option value={value} key={value}>{value}</option>)}</select></label>}
+    <label>Vertical diagnostics<select name="unresolvedVerticalOnly" defaultValue={filters.unresolvedVerticalOnly ? "true" : ""}><option value="">All records</option><option value="true">Missing or unrecognized Vertical</option></select></label>
+    {customFields.filter((field) => field.name.trim().toLocaleLowerCase() !== "vertical").map((field) => <label key={field.id}>{field.name}<select name={`cf_${field.id}`} defaultValue={filters.customFields?.[field.id] ?? ""}><option value="">All values</option>{field.values.map((value) => <option value={value} key={value}>{value}</option>)}</select></label>)}
     <label>Sort<select name="sort" defaultValue={filters.sort}><option value="updated">Recently updated</option><option value="title">Project title</option><option value="due">Due date</option>{!taskOnly && <option value="actual">Most time</option>}</select></label>
     <label>Rows<select name="pageSize" defaultValue={String(filters.pageSize)}><option>25</option><option>50</option><option>100</option><option>200</option></select></label>
   </div><div className="filter-bar"><button type="submit">Apply filters</button><a className="button secondary" href={clearHref}>Clear</a></div></form>;
@@ -43,6 +46,9 @@ function dashboardSelectionLabel(filters: ReportingFilters) {
   if (filters.reportingYear != null) parts.push(`Reporting year ${filters.reportingYear}`);
   if (filters.dashboardClassification) parts.push(classificationLabel(filters.dashboardClassification));
   if (filters.dashboardField && filters.dashboardValue) parts.push(`${titleCase(filters.dashboardField)}: ${filters.dashboardValue}`);
+  if (filters.verticalReportingCategory) parts.push(`Vertical Reporting Category: ${filters.verticalReportingCategory}`);
+  if (filters.associatedVertical) parts.push(`Associated Vertical: ${filters.associatedVertical}`);
+  if (filters.unresolvedVerticalOnly) parts.push("Missing or unrecognized Vertical");
   return parts.join(" · ");
 }
 

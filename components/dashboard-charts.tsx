@@ -32,7 +32,7 @@ export function DashboardCharts({ analytics, filters }: { analytics: DashboardAn
     <section className="dashboard-donut-grid" aria-label="Project categorical analysis">
       <DonutChart title="Projects by Course Type" field="course type" data={assignedDashboardRows(analytics.courseTypes, "name")} filters={filters} />
       <DonutChart title="Projects by Authoring Tool" field="authoring tool" data={assignedDashboardRows(analytics.authoringTools, "name")} filters={filters} />
-      <DonutChart title="Projects by Vertical" field="vertical" data={assignedDashboardRows(analytics.verticals, "name")} filters={filters} />
+      <DonutChart title="Projects by Vertical" field="verticalReportingCategory" data={analytics.verticals} filters={filters} />
     </section>
   </div>;
 }
@@ -41,7 +41,7 @@ function ChartCard({ title, description, empty, notice, children }: { title: str
   return <article className="card dashboard-chart" aria-labelledby={`${slug(title)}-title`}><div className="chart-heading"><div><h2 id={`${slug(title)}-title`}>{title}</h2><p>{description}</p></div></div>{notice && <p className="chart-notice">{notice}</p>}{empty ? <p className="chart-empty">No assigned project values are available for this chart.</p> : children}</article>;
 }
 
-function DonutChart({ title, field, data, filters }: { title: string; field: DashboardField; data: DashboardCategory[]; filters: ReportingFilters }) {
+function DonutChart({ title, field, data, filters }: { title: string; field: DashboardField | "verticalReportingCategory"; data: DashboardCategory[]; filters: ReportingFilters }) {
   const router = useRouter();
   const total = data.reduce((sum, item) => sum + item.projects, 0);
   return <article className="card dashboard-chart donut-card" aria-labelledby={`${slug(title)}-title`}><h2 id={`${slug(title)}-title`}>{title}</h2><p>Each Online Learning project is counted once. Select a slice to view its projects.</p>{data.length ? <>
@@ -92,7 +92,9 @@ function navigateToStatus(push: (href: string) => void, filters: ReportingFilter
 }
 
 const yearHref = (filters: ReportingFilters, label: string, classification?: DashboardClassification) => dashboardDrilldownHref(filters, { kind: "year", year: Number(label), classification });
-const categoryHref = (filters: ReportingFilters, field: DashboardField, value: string) => dashboardDrilldownHref(filters, { kind: "category", field, value });
+const categoryHref = (filters: ReportingFilters, field: DashboardField | "verticalReportingCategory", value: string) => field === "verticalReportingCategory"
+  ? dashboardDrilldownHref(filters, { kind: "verticalCategory", value: value as NonNullable<ReportingFilters["verticalReportingCategory"]> })
+  : dashboardDrilldownHref(filters, { kind: "category", field, value });
 const hours = (minutes: number) => (minutes / 60).toLocaleString(undefined, { maximumFractionDigits: 1 });
 const percent = (value: number, total: number) => total ? `${(value / total * 100).toFixed(1)}%` : "0%";
 const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");

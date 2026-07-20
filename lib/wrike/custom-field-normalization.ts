@@ -1,3 +1,5 @@
+import { normalizeVerticalValue, type NormalizedVerticalResult } from "@/lib/wrike/vertical-normalization";
+
 export const CUSTOM_FIELD_TITLE_ALIASES = {
   "authoring tool used": "Authoring Tool",
   "course development type": "Course Type",
@@ -41,6 +43,7 @@ export type NormalizedCustomFieldValue = {
   sources: NormalizedCustomFieldSource[];
   conflict: boolean;
   conflictMetadata: { distinctValueSets: { wrikeFieldId: string; values: string[] }[] } | null;
+  verticalNormalization?: NormalizedVerticalResult;
 };
 
 const collapseWhitespace = (value: string) => value.trim().replace(/\s+/g, " ");
@@ -89,10 +92,17 @@ export function mergeNormalizedCustomFields(fields: readonly CustomFieldNormaliz
     else grouped.set(title.normalizedKey, { title: title.normalizedTitle, sources: [source] });
   }
   return [...grouped.entries()].map(([normalizedKey, group]) => {
-    const populated = group.sources.filter((source) => source.displayValues.length > 0);
+    const verticalSources = normalizedKey === "vertical"
+      ? group.sources.map((source) => ({ ...source, displayValues: normalizeVerticalValue(source.displayValue).normalizedVerticals }))
+      : group.sources;
+    const populated = verticalSources.filter((source) => source.displayValues.length > 0);
     const distinctSignatures = new Set(populated.map((source) => valueSetSignature(source.displayValues)));
     const conflict = distinctSignatures.size > 1;
-    const displayValues = populated.flatMap((source) => source.displayValues).filter((value, index, values) => values.indexOf(value) === index);
+    const verticalNormalization = normalizedKey === "vertical"
+      ? normalizeVerticalValue(group.sources.length === 1 ? group.sources[0].displayValue : group.sources.map((source) => source.displayValue))
+      : undefined;
+    const displayValues = verticalNormalization?.normalizedVerticals
+      ?? populated.flatMap((source) => source.displayValues).filter((value, index, values) => values.indexOf(value) === index);
     return {
       normalizedKey,
       normalizedTitle: group.title,
@@ -101,7 +111,8 @@ export function mergeNormalizedCustomFields(fields: readonly CustomFieldNormaliz
       sourceTitles: group.sources.map((source) => source.originalTitle),
       sources: group.sources,
       conflict,
-      conflictMetadata: conflict ? { distinctValueSets: populated.map((source) => ({ wrikeFieldId: source.wrikeFieldId, values: source.displayValues })) } : null
+      conflictMetadata: conflict ? { distinctValueSets: populated.map((source) => ({ wrikeFieldId: source.wrikeFieldId, values: source.displayValues })) } : null,
+      verticalNormalization
     };
   });
 }

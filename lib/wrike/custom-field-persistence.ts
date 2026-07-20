@@ -107,6 +107,10 @@ export async function persistNormalizedTaskCustomFields(
       source_values: field.sources,
       has_conflict: field.conflict,
       conflict_metadata: field.conflictMetadata,
+      normalized_verticals: field.verticalNormalization?.normalizedVerticals ?? null,
+      vertical_reporting_category: field.verticalNormalization?.reportingCategory ?? null,
+      has_unresolved_vertical: field.verticalNormalization?.hasUnresolvedVertical ?? null,
+      unresolved_vertical_tokens: field.verticalNormalization?.rejectedTokens ?? null,
       synced_at: syncedAt,
       updated_at: syncedAt
     }];

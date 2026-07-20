@@ -1,10 +1,12 @@
 import { z } from "zod";
+import { APPROVED_VERTICALS, VERTICAL_REPORTING_FILTER_OPTIONS } from "@/lib/wrike/vertical-normalization";
 
 const emptyToUndefined = (value: unknown) => value === "" ? undefined : value;
 const stringArray = z.union([z.string(), z.array(z.string())]).transform((value) => (Array.isArray(value) ? value : value.split(",")).map((item) => item.trim()).filter(Boolean));
 const optionalDate = z.preprocess(emptyToUndefined, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional());
 const optionalInteger = z.preprocess(emptyToUndefined, z.coerce.number().int().nonnegative().optional());
 const optionalEnum = <T extends [string, ...string[]]>(values: T) => z.preprocess(emptyToUndefined, z.enum(values).optional());
+const optionalBoolean = z.preprocess((value) => value === "true" || value === true ? true : undefined, z.boolean().optional());
 
 export const reportingFiltersSchema = z.object({
   q: z.preprocess(emptyToUndefined, z.string().trim().max(200).optional()),
@@ -28,8 +30,11 @@ export const reportingFiltersSchema = z.object({
   customFields: z.record(z.string(), z.string().max(200)).optional(),
   reportingYear: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1900).max(2199).optional()),
   dashboardClassification: optionalEnum(["active", "completed", "stalled_or_canceled"]),
-  dashboardField: optionalEnum(["course type", "authoring tool", "vertical"]),
+  dashboardField: optionalEnum(["course type", "authoring tool"]),
   dashboardValue: z.preprocess(emptyToUndefined, z.string().trim().max(200).optional()),
+  verticalReportingCategory: optionalEnum([...VERTICAL_REPORTING_FILTER_OPTIONS]),
+  associatedVertical: optionalEnum([...APPROVED_VERTICALS]),
+  unresolvedVerticalOnly: optionalBoolean,
   groupCustomFieldId: z.preprocess(emptyToUndefined, z.string().uuid().optional()),
   sort: z.enum(["updated", "title", "due", "actual"]).default("updated"),
   page: z.coerce.number().int().min(1).default(1),

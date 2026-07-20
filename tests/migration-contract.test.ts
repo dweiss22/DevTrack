@@ -15,6 +15,7 @@ const dashboardAnalyticsMigration = fs.readFileSync(path.join(process.cwd(), "su
 const dashboardPerformanceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170006_dashboard_query_performance.sql"), "utf8");
 const dashboardDrilldownMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200001_dashboard_chart_drilldown.sql"), "utf8");
 const developmentDashboardMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200002_development_reporting_dashboard.sql"), "utf8");
+const verticalNormalizationMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200003_controlled_vertical_normalization.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -149,5 +150,17 @@ describe("reporting migration contract", () => {
     expect(developmentDashboardMigration).toContain("IEACHQK7K4BHMLHM");
     expect(developmentDashboardMigration).toContain("current status until status-at-entry is persisted");
     expect(developmentDashboardMigration).toContain("grant execute on function public.reporting_development_analytics(jsonb) to authenticated,service_role");
+  });
+  it("enforces controlled Vertical normalization and separate reporting filters", () => {
+    expect(verticalNormalizationMigration).toContain("normalized_verticals text[]");
+    expect(verticalNormalizationMigration).toContain("vertical_reporting_category text");
+    expect(verticalNormalizationMigration).toContain("has_unresolved_vertical boolean");
+    expect(verticalNormalizationMigration).toContain("unresolved_vertical_tokens text[]");
+    expect(verticalNormalizationMigration).toContain("('EMS1A','EMS1',5)");
+    expect(verticalNormalizationMigration).toContain("using gin(normalized_verticals)");
+    expect(verticalNormalizationMigration).toContain("enforce_wrike_vertical_normalization");
+    expect(verticalNormalizationMigration).toContain("associatedVertical");
+    expect(verticalNormalizationMigration).toContain("verticalReportingCategory");
+    expect(verticalNormalizationMigration).toContain("unresolvedVerticalOnly");
   });
 });

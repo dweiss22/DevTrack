@@ -6,7 +6,7 @@ export type ReportingTaskRow = {
   task_id: string; title: string; status: string; status_name: string; status_reference: ResolvedTaskStatus; custom_status_id: string | null; responsible_wrike_ids: string[]; responsible_users: ResolvedWrikeUser[]; due_date: string | null; completed_at: string | null;
   planned_minutes: number | null; actual_minutes: number; updated_at_wrike: string | null;
   assignees: { id: string; name: string }[]; locations: { folderId: string | null; projectId: string | null; wrikeId: string; title: string; scope: string | null; resolved: boolean }[];
-  custom_values: Record<string, { title: string; values: string[]; conflict: boolean; sourceFieldIds: string[]; sourceTitles: string[] }>; total_count: number;
+  custom_values: Record<string, { title: string; values: string[]; conflict: boolean; sourceFieldIds: string[]; sourceTitles: string[]; normalizedVerticals?: string[] | null; verticalReportingCategory?: string | null; hasUnresolvedVertical?: boolean | null; unresolvedVerticalTokens?: string[] | null }>; total_count: number;
 };
 export type ReportingTimeRow = { entry_id: string; entry_date: string; minutes: number; category: string | null; category_name: string | null; category_reference: ResolvedTimelogCategory | null; comment: string | null; task_id: string; task_title: string; task_status: string; task_status_name: string; status_reference: ResolvedTaskStatus; user_id: string | null; user_wrike_id: string | null; user_name: string | null; user_reference: ResolvedWrikeUser | null; total_count: number };
 export type TimeSummaryRow = { group_key: string; label: string; minutes: number; entry_count: number; wrike_user_id?: string | null; resolved?: boolean };

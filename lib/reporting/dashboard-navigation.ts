@@ -2,10 +2,12 @@ import { ONLINE_LEARNING_WORKFLOW_ID } from "@/lib/reporting/constants";
 import { filtersToQuery, type ReportingFilters } from "@/lib/reporting/filters";
 
 export type DashboardClassification = "active" | "completed" | "stalled_or_canceled";
-export type DashboardField = "course type" | "authoring tool" | "vertical";
+export type DashboardField = "course type" | "authoring tool";
 export type DashboardDrilldown =
   | { kind: "year"; year: number; classification?: DashboardClassification }
-  | { kind: "category"; field: DashboardField; value: string };
+  | { kind: "category"; field: DashboardField; value: string }
+  | { kind: "verticalCategory"; value: NonNullable<ReportingFilters["verticalReportingCategory"]> }
+  | { kind: "unresolvedVertical" };
 
 export function dashboardDrilldownHref(filters: ReportingFilters, drilldown: DashboardDrilldown) {
   const target: Partial<ReportingFilters> = {
@@ -16,9 +18,13 @@ export function dashboardDrilldownHref(filters: ReportingFilters, drilldown: Das
   if (drilldown.kind === "year") {
     target.reportingYear = drilldown.year;
     target.dashboardClassification = drilldown.classification;
-  } else {
+  } else if (drilldown.kind === "category") {
     target.dashboardField = drilldown.field;
     target.dashboardValue = drilldown.value;
+  } else if (drilldown.kind === "verticalCategory") {
+    target.verticalReportingCategory = drilldown.value;
+  } else {
+    target.unresolvedVerticalOnly = true;
   }
   const targetQuery = new URLSearchParams(filtersToQuery(target));
   const dashboardQuery = filtersToQuery(filters);

@@ -24,17 +24,23 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const returnTo = safeProjectsReturnTo(query.returnTo) ?? "/projects";
   const returnLabel = returnTo.startsWith("/development") ? "Development" : "Projects";
   const { supabase, profile } = await requireContext();
-  const [{ data: project }, { data: users }, { data: categories }, { data: statuses }] = await Promise.all([
+  const [{ data: project }, { data: users }, { data: categories }, { data: statuses }, { data: verticalRows }] = await Promise.all([
     supabase.from("wrike_tasks").select("*,wrike_time_entries(id,entry_date,minutes,category,comment,user_wrike_id,wrike_users(display_name,email))").eq("id", id).eq("organization_id", profile.organization_id).maybeSingle(),
     supabase.from("wrike_users").select("wrike_id,display_name,email,avatar_url,synced_at,is_active,is_unresolved,raw_data").eq("organization_id", profile.organization_id),
     supabase.from("wrike_timelog_categories").select("wrike_id,title,synced_at,is_unresolved").eq("organization_id", profile.organization_id),
-    supabase.from("wrike_workflow_statuses").select("wrike_id,title,workflow_id,color,dashboard_classification,synced_at,is_unresolved").eq("organization_id", profile.organization_id)
+    supabase.from("wrike_workflow_statuses").select("wrike_id,title,workflow_id,color,dashboard_classification,synced_at,is_unresolved").eq("organization_id", profile.organization_id),
+    supabase.from("wrike_task_normalized_custom_field_values").select("normalized_verticals,vertical_reporting_category,has_unresolved_vertical,unresolved_vertical_tokens,normalized_field:wrike_normalized_custom_fields!inner(normalized_key)").eq("task_id", id).eq("normalized_field.normalized_key", "vertical").maybeSingle()
   ]);
   if (!project) notFound();
   const row = project as unknown as ProjectDetailRow;
   const folders = row.enriched_metadata?.folders ?? [];
   const customFieldsRaw = row.enriched_metadata?.customFields ?? [];
-  const customFields = row.enriched_metadata?.customFieldsNormalized ?? mergeNormalizedCustomFields(customFieldsRaw);
+  const mergedCustomFields = row.enriched_metadata?.customFieldsNormalized ?? mergeNormalizedCustomFields(customFieldsRaw);
+  const canonicalVertical = verticalRows ? {
+    normalizedKey: "vertical", normalizedTitle: "Vertical", displayValues: verticalRows.normalized_verticals ?? [], sourceFieldIds: [], sourceTitles: [], sources: [], conflict: false, conflictMetadata: null,
+    verticalNormalization: { originalValue: null, normalizedVerticals: verticalRows.normalized_verticals ?? [], reportingCategory: verticalRows.vertical_reporting_category ?? "Unresolved Vertical", isCrossVertical: verticalRows.vertical_reporting_category === "Cross Vertical", hasUnresolvedVertical: verticalRows.has_unresolved_vertical ?? true, rejectedTokens: verticalRows.unresolved_vertical_tokens ?? [] }
+  } satisfies NormalizedCustomFieldValue : null;
+  const customFields = canonicalVertical ? [...mergedCustomFields.filter((field) => field.normalizedKey !== "vertical"), canonicalVertical] : mergedCustomFields;
   const unresolvedCustomFields = customFieldsRaw.filter((field) => !field.resolved && !field.ignored);
   const assignees = resolveResponsibleUsers(row.responsible_wrike_ids ?? [], users ?? []);
   const statusReference = resolveTaskStatus(row.custom_status_id, row.status, statuses ?? []);

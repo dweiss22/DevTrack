@@ -7,7 +7,7 @@ import { developmentFiltersToQuery, type DevelopmentFilters, type DevelopmentPro
 
 type CustomColumn = { key: string; label: string };
 const CORE_COLUMNS = [
-  ["title","Project"],["year","Reporting year"],["status","Custom status"],["completion","Completion"],["assignees","Assigned team"],["priority","Priority"],["start","Start"],["due","Due"],["completed","Completed"],["hours","Hours"],["location","Location"],["wrike","Wrike"],["updated","Last updated"]
+  ["title","Project"],["year","Reporting year"],["status","Custom status"],["completion","Completion"],["verticals","Associated Vertical"],["verticalCategory","Vertical Reporting Category"],["assignees","Assigned team"],["priority","Priority"],["start","Start"],["due","Due"],["completed","Completed"],["hours","Hours"],["location","Location"],["wrike","Wrike"],["updated","Last updated"]
 ] as const;
 const DEFAULT_COLUMNS = CORE_COLUMNS.map(([key]) => key);
 
@@ -26,11 +26,14 @@ export function DevelopmentProjectTable({ rows, total, filters, customColumns }:
 
 function cell(row: DevelopmentProjectRow, key: string, returnTo: string): React.ReactNode {
   if (key.startsWith("custom:")) return <CustomValues field={row.customValues[key.slice(7)]} />;
+  const vertical = Object.values(row.customValues).find((field) => field.title.trim().toLocaleLowerCase() === "vertical");
   switch (key) {
     case "title": return <Link href={`/projects/${row.taskId}?returnTo=${encodeURIComponent(returnTo)}&returnLabel=Development`}>{row.title}</Link>;
     case "year": return row.reportingYear ?? "Missing/Unresolved";
     case "status": return row.status.resolved ? <StatusBadge name={row.status.name} id={row.status.id} color={row.status.color} /> : <span className="status-badge unresolved"><UnresolvedReferenceLabel id={row.status.id} type="custom_status" label="Unknown Status" /></span>;
     case "completion": return <span className={`classification-badge ${row.completionClassification}`}>{title(row.completionClassification)}{row.statusUnmapped ? " · Mapping review" : ""}</span>;
+    case "verticals": return <span title={vertical?.hasUnresolvedVertical ? `Unrecognized: ${vertical.unresolvedVerticalTokens?.join(", ") || "missing value"}` : undefined}>{vertical?.normalizedVerticals?.join(", ") || vertical?.values.join(", ") || "—"}{vertical?.hasUnresolvedVertical ? " ⚠" : ""}</span>;
+    case "verticalCategory": return vertical?.verticalReportingCategory ?? "Unresolved Vertical";
     case "assignees": return row.assignees.length ? row.assignees.map((user,index) => <span key={user.id}>{index ? ", " : ""}{user.resolved ? user.name : <UnresolvedReferenceLabel id={user.id} type="user" label="Unresolved user" />}</span>) : "—";
     case "priority": return row.priority ?? "—"; case "start": return date(row.startDate); case "due": return date(row.dueDate); case "completed": return date(row.completedAt);
     case "hours": return (row.actualMinutes / 60).toLocaleString(undefined,{ maximumFractionDigits: 1 });
