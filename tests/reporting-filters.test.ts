@@ -13,4 +13,9 @@ describe("reporting filters", () => {
       q: "launch", minMinutes: 90, maxPlannedMinutes: 480
     });
   });
+  it("parses dashboard drill-down filters used by the Projects report", () => {
+    expect(parseReportingFilters({ workflowIds: "IEACHQK7K4BHMLHM", reportingYear: "2026", dashboardClassification: "active", dashboardField: "vertical", dashboardValue: "Cross Vertical" })).toMatchObject({
+      workflowIds: ["IEACHQK7K4BHMLHM"], reportingYear: 2026, dashboardClassification: "active", dashboardField: "vertical", dashboardValue: "Cross Vertical"
+    });
+  });
 });

@@ -13,6 +13,7 @@ const customFieldNormalizationMigration = fs.readFileSync(path.join(process.cwd(
 const referenceResolutionMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170004_wrike_reference_resolution.sql"), "utf8");
 const dashboardAnalyticsMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170005_dashboard_analytics.sql"), "utf8");
 const dashboardPerformanceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607170006_dashboard_query_performance.sql"), "utf8");
+const dashboardDrilldownMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200001_dashboard_chart_drilldown.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -129,5 +130,13 @@ describe("reporting migration contract", () => {
     expect(dashboardPerformanceMigration).toContain("public.can_access_wrike_time_entry(entry.id)");
     expect(dashboardPerformanceMigration).toContain("alter function public.reporting_online_learning_dashboard_v2(jsonb) security definer");
     expect(dashboardPerformanceMigration).toContain("where task.organization_id=viewer_organization_id");
+  });
+  it("preserves derived dashboard buckets when drilling into Projects", () => {
+    expect(dashboardDrilldownMigration).toContain("matches_reporting_dashboard_drilldown");
+    expect(dashboardDrilldownMigration).toContain("reportingYear");
+    expect(dashboardDrilldownMigration).toContain("dashboardClassification");
+    expect(dashboardDrilldownMigration).toContain("'Multiple Authoring Tools'");
+    expect(dashboardDrilldownMigration).toContain("'Cross Vertical'");
+    expect(dashboardDrilldownMigration).toContain("reporting_filtered_tasks_without_dashboard_drilldown");
   });
 });

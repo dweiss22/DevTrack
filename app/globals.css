@@ -83,6 +83,8 @@ main { max-width: 1500px; width: 100%; padding: 42px; margin: auto; }
 .chart-data { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
 .chart-data summary { width: max-content; color: var(--blue); cursor: pointer; font-size: 12px; font-weight: 650; }
 .chart-data table { margin-top: 10px; }
+.chart-data a { color: var(--blue); font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
+.dashboard-chart .recharts-bar-rectangle, .dashboard-chart .recharts-line-dot, .dashboard-chart .recharts-pie-sector { cursor: pointer; }
 .dashboard-donut-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; }
 .donut-card { min-width: 0; }
 .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
@@ -120,6 +122,7 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
 pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px; background: #f8fafc; padding: 12px; border-radius: 7px; }
 .muted, small { color: var(--muted); }
 .report-filters { margin-bottom: 18px; }
+.drilldown-context { margin: 0 0 14px; padding: 10px 12px; border-radius: 8px; background: var(--blue-soft); color: var(--navy); }
 .filter-fields { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .report-filters .filter-bar { margin: 0; }
 .pagination { display: flex; justify-content: space-between; align-items: center; margin: 18px 0; gap: 12px; color: var(--muted); }

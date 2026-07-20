@@ -6,11 +6,17 @@ import { StatusBadge, UnresolvedReferenceLabel } from "@/components/wrike-refere
 import { requireContext } from "@/lib/auth";
 import { hours } from "@/lib/metrics";
 import { loadTaskRows } from "@/lib/reporting/data";
-import { parseReportingFilters } from "@/lib/reporting/filters";
+import { filtersToQuery, parseReportingFilters } from "@/lib/reporting/filters";
 import { loadCustomFieldOptions, loadStatusOptions } from "@/lib/reporting/options";
+import { safeDashboardReturnTo } from "@/lib/reporting/dashboard-navigation";
 
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const filters = parseReportingFilters(await searchParams);
+  const query = await searchParams;
+  const filters = parseReportingFilters(query);
+  const returnTo = safeDashboardReturnTo(query.returnTo);
+  const projectListQuery = new URLSearchParams(filtersToQuery(filters));
+  if (returnTo) projectListQuery.set("returnTo", returnTo);
+  const projectListHref = `/projects?${projectListQuery.toString()}`;
   const { supabase, profile } = await requireContext();
   const [projects, statuses, customFields] = await Promise.all([
     loadTaskRows(supabase, filters),
@@ -20,11 +26,11 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const total = projects[0]?.total_count ?? 0;
 
   return <AppShell isAdmin={profile.role === "admin"}>
-    <header className="page-header"><div><p className="eyebrow">PROJECTS</p><h1>Imported Wrike projects</h1><p>Browse synchronized project work while retaining stable Wrike task IDs and reporting access controls.</p></div></header>
-    <ReportFilters filters={filters} statuses={statuses} customFields={customFields} taskOnly />
+    <header className="page-header"><div><p className="eyebrow">PROJECTS</p><h1>Imported Wrike projects</h1><p>Browse synchronized project work while retaining stable Wrike task IDs and reporting access controls.</p></div>{returnTo && <Link className="button secondary" href={returnTo}>Back to Dashboard</Link>}</header>
+    <ReportFilters filters={filters} statuses={statuses} customFields={customFields} taskOnly returnTo={returnTo} />
     {projects.length ? <>
       <table><thead><tr><th>Project</th><th>Status</th><th>Assignees</th><th>Folders</th><th>Due</th><th>Planned</th><th>Last updated</th></tr></thead><tbody>{projects.map((project) => <tr key={project.task_id}>
-        <td><Link href={`/projects/${project.task_id}`}>{project.title}</Link></td>
+        <td><Link href={`/projects/${project.task_id}?returnTo=${encodeURIComponent(projectListHref)}`}>{project.title}</Link></td>
         <td><StatusBadge name={project.status_name} id={project.custom_status_id} color={project.status_reference.color} resolved={project.status_reference.resolved} /></td>
         <td>{project.responsible_users.length ? project.responsible_users.map((user, index) => <span key={user.wrikeUserId}>{index > 0 && ", "}{user.resolved ? user.fullName : <UnresolvedReferenceLabel id={user.wrikeUserId} type="user" />}</span>) : "—"}</td>
         <td>{project.locations.length ? project.locations.map((location, index) => <span key={location.wrikeId}>{index > 0 && ", "}{location.resolved ? location.title : <UnresolvedReferenceLabel id={location.wrikeId} type="folder" />}</span>) : "—"}</td>
@@ -32,7 +38,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
         <td>{project.planned_minutes == null ? "—" : `${hours(project.planned_minutes)} h`}</td>
         <td>{project.updated_at_wrike ? new Date(project.updated_at_wrike).toLocaleDateString() : "—"}</td>
       </tr>)}</tbody></table>
-      <Pagination filters={filters} total={total} />
+      <Pagination filters={filters} total={total} returnTo={returnTo} />
     </> : <p className="card empty">No imported projects match these filters. If no import has run, go to Data and select Import folder tasks and timelogs.</p>}
   </AppShell>;
 }

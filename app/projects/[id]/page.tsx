@@ -8,6 +8,7 @@ import { hours } from "@/lib/metrics";
 import { mergeNormalizedCustomFields, type NormalizedCustomFieldValue } from "@/lib/wrike/custom-field-normalization";
 import type { ResolvedCustomField, ResolvedFolder } from "@/lib/wrike/metadata";
 import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory } from "@/lib/wrike/reference-data";
+import { safeProjectsReturnTo } from "@/lib/reporting/dashboard-navigation";
 
 type ProjectDetailRow = {
   title: string; status: string; custom_status_id: string | null; responsible_wrike_ids: string[];
@@ -17,8 +18,9 @@ type ProjectDetailRow = {
   wrike_time_entries: { id: string; entry_date: string; minutes: number; category: string | null; comment: string | null; user_wrike_id: string | null; wrike_users: { display_name: string; email: string | null } | null }[];
 };
 
-export default async function ProjectDetail({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProjectDetail({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { id } = await params;
+  const returnTo = safeProjectsReturnTo((await searchParams).returnTo) ?? "/projects";
   const { supabase, profile } = await requireContext();
   const [{ data: project }, { data: users }, { data: categories }, { data: statuses }] = await Promise.all([
     supabase.from("wrike_tasks").select("*,wrike_time_entries(id,entry_date,minutes,category,comment,user_wrike_id,wrike_users(display_name,email))").eq("id", id).eq("organization_id", profile.organization_id).maybeSingle(),
@@ -36,7 +38,7 @@ export default async function ProjectDetail({ params }: { params: Promise<{ id: 
   const statusReference = resolveTaskStatus(row.custom_status_id, row.status, statuses ?? []);
 
   return <AppShell isAdmin={profile.role === "admin"}>
-    <nav className="breadcrumb" aria-label="Breadcrumb"><Link href="/projects">Projects</Link><span aria-hidden="true">/</span><span aria-current="page">Project detail</span></nav>
+    <nav className="breadcrumb" aria-label="Breadcrumb"><Link href={returnTo}>Projects</Link><span aria-hidden="true">/</span><span aria-current="page">Project detail</span></nav>
     <header className="page-header"><div><p className="eyebrow">PROJECT DETAIL</p><h1>{row.title}</h1><p><StatusBadge name={statusReference.name} id={row.custom_status_id} color={statusReference.color} resolved={statusReference.resolved} /> · Due {row.due_date ?? "not set"}</p></div>{row.permalink && <a className="button" href={row.permalink} target="_blank" rel="noreferrer">Open in Wrike</a>}</header>
     <div className="admin-grid">
       <section className="card"><h2>Reporting details</h2><p><strong>Assignees:</strong> {assignees.length ? assignees.map((item, index) => <span key={item.wrikeUserId}>{index > 0 && ", "}{item.resolved ? item.fullName : <UnresolvedReferenceLabel id={item.wrikeUserId} type="user" />}</span>) : "Unassigned"}</p><p><strong>Planned effort:</strong> {row.planned_minutes == null ? "Not available" : `${hours(row.planned_minutes)} hours`}</p><p><strong>Allocated effort:</strong> {row.allocated_minutes == null ? "Not available" : `${hours(row.allocated_minutes)} hours`}</p><p><strong>Completion:</strong> {row.completed_at ? new Date(row.completed_at).toLocaleString() : "Not completed"}</p><p>{row.description || "No project description supplied by Wrike."}</p></section>

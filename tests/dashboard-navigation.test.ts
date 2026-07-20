@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { completedReportingYearAverages, dashboardCategory, dashboardMetricCounts, loadDashboardAnalyticsResult, normalizeDashboardValues, normalizeReportingYear, ONLINE_LEARNING_WORKFLOW_ID } from "@/lib/reporting/dashboard";
 import { APPLICATION_NAVIGATION, navigationForRole } from "@/lib/navigation";
+import { assignedDashboardRows, dashboardDrilldownHref, safeDashboardReturnTo, safeProjectsReturnTo } from "@/lib/reporting/dashboard-navigation";
 
 describe("application navigation", () => {
   it("uses the requested order, two dividers, and Projects presentation", () => {
@@ -30,6 +31,25 @@ describe("application navigation", () => {
 });
 
 describe("Online Learning dashboard calculations", () => {
+  it("removes Unassigned buckets from graph presentation", () => {
+    expect(assignedDashboardRows([{ label: "2025" }, { label: " Unassigned " }, { label: "2026" }], "label")).toEqual([{ label: "2025" }, { label: "2026" }]);
+  });
+
+  it("builds exact project drill-down filters and preserves the dashboard return URL", () => {
+    const href = dashboardDrilldownHref({ sort: "title", page: 2, pageSize: 25, q: "academy" }, { kind: "year", year: 2026, classification: "completed" });
+    const url = new URL(href, "https://devtrack.test");
+    expect(url.pathname).toBe("/projects");
+    expect(url.searchParams.get("reportingYear")).toBe("2026");
+    expect(url.searchParams.get("dashboardClassification")).toBe("completed");
+    expect(url.searchParams.get("workflowIds")).toBe(ONLINE_LEARNING_WORKFLOW_ID);
+    expect(url.searchParams.get("returnTo")).toContain("q=academy");
+    expect(url.searchParams.get("page")).toBe("1");
+    expect(safeDashboardReturnTo(url.searchParams.get("returnTo") ?? undefined)).toContain("q=academy");
+    expect(safeDashboardReturnTo("https://malicious.example")).toBeUndefined();
+    expect(safeProjectsReturnTo("/projects?reportingYear=2026")).toBe("/projects?reportingYear=2026");
+    expect(safeProjectsReturnTo("//malicious.example/projects")).toBeUndefined();
+  });
+
   it("turns a missing Dashboard RPC into an actionable migration notice", async () => {
     const rpc = async () => ({ data: null, error: { code: "PGRST202", message: "Could not find public.reporting_online_learning_dashboard_v2" } });
     const result = await loadDashboardAnalyticsResult({ rpc } as never, { sort: "updated", page: 1, pageSize: 50 });

@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { filtersForRpc, type ReportingFilters } from "@/lib/reporting/filters";
+import { ONLINE_LEARNING_WORKFLOW_ID } from "@/lib/reporting/constants";
 
-export const ONLINE_LEARNING_WORKFLOW_ID = "IEACHQK7K4BHMLHM";
+export { ONLINE_LEARNING_WORKFLOW_ID } from "@/lib/reporting/constants";
 
 export type DashboardMetrics = {
   totalProjects: number;

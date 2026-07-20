@@ -48,6 +48,6 @@ function DashboardContent({ analytics, filters, statuses, customFields, filterOp
     <ReportFilters filters={filters} statuses={statuses} customFields={customFields} taskOnly />
     {metrics.unresolvedStatusProjects > 0 && <p className="notice error">{metrics.unresolvedStatusProjects} project{metrics.unresolvedStatusProjects === 1 ? " has" : "s have"} an unclassified or unresolved Wrike status. Review status classifications in Data administration.</p>}
     {metrics.customFieldConflictProjects > 0 && <p className="notice error">{metrics.customFieldConflictProjects} project{metrics.customFieldConflictProjects === 1 ? " has" : "s have"} conflicting Dashboard custom-field sources. Preserved values are visible for administrative review.</p>}
-    <DashboardCharts analytics={analytics} />
+    <DashboardCharts analytics={analytics} filters={filters} />
   </>;
 }
