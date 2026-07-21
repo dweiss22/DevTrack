@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { customFieldDisplayValues, mergeNormalizedCustomFields, normalizeWrikeCustomFieldTitle } from "@/lib/wrike/custom-field-normalization";
-import { loadCustomFieldOptions } from "@/lib/reporting/options";
+import { loadCustomFieldOptions, loadCustomFieldOptionsResult } from "@/lib/reporting/options";
 import { persistNormalizedTaskCustomFields } from "@/lib/wrike/custom-field-persistence";
 
 const field = (id: string, title: string, value: unknown) => ({ id, title, type: "DropDown", rawValue: value, displayValue: value, resolved: true });
@@ -63,6 +63,16 @@ describe("Wrike custom-field normalization", () => {
     expect(rpc).toHaveBeenCalledWith("reporting_custom_field_options");
     expect(result).toEqual([{ id: "F1", name: "Authoring Tool", values: ["Rise", "Storyline"] }]);
     expect(JSON.stringify(result)).not.toContain("Captivate");
+  });
+
+  it("keeps the Projects page available when custom-field choices time out", async () => {
+    const error = { code: "57014", message: "canceling statement due to statement timeout" };
+    const rpc = vi.fn().mockResolvedValue({ data: null, error });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await loadCustomFieldOptionsResult({ rpc } as never);
+    logged.mockRestore();
+    expect(result).toEqual({ data: [], error });
+    expect(fs.readFileSync(path.join(process.cwd(), "app/projects/page.tsx"), "utf8")).toContain("Projects remain available, but custom-field filter options could not be loaded.");
   });
 
   it("documents normalization, conflicts, raw-ID preservation, and dynamic choices", () => {

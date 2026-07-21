@@ -7,7 +7,7 @@ import { requireContext } from "@/lib/auth";
 import { hours } from "@/lib/metrics";
 import { loadTaskRows } from "@/lib/reporting/data";
 import { filtersToQuery, parseReportingFilters } from "@/lib/reporting/filters";
-import { loadCustomFieldOptions, loadStatusOptions } from "@/lib/reporting/options";
+import { loadCustomFieldOptionsResult, loadStatusOptions } from "@/lib/reporting/options";
 import { safeDashboardReturnTo } from "@/lib/reporting/dashboard-navigation";
 
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -18,15 +18,17 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   if (returnTo) projectListQuery.set("returnTo", returnTo);
   const projectListHref = `/projects?${projectListQuery.toString()}`;
   const { supabase, profile } = await requireContext();
-  const [projects, statuses, customFields] = await Promise.all([
+  const [projects, statuses, customFieldsResult] = await Promise.all([
     loadTaskRows(supabase, filters),
     loadStatusOptions(supabase, profile.organization_id),
-    loadCustomFieldOptions(supabase)
+    loadCustomFieldOptionsResult(supabase)
   ]);
+  const customFields = customFieldsResult.data;
   const total = projects[0]?.total_count ?? 0;
 
   return <AppShell isAdmin={profile.role === "admin"}>
     <header className="page-header"><div><p className="eyebrow">PROJECTS</p><h1>Imported Wrike projects</h1><p>Browse synchronized project work while retaining stable Wrike task IDs and reporting access controls.</p></div>{returnTo && <Link className="button secondary" href={returnTo}>Back to Dashboard</Link>}</header>
+    {customFieldsResult.error && <p className="notice error" role="status">Projects remain available, but custom-field filter options could not be loaded. Retry the page to restore those filter choices.</p>}
     <ReportFilters filters={filters} statuses={statuses} customFields={customFields} taskOnly returnTo={returnTo} verticalMode="associated" />
     {projects.length ? <>
       <table><thead><tr><th>Project</th><th>Status</th><th>Associated Vertical</th><th>Vertical Reporting Category</th><th>Assignees</th><th>Folders</th><th>Due</th><th>Planned</th><th>Last updated</th></tr></thead><tbody>{projects.map((project) => { const vertical = Object.values(project.custom_values).find((field) => field.title.trim().toLocaleLowerCase() === "vertical"); return <tr key={project.task_id}>

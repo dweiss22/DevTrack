@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type CustomFieldFilterOption = { id: string; name: string; values: string[] };
 export type StatusFilterOption = { id: string; name: string; color: string | null; resolved: boolean };
+export type CustomFieldOptionsResult = { data: CustomFieldFilterOption[]; error: null } | { data: []; error: { code: string | null; message: string } };
 
 export async function loadStatusOptions(supabase: SupabaseClient, organizationId?: string): Promise<StatusFilterOption[]> {
   let query = supabase.from("wrike_workflow_statuses").select("wrike_id,title,color,is_unresolved").order("title");
@@ -12,8 +13,14 @@ export async function loadStatusOptions(supabase: SupabaseClient, organizationId
 }
 
 export async function loadCustomFieldOptions(supabase: SupabaseClient): Promise<CustomFieldFilterOption[]> {
+  const started = Date.now();
   const { data, error } = await supabase.rpc("reporting_custom_field_options");
-  if (error) throw error;
+  const elapsedMs = Date.now() - started;
+  if (error) {
+    console.error("reporting_custom_field_options_failed", { elapsedMs, code: error.code });
+    throw error;
+  }
+  console.info("reporting_custom_field_options_completed", { elapsedMs });
   const grouped = new Map<string, CustomFieldFilterOption>();
   for (const row of (data ?? []) as { normalized_field_id: string; normalized_title: string; value: string }[]) {
     const existing = grouped.get(row.normalized_field_id);
@@ -22,6 +29,15 @@ export async function loadCustomFieldOptions(supabase: SupabaseClient): Promise<
     } else grouped.set(row.normalized_field_id, { id: row.normalized_field_id, name: row.normalized_title, values: [row.value] });
   }
   return [...grouped.values()].sort((left, right) => left.name.localeCompare(right.name)).map((field) => ({ ...field, values: field.values.sort((left, right) => left.localeCompare(right)) }));
+}
+
+export async function loadCustomFieldOptionsResult(supabase: SupabaseClient): Promise<CustomFieldOptionsResult> {
+  try {
+    return { data: await loadCustomFieldOptions(supabase), error: null };
+  } catch (error) {
+    const candidate = error && typeof error === "object" ? error as { code?: string | null; message?: string } : {};
+    return { data: [], error: { code: candidate.code ?? null, message: candidate.message ?? "Custom-field filter options could not be loaded." } };
+  }
 }
 
 export async function loadReportingOptions(supabase: SupabaseClient, organizationId: string) {

@@ -21,6 +21,7 @@ const allYearsDashboardMigration = fs.readFileSync(path.join(process.cwd(), "sup
 const allYearsDrilldownMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200006_all_years_dashboard_drilldown.sql"), "utf8");
 const currentWrikeUserNamesMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200007_current_wrike_user_names.sql"), "utf8");
 const ignoredFolderReferencesMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200008_ignore_out_of_scope_folder_references.sql"), "utf8");
+const reportingFilterOptionsPerformanceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200009_reporting_filter_options_performance.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -204,5 +205,14 @@ describe("reporting migration contract", () => {
     expect(ignoredFolderReferencesMigration).toContain("delete from public.wrike_task_locations");
     expect(ignoredFolderReferencesMigration).toContain("Original task raw_data is preserved");
     expect(ignoredFolderReferencesMigration).toContain("resolution_status='ignored'");
+  });
+  it("resolves custom-field filter access once with set-based restricted access", () => {
+    expect(reportingFilterOptionsPerformanceMigration).toContain("reporting_accessible_task_ids");
+    expect(reportingFilterOptionsPerformanceMigration).toContain("has_unrestricted_organization_access");
+    expect(reportingFilterOptionsPerformanceMigration).toContain("source_matches as materialized");
+    expect(reportingFilterOptionsPerformanceMigration).toContain("people_matches as materialized");
+    expect(reportingFilterOptionsPerformanceMigration).toContain("join visible_tasks visible_task");
+    expect(reportingFilterOptionsPerformanceMigration).toContain("security definer");
+    expect(reportingFilterOptionsPerformanceMigration).not.toContain("public.can_access_wrike_task(task.id)");
   });
 });
