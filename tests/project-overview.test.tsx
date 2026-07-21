@@ -13,7 +13,8 @@ import {
   percentileRank,
   projectLengthBenchmark
 } from "@/lib/reporting/project-overview";
-import { projectContactValues, projectFieldRole, projectOverviewFieldKeys } from "@/lib/reporting/projects";
+import { projectAssignedIdValues, projectContactValues, projectFieldRole, projectOverviewFieldKeys } from "@/lib/reporting/projects";
+import { normalizeWrikeCustomFieldTitle } from "@/lib/wrike/custom-field-normalization";
 import { resolveResponsibleUsers } from "@/lib/wrike/reference-data";
 
 describe("project Overview metadata", () => {
@@ -69,6 +70,22 @@ describe("project Overview metadata", () => {
     expect(resolveResponsibleUsers(["KU1", "MISSING"], [{ wrike_id: "KU1", display_name: "Alex Smith", email: null, avatar_url: null, synced_at: "2026-07-21T00:00:00Z" }]).map((person) => [person.fullName, person.resolved])).toEqual([["Alex Smith", true], ["MISSING", false]]);
   });
 
+  it("connects the exact ID Assigned field to readable dropdown values and Wrike users", () => {
+    expect(normalizeWrikeCustomFieldTitle("[LCT] ID Assigned (M)")).toMatchObject({ normalizedTitle: "ID Assigned", normalizedKey: "id assigned" });
+    expect(projectFieldRole("id assigned")).toBe("owner");
+    const people = [
+      { wrikeId: "KU1", name: "Alex Smith", resolved: true },
+      { wrikeId: "KU2", name: "Unresolved person", resolved: false }
+    ];
+    expect(projectAssignedIdValues(["Katie Willis", "KU1", "KU2", "KUMISSING"], people)).toEqual([
+      { id: "Katie Willis", label: "Katie Willis", resolved: true },
+      { id: "KU1", label: "Alex Smith", resolved: true },
+      { id: "KU2", label: "Unresolved Wrike user KU2", resolved: false },
+      { id: "KUMISSING", label: "Unresolved Wrike user KUMISSING", resolved: false }
+    ]);
+    expect(projectAssignedIdValues(["alex smith"], people)[0]).toMatchObject({ label: "Alex Smith", resolved: true });
+  });
+
   it("uses canonical Vertical membership and an exact Legal Reviewer role", () => {
     expect(formatVerticalMembership(["P1A"])).toBe("P1A");
     expect(formatVerticalMembership(["P1A", "EMS1", "P1A"])).toBe("P1A, EMS1");
@@ -77,7 +94,7 @@ describe("project Overview metadata", () => {
   });
 
   it("excludes only displayed custom fields and keeps Course Type in Other synchronized fields", () => {
-    const fields = ["reporting", "instructional designer", "vertical", "course length", "authoring tool", "sme", "legal reviewer", "course type"].map((normalizedKey) => ({ normalizedKey }));
+    const fields = ["reporting", "id assigned", "vertical", "course length", "authoring tool", "sme", "legal reviewer", "course type"].map((normalizedKey) => ({ normalizedKey }));
     const featured = projectOverviewFieldKeys(fields);
     expect(featured.has("course type")).toBe(false);
     for (const key of fields.slice(0, 7).map((field) => field.normalizedKey)) expect(featured.has(key)).toBe(true);
@@ -91,5 +108,20 @@ describe("project Overview metadata", () => {
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
     for (const removed of ["Course type", "Vertical reporting category", "Planned effort", "Allocated effort", "Assigned users", "Owner / Instructional Designer"]) expect(source).not.toContain(`label=\"${removed}\"`);
     expect(source).not.toContain("fieldByRole.get(\"courseType\")");
+  });
+
+  it("unifies time metrics with Overview and collapses secondary project data", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "app/projects/[id]/page.tsx"), "utf8");
+    const styles = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
+    const charts = fs.readFileSync(path.join(process.cwd(), "components/project-time-analytics.tsx"), "utf8");
+    expect(source.indexOf("project-time-metrics")).toBeGreaterThan(source.indexOf('label="Legal Reviewer"'));
+    expect(source.indexOf("project-time-metrics")).toBeLessThan(source.indexOf("project-additional-data"));
+    expect(source).toContain('<details className="card project-additional-data">');
+    expect(source).not.toContain('<details className="card project-additional-data" open>');
+    expect(source).toContain("Project dates, Wrike folders, and other synchronized fields");
+    expect(source).toContain("{row.due_date && <>");
+    expect(styles).toContain(".project-time-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr))");
+    expect(styles).toContain(".project-chart-card-wide { grid-column: 1 / -1; }");
+    expect(charts).toContain('className="project-chart-card-wide"');
   });
 });

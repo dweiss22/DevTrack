@@ -20,7 +20,7 @@ export type ProjectFilterFields = {
 
 const FIELD_PATTERNS = {
   reporting: /^(reporting|reporting year)$/i,
-  owner: /^(instructional designer|course owner|project owner|owner|id)$/i,
+  owner: /^(instructional designer|course owner|project owner|owner|id|id assigned)$/i,
   tool: /^(authoring tool|authoring tool used)$/i,
   courseType: /^(course type|course development type)$/i,
   vertical: /^vertical$/i,
@@ -86,6 +86,20 @@ export function projectContactValues(values: readonly string[], people: readonly
     label: projectPersonLabel(value, people),
     resolved: Boolean(people.find((person) => person.wrikeId === value)?.resolved)
   }));
+}
+
+const WRIKE_USER_ID_PATTERN = /^KU[A-Z0-9]+$/i;
+
+export function projectAssignedIdValues(values: readonly string[], people: readonly ProjectPersonOption[]) {
+  return values.map((sourceValue) => {
+    const value = sourceValue.trim();
+    const personById = people.find((person) => person.wrikeId.toLocaleLowerCase() === value.toLocaleLowerCase());
+    if (personById) return { id: personById.wrikeId, label: personById.resolved ? personById.name : `Unresolved Wrike user ${personById.wrikeId}`, resolved: personById.resolved };
+    const personByName = people.find((person) => person.resolved && person.name.trim().toLocaleLowerCase() === value.toLocaleLowerCase());
+    if (personByName) return { id: value, label: personByName.name, resolved: true };
+    if (WRIKE_USER_ID_PATTERN.test(value)) return { id: value, label: `Unresolved Wrike user ${value}`, resolved: false };
+    return { id: value, label: value, resolved: true };
+  });
 }
 
 export function projectFilterHref(filters: ReportingFilters, changes: Record<string, string | number | boolean | null | undefined>, returnTo?: string) {

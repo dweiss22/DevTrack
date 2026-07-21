@@ -60,7 +60,7 @@ function ContributorChart({ entries, categories }: { entries: ProjectTimeEntry[]
 function CategoryChart({ entries, contributors }: { entries: ProjectTimeEntry[]; contributors: Option[] }) {
   const [from, setFrom] = useState(""); const [to, setTo] = useState(""); const [contributorId, setContributor] = useState("");
   const data = useMemo(() => groupProjectTimeByCategory(filterProjectTime(entries, { from, to, contributorId })), [entries, from, to, contributorId]);
-  return <ChartCard title="Time by category" description="Recorded effort grouped by synchronized timelog category.">
+  return <ChartCard title="Time by category" description="Recorded effort grouped by synchronized timelog category." className="project-chart-card-wide">
     <div className="project-chart-filters"><DateFilters prefix="category" from={from} to={to} setFrom={setFrom} setTo={setTo} /><OptionFilter label="Contributor" value={contributorId} setValue={setContributor} options={contributors} allLabel="All contributors" /></div>
     <ChartReset active={Boolean(from || to || contributorId)} onReset={() => { setFrom(""); setTo(""); setContributor(""); }} />
     {data.length ? <><div className="project-chart-canvas" role="img" aria-label="Bar chart of recorded hours by category"><ResponsiveContainer width="100%" height={250}><BarChart data={data} margin={{ top: 8, right: 12, left: -15, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} angle={data.length > 4 ? -20 : 0} textAnchor={data.length > 4 ? "end" : "middle"} height={data.length > 4 ? 62 : 34} /><YAxis tick={{ fontSize: 11 }} /><Tooltip formatter={hoursTooltip} /><Bar dataKey="hours" name="Hours" radius={[5, 5, 0, 0]}>{data.map((row, index) => <Cell key={row.key} fill={row.resolved ? COLORS[index % COLORS.length] : "#d97706"} />)}</Bar></BarChart></ResponsiveContainer></div><AccessibleData title="Category time data" headers={["Category", "Hours", "Entries", "Reference"]} rows={data.map((row) => [row.label, formatHours(row.minutes), String(row.entries), row.resolved ? "Resolved" : "Unresolved"])} /></> : <ChartEmpty />}
@@ -75,8 +75,8 @@ function PlannedActualChart({ plannedMinutes, actualMinutes }: { plannedMinutes:
   </ChartCard>;
 }
 
-function ChartCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
-  return <article className="card project-chart-card"><h3>{title}</h3><p>{description}</p>{children}</article>;
+function ChartCard({ title, description, children, className = "" }: { title: string; description: string; children: React.ReactNode; className?: string }) {
+  return <article className={`card project-chart-card ${className}`.trim()}><h3>{title}</h3><p>{description}</p>{children}</article>;
 }
 
 function DateFilters({ prefix, from, to, setFrom, setTo }: { prefix: string; from: string; to: string; setFrom: (value: string) => void; setTo: (value: string) => void }) {

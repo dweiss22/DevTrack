@@ -33,6 +33,7 @@ describe("Projects experience", () => {
     expect(fields.owner?.name).toBe("Instructional Designer");
     expect(fields.sme?.name).toBe("SME");
     expect(reportingYearOptions(fields.reporting)).toEqual([2026, 2025]);
+    expect(projectFilterFields([{ id: "ID1", name: "ID Assigned", values: ["Katie Willis"] }]).owner?.name).toBe("ID Assigned");
   });
 
   it("resolves contact options and labels missing references visibly", () => {
@@ -82,6 +83,7 @@ describe("Projects experience", () => {
     const migration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210002_project_people_search.sql"), "utf8");
     expect(detailSource).toContain("plannedMinutes={row.planned_minutes}");
     expect(chartSource).toContain("plannedMinutes != null");
+    expect(chartSource).toContain('className="project-chart-card-wide"');
     expect(chartSource).toContain("View accessible data");
     expect(migration).toContain("wrike_task_assignees");
     expect(migration).toContain("person.wrike_id=any(value.display_values)");

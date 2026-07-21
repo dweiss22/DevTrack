@@ -11,7 +11,7 @@ import { hours } from "@/lib/metrics";
 import { safeProjectsReturnTo } from "@/lib/reporting/dashboard-navigation";
 import { formatCourseLength, formatVerticalMembership, parseCourseLengthMinutes, projectLengthBenchmark, type ProjectLengthBenchmarkRow } from "@/lib/reporting/project-overview";
 import { projectTimeMetrics, type ProjectTimeEntry } from "@/lib/reporting/project-time";
-import { extractFieldYear, projectContactValues, projectFieldRole, projectOverviewFieldKeys, type ProjectPersonOption } from "@/lib/reporting/projects";
+import { extractFieldYear, projectAssignedIdValues, projectContactValues, projectFieldRole, projectOverviewFieldKeys, type ProjectPersonOption } from "@/lib/reporting/projects";
 import { mergeNormalizedCustomFields, type NormalizedCustomFieldValue } from "@/lib/wrike/custom-field-normalization";
 import type { ResolvedCustomField, ResolvedFolder } from "@/lib/wrike/metadata";
 import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory } from "@/lib/wrike/reference-data";
@@ -83,7 +83,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
 
   return <AppShell isAdmin={profile.role === "admin"}>
     <nav className="breadcrumb" aria-label="Breadcrumb"><Link href={returnTo}>{returnLabel}</Link><span aria-hidden="true">/</span><span aria-current="page">Project detail</span></nav>
-    <header className="page-header project-detail-header"><div><p className="eyebrow">PROJECT DETAIL</p><h1>{row.title}</h1><p><StatusBadge name={statusReference.name} id={row.custom_status_id} color={statusReference.color} resolved={statusReference.resolved} /> <span aria-hidden="true">·</span> Due {formatDate(row.due_date)}</p></div>{row.permalink && <a className="button" href={row.permalink} target="_blank" rel="noreferrer">Open in Wrike</a>}</header>
+    <header className="page-header project-detail-header"><div><p className="eyebrow">PROJECT DETAIL</p><h1>{row.title}</h1><p><StatusBadge name={statusReference.name} id={row.custom_status_id} color={statusReference.color} resolved={statusReference.resolved} />{row.due_date && <> <span aria-hidden="true">·</span> Due {formatDate(row.due_date)}</>}</p></div>{row.permalink && <a className="button" href={row.permalink} target="_blank" rel="noreferrer">Open in Wrike</a>}</header>
 
     {row.custom_fields_sync_state !== "complete" && <p className="notice project-sync-notice" role="status">Some custom-field data is not currently verified. Previously synchronized values are labeled below and have not been replaced with empty data.</p>}
 
@@ -93,7 +93,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
         <MetadataItem label="Status"><StatusBadge name={statusReference.name} id={row.custom_status_id} color={statusReference.color} resolved={statusReference.resolved} /></MetadataItem>
         <MetadataItem label="Percentile" className="project-percentile-item"><ProjectPercentileGauge benchmark={benchmark} /></MetadataItem>
         <MetadataItem label="Reporting year">{reportingYear ?? fieldValue(fieldByRole.get("reporting"), people)}{reportingYear && fieldByRole.get("reporting")?.conflict && <ConflictBadge />}</MetadataItem>
-        <MetadataItem label="ID Assigned">{fieldValue(fieldByRole.get("owner"), people, true)}</MetadataItem>
+        <MetadataItem label="ID Assigned">{assignedIdFieldValue(fieldByRole.get("owner"), people)}</MetadataItem>
         <MetadataItem label="Vertical">{formatVerticalMembership(vertical?.displayValues ?? []) ?? "Not assigned"}{vertical?.conflict && <ConflictBadge />}{row.vertical_state === "synchronization_incomplete" && <MetadataWarning>Previously synchronized</MetadataWarning>}{row.vertical_state === "unrecognized" && <MetadataWarning>Needs review</MetadataWarning>}</MetadataItem>
         <MetadataItem label="Length">{courseLengthValue(fieldByRole.get("courseLength"), people)}</MetadataItem>
         <MetadataItem label="Assigned in Wrike">{assignees.length ? assignees.map((person, index) => <React.Fragment key={person.wrikeUserId}>{index > 0 && ", "}{person.resolved ? person.fullName : <UnresolvedReferenceLabel id={person.wrikeUserId} type="user" />}</React.Fragment>) : "Unassigned"}</MetadataItem>
@@ -101,21 +101,24 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
         <MetadataItem label="SME">{fieldValue(fieldByRole.get("sme"), people, true)}</MetadataItem>
         <MetadataItem label="Legal Reviewer">{fieldValue(fieldByRole.get("legalReviewer"), people, true)}</MetadataItem>
       </dl>
+      <div className="project-time-summary-heading"><p className="eyebrow">TIME SUMMARY</p><h3>Recorded effort</h3></div>
+      <section className="project-time-metrics" aria-label="Project time summary">
+        <article className="project-summary-tile"><p>Total recorded time</p><strong>{hours(metrics.minutes)} h</strong></article>
+        <article className="project-summary-tile"><p>Time entries</p><strong>{metrics.entries.toLocaleString()}</strong></article>
+        <article className="project-summary-tile"><p>Contributors</p><strong>{metrics.contributors.toLocaleString()}</strong></article>
+        {row.planned_minutes != null && <article className="project-summary-tile"><p>Planned vs. actual</p><strong>{hours(row.planned_minutes)} h <span>/ {hours(metrics.minutes)} h</span></strong><small>{row.planned_minutes >= metrics.minutes ? `${hours(row.planned_minutes - metrics.minutes)} h remaining` : `${hours(metrics.minutes - row.planned_minutes)} h over plan`}</small></article>}
+      </section>
       {profile.role === "admin" && vertical?.verticalNormalization?.rejectedTokens.length ? <details className="project-vertical-diagnostics"><summary>Original unrecognized Vertical values</summary><p>{vertical.verticalNormalization.rejectedTokens.join(", ")}</p></details> : null}
     </section>
 
-    <div className="project-detail-grid">
-      <section className="card"><h2>Project dates</h2><dl className="project-detail-list"><MetadataItem label="Created">{formatDate(row.created_at_wrike, true)}</MetadataItem><MetadataItem label="Start">{formatDate(row.start_date)}</MetadataItem><MetadataItem label="Due">{formatDate(row.due_date)}</MetadataItem><MetadataItem label="Completed">{formatDate(row.completed_at, true)}</MetadataItem><MetadataItem label="Last updated">{formatDate(row.updated_at_wrike, true)}</MetadataItem></dl></section>
-      <section className="card"><h2>Wrike folders</h2><TaskFolderList folders={folders} /></section>
-      <section className="card project-other-fields"><h2>Other synchronized fields</h2><TaskCustomFieldList fields={otherFields} unresolvedFields={unresolvedCustomFields} verticalState={row.vertical_state} showAdminDiagnostics={profile.role === "admin"} /></section>
-    </div>
-
-    <section className={`project-time-metrics ${row.planned_minutes == null ? "three" : ""}`} aria-label="Project time summary">
-      <article className="card"><p>Total recorded time</p><strong>{hours(metrics.minutes)} h</strong></article>
-      <article className="card"><p>Time entries</p><strong>{metrics.entries.toLocaleString()}</strong></article>
-      <article className="card"><p>Contributors</p><strong>{metrics.contributors.toLocaleString()}</strong></article>
-      {row.planned_minutes != null && <article className="card"><p>Planned vs. actual</p><strong>{hours(row.planned_minutes)} h <span>/ {hours(metrics.minutes)} h</span></strong><small>{row.planned_minutes >= metrics.minutes ? `${hours(row.planned_minutes - metrics.minutes)} h remaining` : `${hours(metrics.minutes - row.planned_minutes)} h over plan`}</small></article>}
-    </section>
+    <details className="card project-additional-data">
+      <summary><span><span className="eyebrow">ADDITIONAL DATA</span><strong>Additional project data</strong><small>Project dates, Wrike folders, and other synchronized fields</small></span></summary>
+      <div className="project-additional-grid">
+        <section aria-labelledby="project-dates-heading"><h3 id="project-dates-heading">Project dates</h3><dl className="project-detail-list"><MetadataItem label="Created">{formatDate(row.created_at_wrike, true)}</MetadataItem><MetadataItem label="Start">{formatDate(row.start_date)}</MetadataItem><MetadataItem label="Due">{formatDate(row.due_date)}</MetadataItem><MetadataItem label="Completed">{formatDate(row.completed_at, true)}</MetadataItem><MetadataItem label="Last updated">{formatDate(row.updated_at_wrike, true)}</MetadataItem></dl></section>
+        <section aria-labelledby="project-folders-heading"><h3 id="project-folders-heading">Wrike folders</h3><TaskFolderList folders={folders} /></section>
+        <section className="project-other-fields" aria-labelledby="project-other-fields-heading"><h3 id="project-other-fields-heading">Other synchronized fields</h3><TaskCustomFieldList fields={otherFields} unresolvedFields={unresolvedCustomFields} verticalState={row.vertical_state} showAdminDiagnostics={profile.role === "admin"} /></section>
+      </div>
+    </details>
 
     <ProjectTimeAnalytics entries={timeEntries} plannedMinutes={row.planned_minutes} />
 
@@ -132,6 +135,12 @@ function MetadataWarning({ children }: { children: React.ReactNode }) { return <
 function fieldValue(field: NormalizedCustomFieldValue | undefined, people: ProjectPersonOption[], contact = false): React.ReactNode {
   if (!field?.displayValues.length) return "Not available";
   const values = contact ? projectContactValues(field.displayValues, people) : field.displayValues.map((value) => ({ id: value, label: value, resolved: true }));
+  return <>{values.map((value, index) => <React.Fragment key={`${field.normalizedKey}-${value.id}`}>{index > 0 && ", "}{value.resolved ? value.label : <UnresolvedReferenceLabel id={value.id} type="user" label="Unresolved user" />}</React.Fragment>)}{field.conflict && <ConflictBadge />}</>;
+}
+
+function assignedIdFieldValue(field: NormalizedCustomFieldValue | undefined, people: ProjectPersonOption[]) {
+  if (!field?.displayValues.length) return "Not available";
+  const values = projectAssignedIdValues(field.displayValues, people);
   return <>{values.map((value, index) => <React.Fragment key={`${field.normalizedKey}-${value.id}`}>{index > 0 && ", "}{value.resolved ? value.label : <UnresolvedReferenceLabel id={value.id} type="user" label="Unresolved user" />}</React.Fragment>)}{field.conflict && <ConflictBadge />}</>;
 }
 
