@@ -2,18 +2,20 @@ import React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { ProjectPercentileGauge } from "@/components/project-percentile-gauge";
 import { ProjectTimeAnalytics } from "@/components/project-time-analytics";
 import { TaskCustomFieldList, TaskFolderList } from "@/components/task-metadata";
 import { StatusBadge, UnresolvedReferenceLabel } from "@/components/wrike-reference";
 import { requireContext } from "@/lib/auth";
 import { hours } from "@/lib/metrics";
 import { safeProjectsReturnTo } from "@/lib/reporting/dashboard-navigation";
+import { formatCourseLength, formatVerticalMembership, parseCourseLengthMinutes, projectLengthBenchmark, type ProjectLengthBenchmarkRow } from "@/lib/reporting/project-overview";
 import { projectTimeMetrics, type ProjectTimeEntry } from "@/lib/reporting/project-time";
-import { extractFieldYear, projectContactValues, projectFieldRole, type ProjectPersonOption } from "@/lib/reporting/projects";
+import { extractFieldYear, projectContactValues, projectFieldRole, projectOverviewFieldKeys, type ProjectPersonOption } from "@/lib/reporting/projects";
 import { mergeNormalizedCustomFields, type NormalizedCustomFieldValue } from "@/lib/wrike/custom-field-normalization";
 import type { ResolvedCustomField, ResolvedFolder } from "@/lib/wrike/metadata";
 import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory } from "@/lib/wrike/reference-data";
-import { normalizeVerticalValue, verticalStateLabel, type VerticalState } from "@/lib/wrike/vertical-normalization";
+import { normalizeVerticalValue, type VerticalState } from "@/lib/wrike/vertical-normalization";
 
 type ProjectDetailRow = {
   wrike_id: string; title: string; status: string; custom_status_id: string | null; responsible_wrike_ids: string[];
@@ -31,14 +33,15 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const returnTo = safeProjectsReturnTo(query.returnTo) ?? "/projects";
   const returnLabel = returnTo.startsWith("/development") ? "Development" : "Projects";
   const { supabase, profile } = await requireContext();
-  const [projectResult, usersResult, categoriesResult, statusesResult, verticalResult] = await Promise.all([
-    supabase.from("wrike_tasks").select("*,wrike_time_entries(id,wrike_id,entry_date,minutes,category,comment,user_wrike_id,wrike_users(display_name,email))").eq("id", id).eq("organization_id", profile.organization_id).maybeSingle(),
+  const [projectResult, usersResult, categoriesResult, statusesResult, verticalResult, benchmarkResult] = await Promise.all([
+    supabase.from("wrike_tasks").select("*,wrike_time_entries(id,wrike_id,entry_date,minutes,category,comment,user_wrike_id,wrike_users(display_name,email))").eq("id", id).eq("organization_id", profile.organization_id).eq("wrike_time_entries.is_deleted", false).maybeSingle(),
     supabase.from("wrike_users").select("wrike_id,display_name,email,avatar_url,synced_at,is_active,is_unresolved,raw_data").eq("organization_id", profile.organization_id),
     supabase.from("wrike_timelog_categories").select("wrike_id,title,synced_at,is_unresolved").eq("organization_id", profile.organization_id),
     supabase.from("wrike_workflow_statuses").select("wrike_id,title,workflow_id,color,dashboard_classification,synced_at,is_unresolved").eq("organization_id", profile.organization_id),
-    supabase.from("wrike_task_normalized_custom_field_values").select("normalized_verticals,vertical_reporting_category,has_unresolved_vertical,unresolved_vertical_tokens,has_conflict,source_wrike_field_ids,source_titles,normalized_field:wrike_normalized_custom_fields!inner(normalized_key)").eq("task_id", id).eq("normalized_field.normalized_key", "vertical").maybeSingle()
+    supabase.from("wrike_task_normalized_custom_field_values").select("normalized_verticals,vertical_reporting_category,has_unresolved_vertical,unresolved_vertical_tokens,has_conflict,source_wrike_field_ids,source_titles,normalized_field:wrike_normalized_custom_fields!inner(normalized_key)").eq("task_id", id).eq("normalized_field.normalized_key", "vertical").maybeSingle(),
+    supabase.rpc("reporting_project_length_percentile", { target_task_id: id }).maybeSingle()
   ]);
-  for (const result of [projectResult, usersResult, categoriesResult, statusesResult, verticalResult]) if (result.error) throw result.error;
+  for (const result of [projectResult, usersResult, categoriesResult, statusesResult, verticalResult, benchmarkResult]) if (result.error) throw result.error;
   if (!projectResult.data) notFound();
   const row = projectResult.data as unknown as ProjectDetailRow;
   const users = usersResult.data ?? [];
@@ -55,8 +58,8 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const people: ProjectPersonOption[] = users.map((person) => ({ wrikeId: person.wrike_id, name: person.display_name, resolved: !person.is_unresolved && person.display_name !== person.wrike_id }));
   const fieldByRole = new Map(customFields.map((field) => [projectFieldRole(field.normalizedKey), field]).filter((entry): entry is [NonNullable<ReturnType<typeof projectFieldRole>>, NormalizedCustomFieldValue] => entry[0] != null));
   const vertical = fieldByRole.get("vertical");
-  const featuredRoles = new Set([...fieldByRole.values()].map((field) => field.normalizedKey));
-  const otherFields = customFields.filter((field) => !featuredRoles.has(field.normalizedKey));
+  const featuredFields = projectOverviewFieldKeys(customFields);
+  const otherFields = customFields.filter((field) => !featuredFields.has(field.normalizedKey));
   const timeEntries = row.wrike_time_entries.map((entry): ProjectTimeEntry => {
     const person = entry.user_wrike_id ? resolveResponsibleUsers([entry.user_wrike_id], users)[0] : null;
     const category = resolveTimelogCategory(entry.category, categories);
@@ -76,6 +79,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   }).sort((left, right) => right.date.localeCompare(left.date));
   const metrics = projectTimeMetrics(timeEntries);
   const reportingYear = extractFieldYear(fieldByRole.get("reporting")?.displayValues ?? []);
+  const benchmark = projectLengthBenchmark((benchmarkResult.data as ProjectLengthBenchmarkRow | null) ?? null);
 
   return <AppShell isAdmin={profile.role === "admin"}>
     <nav className="breadcrumb" aria-label="Breadcrumb"><Link href={returnTo}>{returnLabel}</Link><span aria-hidden="true">/</span><span aria-current="page">Project detail</span></nav>
@@ -84,20 +88,18 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
     {row.custom_fields_sync_state !== "complete" && <p className="notice project-sync-notice" role="status">Some custom-field data is not currently verified. Previously synchronized values are labeled below and have not been replaced with empty data.</p>}
 
     <section className="card project-overview-card" aria-labelledby="project-overview-heading">
-      <div className="section-heading"><div><p className="eyebrow">OVERVIEW</p><h2 id="project-overview-heading">Project information</h2></div>{row.description && <p>{row.description}</p>}</div>
+      <div className="section-heading project-overview-heading"><div><p className="eyebrow">OVERVIEW</p><h2 id="project-overview-heading">Project information</h2></div>{row.description && <p className="project-overview-description">{row.description}</p>}</div>
       <dl className="project-metadata-grid">
         <MetadataItem label="Status"><StatusBadge name={statusReference.name} id={row.custom_status_id} color={statusReference.color} resolved={statusReference.resolved} /></MetadataItem>
+        <MetadataItem label="Percentile" className="project-percentile-item"><ProjectPercentileGauge benchmark={benchmark} /></MetadataItem>
         <MetadataItem label="Reporting year">{reportingYear ?? fieldValue(fieldByRole.get("reporting"), people)}{reportingYear && fieldByRole.get("reporting")?.conflict && <ConflictBadge />}</MetadataItem>
-        <MetadataItem label="Owner / Instructional Designer">{fieldValue(fieldByRole.get("owner"), people, true)}</MetadataItem>
-        <MetadataItem label="Authoring tool">{fieldValue(fieldByRole.get("tool"), people)}</MetadataItem>
-        <MetadataItem label="Course type">{fieldValue(fieldByRole.get("courseType"), people)}</MetadataItem>
-        <MetadataItem label="Associated Vertical">{vertical?.displayValues.length ? vertical.displayValues.join(", ") : "Not assigned"}{vertical?.conflict && <ConflictBadge />}</MetadataItem>
-        <MetadataItem label="Vertical reporting category">{row.vertical_state ? verticalStateLabel(row.vertical_state) : vertical?.verticalNormalization?.reportingCategory ?? "Not available"}</MetadataItem>
+        <MetadataItem label="ID Assigned">{fieldValue(fieldByRole.get("owner"), people, true)}</MetadataItem>
+        <MetadataItem label="Vertical">{formatVerticalMembership(vertical?.displayValues ?? []) ?? "Not assigned"}{vertical?.conflict && <ConflictBadge />}{row.vertical_state === "synchronization_incomplete" && <MetadataWarning>Previously synchronized</MetadataWarning>}{row.vertical_state === "unrecognized" && <MetadataWarning>Needs review</MetadataWarning>}</MetadataItem>
+        <MetadataItem label="Length">{courseLengthValue(fieldByRole.get("courseLength"), people)}</MetadataItem>
+        <MetadataItem label="Assigned in Wrike">{assignees.length ? assignees.map((person, index) => <React.Fragment key={person.wrikeUserId}>{index > 0 && ", "}{person.resolved ? person.fullName : <UnresolvedReferenceLabel id={person.wrikeUserId} type="user" />}</React.Fragment>) : "Unassigned"}</MetadataItem>
+        <MetadataItem label="Authoring Tool">{fieldValue(fieldByRole.get("tool"), people)}</MetadataItem>
         <MetadataItem label="SME">{fieldValue(fieldByRole.get("sme"), people, true)}</MetadataItem>
-        <MetadataItem label="Course length">{fieldValue(fieldByRole.get("courseLength"), people)}</MetadataItem>
-        <MetadataItem label="Assigned users">{assignees.length ? assignees.map((person, index) => <React.Fragment key={person.wrikeUserId}>{index > 0 && ", "}{person.resolved ? person.fullName : <UnresolvedReferenceLabel id={person.wrikeUserId} type="user" />}</React.Fragment>) : "Unassigned"}</MetadataItem>
-        <MetadataItem label="Planned effort">{row.planned_minutes == null ? "Not available" : `${hours(row.planned_minutes)} hours`}</MetadataItem>
-        <MetadataItem label="Allocated effort">{row.allocated_minutes == null ? "Not available" : `${hours(row.allocated_minutes)} hours`}</MetadataItem>
+        <MetadataItem label="Legal Reviewer">{fieldValue(fieldByRole.get("legalReviewer"), people, true)}</MetadataItem>
       </dl>
       {profile.role === "admin" && vertical?.verticalNormalization?.rejectedTokens.length ? <details className="project-vertical-diagnostics"><summary>Original unrecognized Vertical values</summary><p>{vertical.verticalNormalization.rejectedTokens.join(", ")}</p></details> : null}
     </section>
@@ -123,13 +125,20 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   </AppShell>;
 }
 
-function MetadataItem({ label, children }: { label: string; children: React.ReactNode }) { return <div><dt>{label}</dt><dd>{children}</dd></div>; }
+function MetadataItem({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) { return <div className={className}><dt>{label}</dt><dd>{children}</dd></div>; }
 function ConflictBadge() { return <span className="metadata-warning">Conflicting sources</span>; }
+function MetadataWarning({ children }: { children: React.ReactNode }) { return <span className="metadata-warning">{children}</span>; }
 
 function fieldValue(field: NormalizedCustomFieldValue | undefined, people: ProjectPersonOption[], contact = false): React.ReactNode {
   if (!field?.displayValues.length) return "Not available";
   const values = contact ? projectContactValues(field.displayValues, people) : field.displayValues.map((value) => ({ id: value, label: value, resolved: true }));
   return <>{values.map((value, index) => <React.Fragment key={`${field.normalizedKey}-${value.id}`}>{index > 0 && ", "}{value.resolved ? value.label : <UnresolvedReferenceLabel id={value.id} type="user" label="Unresolved user" />}</React.Fragment>)}{field.conflict && <ConflictBadge />}</>;
+}
+
+function courseLengthValue(field: NormalizedCustomFieldValue | undefined, people: ProjectPersonOption[]) {
+  const formatted = formatCourseLength(parseCourseLengthMinutes(field?.displayValues));
+  if (!formatted) return fieldValue(field, people);
+  return <>{formatted}{field?.conflict && <ConflictBadge />}</>;
 }
 
 function canonicalVerticalField(row: { normalized_verticals: string[] | null; vertical_reporting_category: string | null; has_unresolved_vertical: boolean | null; unresolved_vertical_tokens: string[] | null; has_conflict: boolean | null; source_wrike_field_ids: string[] | null; source_titles: string[] | null }, state: VerticalState | null): NormalizedCustomFieldValue {

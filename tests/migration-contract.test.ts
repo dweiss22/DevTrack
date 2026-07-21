@@ -23,6 +23,7 @@ const currentWrikeUserNamesMigration = fs.readFileSync(path.join(process.cwd(), 
 const ignoredFolderReferencesMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200008_ignore_out_of_scope_folder_references.sql"), "utf8");
 const reportingFilterOptionsPerformanceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200009_reporting_filter_options_performance.sql"), "utf8");
 const verticalCompletenessMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210001_vertical_completeness_and_repair.sql"), "utf8");
+const projectLengthPercentileMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210003_project_length_percentile.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -224,5 +225,15 @@ describe("reporting migration contract", () => {
     expect(verticalCompletenessMigration).toContain("reporting_vertical_data_quality");
     expect(verticalCompletenessMigration).toContain("vertical repair runs admin read");
     expect(verticalCompletenessMigration).toContain("verticalState");
+  });
+  it("calculates same-length project percentiles inside viewer reporting boundaries", () => {
+    expect(projectLengthPercentileMigration).toContain("reporting_project_length_percentile");
+    expect(projectLengthPercentileMigration).toContain("security invoker");
+    expect(projectLengthPercentileMigration).toContain("reporting_accessible_task_ids()");
+    expect(projectLengthPercentileMigration).toContain("can_access_wrike_time_entry(entry.id)");
+    expect(projectLengthPercentileMigration).toContain("not task.is_deleted");
+    expect(projectLengthPercentileMigration).toContain("not entry.is_deleted");
+    expect(projectLengthPercentileMigration).toContain("task.custom_fields_sync_state='complete'");
+    expect(projectLengthPercentileMigration).toContain("wrike_course_length_value_minutes");
   });
 });

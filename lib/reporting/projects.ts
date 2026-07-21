@@ -15,6 +15,7 @@ export type ProjectFilterFields = {
   vertical: CustomFieldFilterOption | null;
   sme: CustomFieldFilterOption | null;
   courseLength: CustomFieldFilterOption | null;
+  legalReviewer: CustomFieldFilterOption | null;
 };
 
 const FIELD_PATTERNS = {
@@ -24,8 +25,11 @@ const FIELD_PATTERNS = {
   courseType: /^(course type|course development type)$/i,
   vertical: /^vertical$/i,
   sme: /^(sme|smes|subject matter expert|subject matter experts)$/i,
-  courseLength: /^(course length|course duration|estimated course length)$/i
+  courseLength: /^(course length|course duration|estimated course length)$/i,
+  legalReviewer: /^legal reviewer$/i
 } satisfies Record<keyof ProjectFilterFields, RegExp>;
+
+export const PROJECT_OVERVIEW_FIELD_ROLES = new Set<keyof ProjectFilterFields>(["reporting", "owner", "vertical", "courseLength", "tool", "sme", "legalReviewer"]);
 
 export function projectFilterFields(options: readonly CustomFieldFilterOption[]): ProjectFilterFields {
   const find = (pattern: RegExp) => options.find((field) => pattern.test(field.name.trim())) ?? null;
@@ -36,13 +40,21 @@ export function projectFilterFields(options: readonly CustomFieldFilterOption[])
     courseType: find(FIELD_PATTERNS.courseType),
     vertical: find(FIELD_PATTERNS.vertical),
     sme: find(FIELD_PATTERNS.sme),
-    courseLength: find(FIELD_PATTERNS.courseLength)
+    courseLength: find(FIELD_PATTERNS.courseLength),
+    legalReviewer: find(FIELD_PATTERNS.legalReviewer)
   };
 }
 
 export function projectFieldRole(name: string): keyof ProjectFilterFields | null {
   const normalized = name.trim();
   return (Object.entries(FIELD_PATTERNS) as [keyof ProjectFilterFields, RegExp][]).find(([, pattern]) => pattern.test(normalized))?.[0] ?? null;
+}
+
+export function projectOverviewFieldKeys(fields: readonly { normalizedKey: string }[]) {
+  return new Set(fields.flatMap((field) => {
+    const role = projectFieldRole(field.normalizedKey);
+    return role && PROJECT_OVERVIEW_FIELD_ROLES.has(role) ? [field.normalizedKey] : [];
+  }));
 }
 
 export function reportingYearOptions(field: CustomFieldFilterOption | null) {

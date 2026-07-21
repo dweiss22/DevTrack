@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(13);
+select plan(15);
 
 insert into auth.users(id,email) values
   ('00000000-0000-0000-0000-000000000011','admin@example.test'),
@@ -75,9 +75,9 @@ select is((select count(*) from public.wrike_tasks),1::bigint,'people-only group
 
 reset role;
 insert into public.reporting_group_scopes(group_id,scope_id) values ('00000000-0000-0000-0000-000000000061','00000000-0000-0000-0000-000000000051');
-insert into public.wrike_time_entries(id,organization_id,wrike_id,task_id,user_id,entry_date,minutes) values
-  ('00000000-0000-0000-0000-000000000081','00000000-0000-0000-0000-000000000021','WE1','00000000-0000-0000-0000-000000000041','00000000-0000-0000-0000-000000000031',current_date,60),
-  ('00000000-0000-0000-0000-000000000082','00000000-0000-0000-0000-000000000021','WE2','00000000-0000-0000-0000-000000000041','00000000-0000-0000-0000-000000000032',current_date,30);
+insert into public.wrike_time_entries(id,organization_id,wrike_id,task_id,task_wrike_id,user_id,user_wrike_id,entry_date,minutes,hours) values
+  ('00000000-0000-0000-0000-000000000081','00000000-0000-0000-0000-000000000021','WE1','00000000-0000-0000-0000-000000000041','WT1','00000000-0000-0000-0000-000000000031','WU1',current_date,60,1),
+  ('00000000-0000-0000-0000-000000000082','00000000-0000-0000-0000-000000000021','WE2','00000000-0000-0000-0000-000000000041','WT1','00000000-0000-0000-0000-000000000032','WU2',current_date,30,0.5);
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000012',true);
 select is((select count(*) from public.wrike_time_entries),1::bigint,'timelog visibility independently requires the entry author match');
@@ -93,6 +93,39 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000012',true);
 select is((select count(*) from public.reporting_task_rows('{"customFields":{"00000000-0000-0000-0000-000000000092":"Course"}}'::jsonb,50,0)),1::bigint,'logical custom fields filter authorized tasks across raw sources');
 select is((select count(*) from public.reporting_custom_field_options()),1::bigint,'dynamic custom-field options contain only values on visible tasks');
+
+reset role;
+update public.wrike_tasks set custom_fields_sync_state='complete' where id in (
+  '00000000-0000-0000-0000-000000000041','00000000-0000-0000-0000-000000000042'
+);
+insert into public.wrike_tasks(id,organization_id,wrike_id,title,status,custom_fields_sync_state) values
+  ('00000000-0000-0000-0000-000000000043','00000000-0000-0000-0000-000000000021','WT3','Peer 1','Active','complete'),
+  ('00000000-0000-0000-0000-000000000044','00000000-0000-0000-0000-000000000021','WT4','Peer 2','Active','complete'),
+  ('00000000-0000-0000-0000-000000000045','00000000-0000-0000-0000-000000000021','WT5','Peer 3','Active','complete'),
+  ('00000000-0000-0000-0000-000000000046','00000000-0000-0000-0000-000000000021','WT6','Peer 4','Active','complete');
+insert into public.wrike_normalized_custom_fields(id,organization_id,normalized_key,title) values
+  ('00000000-0000-0000-0000-000000000093','00000000-0000-0000-0000-000000000021','course length','Course Length'),
+  ('00000000-0000-0000-0000-000000000094','00000000-0000-0000-0000-000000000022','course length','Course Length');
+insert into public.wrike_task_normalized_custom_field_values(task_id,normalized_field_id,display_values,source_wrike_field_ids,source_titles,source_values) values
+  ('00000000-0000-0000-0000-000000000041','00000000-0000-0000-0000-000000000093',array['1.5 hours'],array['L1'],array['Course Length'],'[]'::jsonb),
+  ('00000000-0000-0000-0000-000000000043','00000000-0000-0000-0000-000000000093',array['90 minutes'],array['L1'],array['Course Length'],'[]'::jsonb),
+  ('00000000-0000-0000-0000-000000000044','00000000-0000-0000-0000-000000000093',array['01:30'],array['L1'],array['Course Length'],'[]'::jsonb),
+  ('00000000-0000-0000-0000-000000000045','00000000-0000-0000-0000-000000000093',array['1 hour 30 minutes'],array['L1'],array['Course Length'],'[]'::jsonb),
+  ('00000000-0000-0000-0000-000000000046','00000000-0000-0000-0000-000000000093',array['90 min'],array['L1'],array['Course Length'],'[]'::jsonb),
+  ('00000000-0000-0000-0000-000000000042','00000000-0000-0000-0000-000000000094',array['90 minutes'],array['L2'],array['Course Length'],'[]'::jsonb);
+insert into public.wrike_time_entries(id,organization_id,wrike_id,task_id,task_wrike_id,entry_date,minutes,hours) values
+  ('00000000-0000-0000-0000-000000000083','00000000-0000-0000-0000-000000000021','WE3','00000000-0000-0000-0000-000000000043','WT3',current_date,30,0.5),
+  ('00000000-0000-0000-0000-000000000084','00000000-0000-0000-0000-000000000021','WE4','00000000-0000-0000-0000-000000000044','WT4',current_date,60,1),
+  ('00000000-0000-0000-0000-000000000085','00000000-0000-0000-0000-000000000021','WE5','00000000-0000-0000-0000-000000000045','WT5',current_date,120,2),
+  ('00000000-0000-0000-0000-000000000086','00000000-0000-0000-0000-000000000021','WE6','00000000-0000-0000-0000-000000000046','WT6',current_date,150,2.5);
+set local role authenticated;
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000011',true);
+select results_eq(
+  $$select cohort_size,target_minutes,cohort_average_minutes from public.reporting_project_length_percentile('00000000-0000-0000-0000-000000000041')$$,
+  $$values (5::bigint,90::bigint,90.00::numeric)$$,
+  'same-length benchmark uses five visible organization courses and valid visible time'
+);
+select is((select count(*) from public.reporting_project_length_percentile('00000000-0000-0000-0000-000000000042')),0::bigint,'cross-organization benchmark targets remain hidden');
 
 reset role;
 insert into public.reporting_conversations(id,organization_id,user_id,title) values
