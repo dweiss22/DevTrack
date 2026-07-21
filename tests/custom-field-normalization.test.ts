@@ -72,7 +72,9 @@ describe("Wrike custom-field normalization", () => {
     const result = await loadCustomFieldOptionsResult({ rpc } as never);
     logged.mockRestore();
     expect(result).toEqual({ data: [], error });
-    expect(fs.readFileSync(path.join(process.cwd(), "app/projects/page.tsx"), "utf8")).toContain("Projects remain available, but custom-field filter options could not be loaded.");
+    const page = fs.readFileSync(path.join(process.cwd(), "app/projects/page.tsx"), "utf8");
+    expect(page).toContain("Custom-field filter options");
+    expect(page).toContain("Project rows remain available; custom-field filter choices are temporarily unavailable.");
   });
 
   it("documents normalization, conflicts, raw-ID preservation, and dynamic choices", () => {

@@ -5,8 +5,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { DevTrackBrand } from "@/components/devtrack-brand";
 import { ProjectPercentileRing } from "@/components/project-percentile-ring";
+import { ProjectsLoadFailure } from "@/components/projects-load-failure";
 import { ProjectsFilters } from "@/components/projects-filters";
-import { loadProjectLengthPercentiles } from "@/lib/reporting/data";
+import { loadProjectLengthPercentiles, loadProjectLengthPercentilesResult } from "@/lib/reporting/data";
+import { reportingFailure } from "@/lib/reporting/failure";
 import { parseProjectReportingFilters } from "@/lib/reporting/filters";
 
 const customFields = [
@@ -65,5 +67,28 @@ describe("Projects list redesign", () => {
     expect(rpc).toHaveBeenCalledTimes(1);
     expect(rpc).toHaveBeenCalledWith("reporting_project_length_percentiles", { target_task_ids: ids });
     expect(result.get("T1")?.percentile).toBe(70);
+  });
+
+  it("keeps Projects available when the optional percentile migration is missing", async () => {
+    const databaseError = { code: "PGRST202", message: "Could not find reporting_project_length_percentiles in the schema cache" };
+    const result = await loadProjectLengthPercentilesResult({ rpc: vi.fn().mockResolvedValue({ data: null, error: databaseError }) } as never, ["T1"]);
+    expect(result.data.size).toBe(0);
+    expect(result.error).toEqual(databaseError);
+    const failure = reportingFailure(result.error, "Development percentile query", "202607210004_projects_list_experience.sql");
+    const markup = renderToStaticMarkup(<ProjectsLoadFailure failure={failure} isAdmin nonfatal />);
+    expect(markup).toContain("requires a database migration");
+    expect(markup).toContain("202607210004_projects_list_experience.sql");
+    expect(markup).toContain("Project rows remain available");
+    expect(markup).toContain("PGRST202");
+  });
+
+  it("uses route-aware Projects errors instead of the Dashboard error copy", () => {
+    const projectsError = fs.readFileSync(path.join(process.cwd(), "app/projects/error.tsx"), "utf8");
+    const globalError = fs.readFileSync(path.join(process.cwd(), "app/error.tsx"), "utf8");
+    expect(projectsError).toContain("PROJECTS ERROR");
+    expect(projectsError).toContain("Diagnostic code");
+    expect(projectsError).not.toContain("Dashboard data could not be loaded");
+    expect(globalError).toContain("APPLICATION ERROR");
+    expect(globalError).not.toContain("DASHBOARD ERROR");
   });
 });

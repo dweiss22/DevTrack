@@ -42,13 +42,29 @@ export async function loadTaskRows(supabase: SupabaseClient, filters: ReportingF
 }
 
 export async function loadProjectLengthPercentiles(supabase: SupabaseClient, taskIds: readonly string[]): Promise<Map<string, ProjectLengthBenchmark>> {
-  if (!taskIds.length) return new Map<string, ProjectLengthBenchmark>();
-  const { data, error } = await supabase.rpc("reporting_project_length_percentiles", { target_task_ids: taskIds.slice(0, 200) });
-  if (error) throw error;
-  return new Map<string, ProjectLengthBenchmark>((data ?? []).flatMap((row: ProjectLengthBenchmarkRow & { task_id: string }) => {
-    const benchmark = projectLengthBenchmark(row);
-    return benchmark ? [[row.task_id, benchmark] as const] : [];
-  }));
+  const result = await loadProjectLengthPercentilesResult(supabase, taskIds);
+  if (result.error) throw result.error;
+  return result.data;
+}
+
+export async function loadProjectLengthPercentilesResult(supabase: SupabaseClient, taskIds: readonly string[]): Promise<{ data: Map<string, ProjectLengthBenchmark>; error: null } | { data: Map<string, ProjectLengthBenchmark>; error: unknown }> {
+  if (!taskIds.length) return { data: new Map<string, ProjectLengthBenchmark>(), error: null };
+  const started = Date.now();
+  try {
+    const { data, error } = await supabase.rpc("reporting_project_length_percentiles", { target_task_ids: taskIds.slice(0, 200) });
+    if (error) {
+      console.error("reporting_project_percentiles_failed", { elapsedMs: Date.now() - started, code: error.code, message: error.message });
+      return { data: new Map<string, ProjectLengthBenchmark>(), error };
+    }
+    console.info("reporting_project_percentiles_completed", { elapsedMs: Date.now() - started, requestedTasks: taskIds.length });
+    return { data: new Map<string, ProjectLengthBenchmark>((data ?? []).flatMap((row: ProjectLengthBenchmarkRow & { task_id: string }) => {
+      const benchmark = projectLengthBenchmark(row);
+      return benchmark ? [[row.task_id, benchmark] as const] : [];
+    })), error: null };
+  } catch (error) {
+    console.error("reporting_project_percentiles_exception", { elapsedMs: Date.now() - started, message: error instanceof Error ? error.message : "Unknown error" });
+    return { data: new Map<string, ProjectLengthBenchmark>(), error };
+  }
 }
 
 export async function loadTimeRows(supabase: SupabaseClient, filters: ReportingFilters) {
