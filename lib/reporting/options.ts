@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export type CustomFieldFilterOption = { id: string; name: string; values: string[] };
 export type StatusFilterOption = { id: string; name: string; color: string | null; resolved: boolean };
 export type CustomFieldOptionsResult = { data: CustomFieldFilterOption[]; error: null } | { data: []; error: { code: string | null; message: string } };
+export type AccessibleProjectFacets = { customStatusIds: Set<string>; baseStatuses: Set<string>; verticalStates: Set<string> };
 
 export async function loadStatusOptions(supabase: SupabaseClient, organizationId?: string): Promise<StatusFilterOption[]> {
   let query = supabase.from("wrike_workflow_statuses").select("wrike_id,title,color,is_unresolved").order("title");
@@ -38,6 +39,25 @@ export async function loadCustomFieldOptionsResult(supabase: SupabaseClient): Pr
     const candidate = error && typeof error === "object" ? error as { code?: string | null; message?: string } : {};
     return { data: [], error: { code: candidate.code ?? null, message: candidate.message ?? "Custom-field filter options could not be loaded." } };
   }
+}
+
+export async function loadAccessibleProjectFacets(supabase: SupabaseClient): Promise<AccessibleProjectFacets> {
+  const facets: AccessibleProjectFacets = { customStatusIds: new Set(), baseStatuses: new Set(), verticalStates: new Set() };
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase.from("wrike_tasks")
+      .select("custom_status_id,status,vertical_state")
+      .eq("is_deleted", false)
+      .range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      if (row.custom_status_id) facets.customStatusIds.add(row.custom_status_id);
+      else if (row.status) facets.baseStatuses.add(row.status);
+      if (row.vertical_state) facets.verticalStates.add(row.vertical_state);
+    }
+    if ((data ?? []).length < pageSize) break;
+  }
+  return facets;
 }
 
 export async function loadReportingOptions(supabase: SupabaseClient, organizationId: string) {

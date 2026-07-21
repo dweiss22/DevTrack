@@ -48,12 +48,23 @@ export type ReportingFilters = z.infer<typeof reportingFiltersSchema>;
 type SearchValues = Record<string, string | string[] | undefined>;
 export function parseReportingFilters(values: SearchValues): ReportingFilters {
   const customFields = Object.fromEntries(Object.entries(values).filter(([key, value]) => key.startsWith("cf_") && typeof value === "string" && value.trim()).map(([key, value]) => [key.slice(3), value as string]));
+  const verticalSelection = typeof values.verticalSelection === "string" ? values.verticalSelection : undefined;
+  const verticalSelectionFilters = verticalSelection?.startsWith("associated:")
+    ? { associatedVertical: verticalSelection.slice("associated:".length), verticalReportingCategory: undefined, verticalState: undefined, unresolvedVerticalOnly: undefined }
+    : verticalSelection?.startsWith("category:")
+      ? { associatedVertical: undefined, verticalReportingCategory: verticalSelection.slice("category:".length), verticalState: undefined, unresolvedVerticalOnly: undefined }
+      : verticalSelection?.startsWith("state:")
+        ? { associatedVertical: undefined, verticalReportingCategory: undefined, verticalState: verticalSelection.slice("state:".length), unresolvedVerticalOnly: undefined }
+        : verticalSelection === "legacy:unresolved"
+          ? { associatedVertical: undefined, verticalReportingCategory: undefined, verticalState: undefined, unresolvedVerticalOnly: true }
+        : {};
   const hoursToMinutes = (value: string | string[] | undefined) => {
     const hours = typeof value === "string" && value.trim() !== "" ? Number(value) : Number.NaN;
     return Number.isFinite(hours) && hours >= 0 ? Math.round(hours * 60) : undefined;
   };
   const normalized = {
     ...values,
+    ...verticalSelectionFilters,
     minMinutes: values.minMinutes ?? hoursToMinutes(values.minHours),
     maxMinutes: values.maxMinutes ?? hoursToMinutes(values.maxHours),
     minPlannedMinutes: values.minPlannedMinutes ?? hoursToMinutes(values.minPlannedHours),
