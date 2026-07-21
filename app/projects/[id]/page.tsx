@@ -2,6 +2,7 @@ import React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { ProjectDescription } from "@/components/project-description";
 import { ProjectPercentileGauge } from "@/components/project-percentile-gauge";
 import { ProjectTimeAnalytics } from "@/components/project-time-analytics";
 import { TaskCustomFieldList, TaskFolderList } from "@/components/task-metadata";
@@ -11,7 +12,7 @@ import { hours } from "@/lib/metrics";
 import { safeProjectsReturnTo } from "@/lib/reporting/dashboard-navigation";
 import { formatCourseLength, formatVerticalMembership, parseCourseLengthMinutes, projectLengthBenchmark, type ProjectLengthBenchmarkRow } from "@/lib/reporting/project-overview";
 import { projectTimeMetrics, type ProjectTimeEntry } from "@/lib/reporting/project-time";
-import { extractFieldYear, projectAssignedIdValues, projectContactValues, projectFieldRole, projectOverviewFieldKeys, type ProjectPersonOption } from "@/lib/reporting/projects";
+import { extractFieldYear, projectFieldRole, projectOverviewContactValues, projectOverviewFieldKeys, type ProjectPersonOption } from "@/lib/reporting/projects";
 import { mergeNormalizedCustomFields, type NormalizedCustomFieldValue } from "@/lib/wrike/custom-field-normalization";
 import type { ResolvedCustomField, ResolvedFolder } from "@/lib/wrike/metadata";
 import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory } from "@/lib/wrike/reference-data";
@@ -88,18 +89,19 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
     {row.custom_fields_sync_state !== "complete" && <p className="notice project-sync-notice" role="status">Some custom-field data is not currently verified. Previously synchronized values are labeled below and have not been replaced with empty data.</p>}
 
     <section className="card project-overview-card" aria-labelledby="project-overview-heading">
-      <div className="section-heading project-overview-heading"><div><p className="eyebrow">OVERVIEW</p><h2 id="project-overview-heading">Project information</h2></div>{row.description && <p className="project-overview-description">{row.description}</p>}</div>
+      <div className="section-heading project-overview-heading"><div><p className="eyebrow">OVERVIEW</p><h2 id="project-overview-heading">Project information</h2></div></div>
+      {row.description && <ProjectDescription description={row.description} />}
       <dl className="project-metadata-grid">
         <MetadataItem label="Status"><StatusBadge name={statusReference.name} id={row.custom_status_id} color={statusReference.color} resolved={statusReference.resolved} /></MetadataItem>
         <MetadataItem label="Percentile" className="project-percentile-item"><ProjectPercentileGauge benchmark={benchmark} /></MetadataItem>
-        <MetadataItem label="Reporting year">{reportingYear ?? fieldValue(fieldByRole.get("reporting"), people)}{reportingYear && fieldByRole.get("reporting")?.conflict && <ConflictBadge />}</MetadataItem>
-        <MetadataItem label="ID Assigned">{assignedIdFieldValue(fieldByRole.get("owner"), people)}</MetadataItem>
+        <MetadataItem label="Reporting year">{reportingYear ?? fieldValue(fieldByRole.get("reporting"))}{reportingYear && fieldByRole.get("reporting")?.conflict && <ConflictBadge />}</MetadataItem>
+        <MetadataItem label="ID Assigned">{contactFieldValue(fieldByRole.get("owner"), people)}</MetadataItem>
         <MetadataItem label="Vertical">{formatVerticalMembership(vertical?.displayValues ?? []) ?? "Not assigned"}{vertical?.conflict && <ConflictBadge />}{row.vertical_state === "synchronization_incomplete" && <MetadataWarning>Previously synchronized</MetadataWarning>}{row.vertical_state === "unrecognized" && <MetadataWarning>Needs review</MetadataWarning>}</MetadataItem>
-        <MetadataItem label="Length">{courseLengthValue(fieldByRole.get("courseLength"), people)}</MetadataItem>
+        <MetadataItem label="Length">{courseLengthValue(fieldByRole.get("courseLength"))}</MetadataItem>
         <MetadataItem label="Assigned in Wrike">{assignees.length ? assignees.map((person, index) => <React.Fragment key={person.wrikeUserId}>{index > 0 && ", "}{person.resolved ? person.fullName : <UnresolvedReferenceLabel id={person.wrikeUserId} type="user" />}</React.Fragment>) : "Unassigned"}</MetadataItem>
-        <MetadataItem label="Authoring Tool">{fieldValue(fieldByRole.get("tool"), people)}</MetadataItem>
-        <MetadataItem label="SME">{fieldValue(fieldByRole.get("sme"), people, true)}</MetadataItem>
-        <MetadataItem label="Legal Reviewer">{fieldValue(fieldByRole.get("legalReviewer"), people, true)}</MetadataItem>
+        <MetadataItem label="Authoring Tool">{fieldValue(fieldByRole.get("tool"))}</MetadataItem>
+        <MetadataItem label="SME">{contactFieldValue(fieldByRole.get("sme"), people)}</MetadataItem>
+        <MetadataItem label="Legal Reviewer">{contactFieldValue(fieldByRole.get("legalReviewer"), people)}</MetadataItem>
       </dl>
       <div className="project-time-summary-heading"><p className="eyebrow">TIME SUMMARY</p><h3>Recorded effort</h3></div>
       <section className="project-time-metrics" aria-label="Project time summary">
@@ -132,21 +134,21 @@ function MetadataItem({ label, children, className = "" }: { label: string; chil
 function ConflictBadge() { return <span className="metadata-warning">Conflicting sources</span>; }
 function MetadataWarning({ children }: { children: React.ReactNode }) { return <span className="metadata-warning">{children}</span>; }
 
-function fieldValue(field: NormalizedCustomFieldValue | undefined, people: ProjectPersonOption[], contact = false): React.ReactNode {
+function fieldValue(field: NormalizedCustomFieldValue | undefined): React.ReactNode {
   if (!field?.displayValues.length) return "Not available";
-  const values = contact ? projectContactValues(field.displayValues, people) : field.displayValues.map((value) => ({ id: value, label: value, resolved: true }));
+  const values = field.displayValues.map((value) => ({ id: value, label: value, resolved: true }));
   return <>{values.map((value, index) => <React.Fragment key={`${field.normalizedKey}-${value.id}`}>{index > 0 && ", "}{value.resolved ? value.label : <UnresolvedReferenceLabel id={value.id} type="user" label="Unresolved user" />}</React.Fragment>)}{field.conflict && <ConflictBadge />}</>;
 }
 
-function assignedIdFieldValue(field: NormalizedCustomFieldValue | undefined, people: ProjectPersonOption[]) {
+function contactFieldValue(field: NormalizedCustomFieldValue | undefined, people: ProjectPersonOption[]) {
   if (!field?.displayValues.length) return "Not available";
-  const values = projectAssignedIdValues(field.displayValues, people);
-  return <>{values.map((value, index) => <React.Fragment key={`${field.normalizedKey}-${value.id}`}>{index > 0 && ", "}{value.resolved ? value.label : <UnresolvedReferenceLabel id={value.id} type="user" label="Unresolved user" />}</React.Fragment>)}{field.conflict && <ConflictBadge />}</>;
+  const values = projectOverviewContactValues(field.displayValues, people);
+  return <>{values.map((value, index) => <React.Fragment key={`${field.normalizedKey}-${value.id}`}>{index > 0 && ", "}{value.resolved ? value.label : <UnresolvedReferenceLabel id={value.referenceId ?? value.id} type="user" label={value.label} showId={value.referenceId != null} />}</React.Fragment>)}{field.conflict && <ConflictBadge />}</>;
 }
 
-function courseLengthValue(field: NormalizedCustomFieldValue | undefined, people: ProjectPersonOption[]) {
+function courseLengthValue(field: NormalizedCustomFieldValue | undefined) {
   const formatted = formatCourseLength(parseCourseLengthMinutes(field?.displayValues));
-  if (!formatted) return fieldValue(field, people);
+  if (!formatted) return fieldValue(field);
   return <>{formatted}{field?.conflict && <ConflictBadge />}</>;
 }
 

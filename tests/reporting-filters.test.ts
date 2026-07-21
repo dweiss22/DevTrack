@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filtersForRpc, parseReportingFilters } from "@/lib/reporting/filters";
+import { filtersForRpc, parseProjectReportingFilters, parseReportingFilters } from "@/lib/reporting/filters";
 
 describe("reporting filters", () => {
   it("normalizes repeated values, pagination, and custom fields", () => {
@@ -17,5 +17,11 @@ describe("reporting filters", () => {
     expect(parseReportingFilters({ workflowIds: "IEACHQK7K4BHMLHM", reportingYear: "2026", dashboardClassification: "active", verticalReportingCategory: "Cross Vertical", associatedVertical: "EMS1", verticalState: "unrecognized", unresolvedVerticalOnly: "true" })).toMatchObject({
       workflowIds: ["IEACHQK7K4BHMLHM"], reportingYear: 2026, dashboardClassification: "active", verticalReportingCategory: "Cross Vertical", associatedVertical: "EMS1", verticalState: "unrecognized", unresolvedVerticalOnly: true
     });
+  });
+  it("uses the Projects-only row default and preserves repeated Vertical selections", () => {
+    const filters = parseProjectReportingFilters({ verticalSelections: ["associated:P1A", "state:missing"] });
+    expect(filters).toMatchObject({ pageSize: 100, verticalSelections: ["associated:P1A", "state:missing"] });
+    expect(filtersForRpc(filters)).toMatchObject({ verticalSelections: ["associated:P1A", "state:missing"] });
+    expect(parseProjectReportingFilters({ verticalSelections: "invalid-token" }).pageSize).toBe(100);
   });
 });

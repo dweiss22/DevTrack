@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { filtersForRpc, type ReportingFilters } from "@/lib/reporting/filters";
 import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory, type ResolvedTaskStatus, type ResolvedTimelogCategory, type ResolvedWrikeUser } from "@/lib/wrike/reference-data";
 import type { VerticalState } from "@/lib/wrike/vertical-normalization";
+import { projectLengthBenchmark, type ProjectLengthBenchmark, type ProjectLengthBenchmarkRow } from "@/lib/reporting/project-overview";
 
 export type ReportingTaskRow = {
   task_id: string; title: string; status: string; status_name: string; status_reference: ResolvedTaskStatus; custom_status_id: string | null; responsible_wrike_ids: string[]; responsible_users: ResolvedWrikeUser[]; due_date: string | null; completed_at: string | null;
@@ -38,6 +39,16 @@ export async function loadTaskRows(supabase: SupabaseClient, filters: ReportingF
     });
     return { ...row, vertical_state: verticalStateByTask.get(row.task_id), locations, status_name: status_reference.name, status_reference, responsible_wrike_ids, responsible_users, assignees: responsible_users.map((user) => ({ id: user.wrikeUserId, name: user.fullName })) };
   });
+}
+
+export async function loadProjectLengthPercentiles(supabase: SupabaseClient, taskIds: readonly string[]): Promise<Map<string, ProjectLengthBenchmark>> {
+  if (!taskIds.length) return new Map<string, ProjectLengthBenchmark>();
+  const { data, error } = await supabase.rpc("reporting_project_length_percentiles", { target_task_ids: taskIds.slice(0, 200) });
+  if (error) throw error;
+  return new Map<string, ProjectLengthBenchmark>((data ?? []).flatMap((row: ProjectLengthBenchmarkRow & { task_id: string }) => {
+    const benchmark = projectLengthBenchmark(row);
+    return benchmark ? [[row.task_id, benchmark] as const] : [];
+  }));
 }
 
 export async function loadTimeRows(supabase: SupabaseClient, filters: ReportingFilters) {

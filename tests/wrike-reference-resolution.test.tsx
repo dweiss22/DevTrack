@@ -40,6 +40,11 @@ describe("central Wrike reference resolution", () => {
     expect(markup).toContain("This Wrike user could not be identified");
     expect(markup).toContain('aria-label="UNKNOWN1.');
     expect(renderToStaticMarkup(<StatusBadge name="UNKNOWN1" id="UNKNOWN1" resolved={false} />)).toContain("unresolved-reference");
+    const nameOnly = renderToStaticMarkup(<UnresolvedReferenceLabel id="Christopher Baldini" type="user" label="Christopher Baldini" showId={false} />);
+    expect(nameOnly).toContain("Christopher Baldini");
+    expect(nameOnly).toContain("unresolved-reference");
+    expect(nameOnly).not.toContain("Wrike ID Christopher Baldini");
+    expect(nameOnly).not.toContain("Wrike ID: Christopher Baldini");
   });
 
   it("preserves historical people and refreshes only missing, unresolved, or older-than-24-hour records", () => {

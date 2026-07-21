@@ -24,6 +24,7 @@ const ignoredFolderReferencesMigration = fs.readFileSync(path.join(process.cwd()
 const reportingFilterOptionsPerformanceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200009_reporting_filter_options_performance.sql"), "utf8");
 const verticalCompletenessMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210001_vertical_completeness_and_repair.sql"), "utf8");
 const projectLengthPercentileMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210003_project_length_percentile.sql"), "utf8");
+const projectsListExperienceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210004_projects_list_experience.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -235,5 +236,15 @@ describe("reporting migration contract", () => {
     expect(projectLengthPercentileMigration).toContain("not entry.is_deleted");
     expect(projectLengthPercentileMigration).toContain("task.custom_fields_sync_state='complete'");
     expect(projectLengthPercentileMigration).toContain("wrike_course_length_value_minutes");
+  });
+  it("batches Projects percentiles and restores OR-based Vertical selection matching", () => {
+    expect(projectsListExperienceMigration).toContain("reporting_project_length_percentiles(target_task_ids uuid[])");
+    expect(projectsListExperienceMigration).toContain("target_task_ids[1:200]");
+    expect(projectsListExperienceMigration).toContain("security invoker");
+    expect(projectsListExperienceMigration).toContain("reporting_accessible_task_ids()");
+    expect(projectsListExperienceMigration).toContain("can_access_wrike_time_entry(entry.id)");
+    expect(projectsListExperienceMigration).toContain("rank() over (partition by length_minutes order by minutes)-1");
+    expect(projectsListExperienceMigration).toContain("jsonb_array_elements_text(filters->'verticalSelections')");
+    expect(projectsListExperienceMigration).toContain("matches_reporting_vertical_filters(filtered.task_id,filters)");
   });
 });

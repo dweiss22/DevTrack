@@ -1,0 +1,69 @@
+import fs from "node:fs";
+import path from "node:path";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
+import { DevTrackBrand } from "@/components/devtrack-brand";
+import { ProjectPercentileRing } from "@/components/project-percentile-ring";
+import { ProjectsFilters } from "@/components/projects-filters";
+import { loadProjectLengthPercentiles } from "@/lib/reporting/data";
+import { parseProjectReportingFilters } from "@/lib/reporting/filters";
+
+const customFields = [
+  { id: "F1", name: "Vertical", values: ["P1A", "EMS1"] },
+  { id: "F2", name: "ID Assigned", values: ["Katie Willis"] }
+];
+const facets = { customStatusIds: new Set<string>(), baseStatuses: new Set<string>(), verticalStates: new Set(["cross_vertical", "missing", "unrecognized", "synchronization_incomplete"]) };
+
+describe("Projects list redesign", () => {
+  it("updates the shared brand and gives Projects a 100-row default", () => {
+    expect(renderToStaticMarkup(<DevTrackBrand />)).toContain("Development Analysis");
+    expect(parseProjectReportingFilters({}).pageSize).toBe(100);
+    expect(parseProjectReportingFilters({ pageSize: "25" }).pageSize).toBe(25);
+  });
+
+  it("renders a checkbox Vertical multi-select without auto-submitting filter changes", () => {
+    const filters = parseProjectReportingFilters({ verticalSelections: ["associated:P1A", "state:missing"] });
+    const markup = renderToStaticMarkup(<ProjectsFilters filters={filters} statuses={[]} customFields={customFields} people={[]} facets={facets} />);
+    expect(markup.match(/name="verticalSelections"/g)).toHaveLength(12);
+    expect(markup).toMatch(/name="verticalSelections" checked="" value="associated:P1A"/);
+    expect(markup).toMatch(/name="verticalSelections" checked="" value="state:missing"/);
+    expect(markup).toContain("2 selected");
+    expect(markup).toContain("Vertical value needs review");
+    expect(markup).toContain("Wellness");
+    const filterSource = fs.readFileSync(path.join(process.cwd(), "components/projects-filters.tsx"), "utf8");
+    const toolbarSource = fs.readFileSync(path.join(process.cwd(), "components/projects-list-toolbar.tsx"), "utf8");
+    expect(filterSource).not.toContain("AutoSubmitSelect");
+    expect(toolbarSource).toContain("AutoSubmitSelect");
+  });
+
+  it("uses the exact six-column table and a formal route loading state", () => {
+    const page = fs.readFileSync(path.join(process.cwd(), "app/projects/page.tsx"), "utf8");
+    const loading = fs.readFileSync(path.join(process.cwd(), "app/projects/loading.tsx"), "utf8");
+    expect(page).toContain("<th>Project name</th><th>Status</th><th>Vertical</th><th>ID Assigned</th><th>Folders</th><th>Development percentile</th>");
+    for (const removed of ["Vertical Reporting Category", "<th>Assignees</th>", "<th>Due</th>", "<th>Planned</th>", "<th>Last updated</th>"]) expect(page).not.toContain(removed);
+    expect(loading).toContain('aria-busy="true"');
+    expect(loading).toContain("projects-loading-table");
+    expect(loading).toContain("Development percentile");
+  });
+
+  it("renders an accessible compact percentile ring and an honest empty state", () => {
+    const ring = renderToStaticMarkup(<ProjectPercentileRing benchmark={{ lengthMinutes: 90, targetMinutes: 120, cohortAverageMinutes: 100, cohortSize: 10, percentile: 62 }} />);
+    expect(ring).toContain('role="meter"');
+    expect(ring).toContain('aria-valuenow="62"');
+    expect(ring).toContain("62nd");
+    expect(ring).toContain("among 10 visible courses");
+    const empty = renderToStaticMarkup(<ProjectPercentileRing benchmark={null} />);
+    expect(empty).not.toContain("aria-valuenow");
+    expect(empty).toContain("Not enough comparable data");
+  });
+
+  it("loads percentiles for 100 displayed projects with one batch RPC", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [{ task_id: "T1", length_minutes: 90, target_minutes: 120, cohort_average_minutes: 100, cohort_size: 5, lower_count: 3, tie_count: 1 }], error: null });
+    const ids = Array.from({ length: 100 }, (_, index) => `T${index + 1}`);
+    const result = await loadProjectLengthPercentiles({ rpc } as never, ids);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith("reporting_project_length_percentiles", { target_task_ids: ids });
+    expect(result.get("T1")?.percentile).toBe(70);
+  });
+});

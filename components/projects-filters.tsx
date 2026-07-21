@@ -1,8 +1,8 @@
 import React from "react";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
-import { AutoSubmitSelect } from "@/components/auto-submit-select";
 import { FilterDisclosure } from "@/components/filter-disclosure";
+import { VerticalMultiSelect, type VerticalMultiSelectOption } from "@/components/vertical-multi-select";
 import { filtersToQuery, type ReportingFilters } from "@/lib/reporting/filters";
 import type { AccessibleProjectFacets, CustomFieldFilterOption, StatusFilterOption } from "@/lib/reporting/options";
 import {
@@ -30,18 +30,27 @@ export function ProjectsFilters({ filters, statuses, customFields, people, facet
   const years = reportingYearOptions(fields.reporting);
   const ownerOptions = projectPersonOptions(fields.owner, people);
   const smeOptions = projectPersonOptions(fields.sme, people);
-  const verticalOptions = APPROVED_VERTICALS.filter((value) => fields.vertical?.values.includes(value));
-  const selectedVertical = filters.associatedVertical ? `associated:${filters.associatedVertical}`
+  const verticalOptions = [...APPROVED_VERTICALS];
+  const legacySelectedVertical = filters.associatedVertical ? `associated:${filters.associatedVertical}`
       : filters.verticalReportingCategory ? `category:${filters.verticalReportingCategory}`
       : filters.verticalState ? `state:${filters.verticalState}`
         : filters.unresolvedVerticalOnly ? "legacy:unresolved" : "";
-  const advancedCount = [fields.courseType && filters.customFields?.[fields.courseType.id], selectedVertical, fields.sme && filters.customFields?.[fields.sme.id], fields.courseLength && filters.customFields?.[fields.courseLength.id]].filter(Boolean).length;
-  const visibleNames = new Set(["q", "statuses", "reportingYear", "associatedVertical", "verticalReportingCategory", "verticalState", "unresolvedVerticalOnly", "verticalSelection"]);
+  const selectedVerticals = filters.verticalSelections?.length ? filters.verticalSelections : legacySelectedVertical ? [legacySelectedVertical] : [];
+  const verticalMultiOptions: VerticalMultiSelectOption[] = [
+    ...verticalOptions.map((value) => ({ value: `associated:${value}`, label: value })),
+    { value: "state:cross_vertical", label: "Cross-Vertical" },
+    { value: "state:missing", label: "Vertical not assigned" },
+    { value: "state:unrecognized", label: "Vertical value needs review" },
+    { value: "state:synchronization_incomplete", label: "Vertical data not fully synchronized" }
+  ];
+  for (const selected of selectedVerticals) if (!verticalMultiOptions.some((option) => option.value === selected)) verticalMultiOptions.push({ value: selected, label: verticalSelectionLabel(selected) });
+  const advancedCount = [fields.courseType && filters.customFields?.[fields.courseType.id], ...selectedVerticals, fields.sme && filters.customFields?.[fields.sme.id], fields.courseLength && filters.customFields?.[fields.courseLength.id]].filter(Boolean).length;
+  const visibleNames = new Set(["q", "statuses", "reportingYear", "associatedVertical", "verticalReportingCategory", "verticalState", "unresolvedVerticalOnly", "verticalSelection", "verticalSelections"]);
   for (const field of [fields.owner, fields.tool, fields.courseType, fields.sme, fields.courseLength]) if (field) visibleNames.add(`cf_${field.id}`);
   const preserved = [...new URLSearchParams(filtersToQuery({ ...filters, page: 1 })).entries()].filter(([name]) => !visibleNames.has(name) && name !== "page");
   const statusValue = filters.statuses?.[0] ?? "";
   const currentStatus = statuses.find((status) => status.id === statusValue);
-  const active = activeProjectFilters(filters, fields, people, statuses, selectedVertical, returnTo);
+  const active = activeProjectFilters(filters, fields, people, statuses, selectedVerticals, returnTo);
 
   return <section className="card projects-filter-card" aria-labelledby="project-search-heading">
     <h2 id="project-search-heading" className="sr-only">Search and filter projects</h2>
@@ -79,18 +88,7 @@ export function ProjectsFilters({ filters, statuses, customFields, people, facet
             <option value="">{fields.courseType ? "All course types" : "No synchronized Course Type field"}</option>
             {fields.courseType?.values.map((value) => <option value={value} key={value}>{value}</option>)}
           </SelectFilter>
-          <SelectFilter label="Vertical" name="verticalSelection" value={selectedVertical} disabled={!fields.vertical && !selectedVertical && !facets.verticalStates.size}>
-            <option value="">All Verticals</option>
-            {filters.associatedVertical && !verticalOptions.includes(filters.associatedVertical) && <option value={`associated:${filters.associatedVertical}`}>{filters.associatedVertical}</option>}
-            {filters.verticalReportingCategory && <option value={`category:${filters.verticalReportingCategory}`}>{filters.verticalReportingCategory === "Cross Vertical" ? "Cross-Vertical" : filters.verticalReportingCategory}</option>}
-            {filters.verticalState && !facets.verticalStates.has(filters.verticalState) && <option value={`state:${filters.verticalState}`}>{verticalStateLabel(filters.verticalState)}</option>}
-            {filters.unresolvedVerticalOnly && <option value="legacy:unresolved">Any Vertical issue</option>}
-            {verticalOptions.map((value) => <option value={`associated:${value}`} key={value}>{value}</option>)}
-            {facets.verticalStates.has("cross_vertical") && <option value="state:cross_vertical">Cross-Vertical</option>}
-            {facets.verticalStates.has("missing") && <option value="state:missing">Vertical not assigned</option>}
-            {facets.verticalStates.has("unrecognized") && <option value="state:unrecognized">Vertical value needs review</option>}
-            {facets.verticalStates.has("synchronization_incomplete") && <option value="state:synchronization_incomplete">Vertical data not fully synchronized</option>}
-          </SelectFilter>
+          <VerticalMultiSelect options={verticalMultiOptions} selected={selectedVerticals} disabled={!fields.vertical && !selectedVerticals.length && !facets.verticalStates.size} />
           <SelectFilter label="SME" name={fields.sme ? `cf_${fields.sme.id}` : "smeUnavailable"} value={fields.sme ? filters.customFields?.[fields.sme.id] ?? "" : ""} disabled={!fields.sme}>
             <option value="">{fields.sme ? "All SMEs" : "No synchronized SME field"}</option>
             {smeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
@@ -110,10 +108,10 @@ export function ProjectsFilters({ filters, statuses, customFields, people, facet
 }
 
 function SelectFilter({ label, name, value, disabled, children }: { label: string; name: string; value: string; disabled?: boolean; children: React.ReactNode }) {
-  return <label>{label}<AutoSubmitSelect name={name} value={value} disabled={disabled}>{children}</AutoSubmitSelect></label>;
+  return <label>{label}<select name={name} defaultValue={value} disabled={disabled}>{children}</select></label>;
 }
 
-function activeProjectFilters(filters: ReportingFilters, fields: ReturnType<typeof projectFilterFields>, people: ProjectPersonOption[], statuses: StatusFilterOption[], selectedVertical: string, returnTo?: string) {
+function activeProjectFilters(filters: ReportingFilters, fields: ReturnType<typeof projectFilterFields>, people: ProjectPersonOption[], statuses: StatusFilterOption[], selectedVerticals: readonly string[], returnTo?: string) {
   const items: { key: string; label: string; href: string }[] = [];
   const add = (key: string, label: string, changes: Record<string, string | null>) => items.push({ key, label, href: projectFilterHref(filters, changes, returnTo) });
   if (filters.q) add("q", `Search: ${filters.q}`, { q: null });
@@ -126,11 +124,21 @@ function activeProjectFilters(filters: ReportingFilters, fields: ReturnType<type
     const value = field ? filters.customFields?.[field.id] : undefined;
     if (field && value) add(key, `${prefix}: ${contact ? projectPersonLabel(value, people) : value}`, { [`cf_${field.id}`]: null });
   }
-  if (selectedVertical) {
-    const label = filters.associatedVertical ?? filters.verticalReportingCategory ?? (filters.verticalState ? verticalStateLabel(filters.verticalState) : "Unresolved Vertical");
-    items.push({ key: "vertical", label: `Vertical: ${label}`, href: projectFilterHref(filters, { associatedVertical: null, verticalReportingCategory: null, verticalState: null, unresolvedVerticalOnly: null }, returnTo) });
+  for (const selected of selectedVerticals) {
+    const remaining = selectedVerticals.filter((value) => value !== selected);
+    const changes = filters.verticalSelections?.length
+      ? { verticalSelections: remaining.length ? remaining : null }
+      : { associatedVertical: null, verticalReportingCategory: null, verticalState: null, unresolvedVerticalOnly: null };
+    items.push({ key: `vertical-${selected}`, label: `Vertical: ${verticalSelectionLabel(selected)}`, href: projectFilterHref(filters, changes, returnTo) });
   }
   if (filters.dashboardClassification) add("classification", `Dashboard: ${filters.dashboardClassification.replaceAll("_", " ")}`, { dashboardClassification: null });
   if (filters.dashboardField && filters.dashboardValue) add("dashboard-category", `${filters.dashboardField}: ${filters.dashboardValue}`, { dashboardField: null, dashboardValue: null });
   return items;
+}
+
+function verticalSelectionLabel(value: string) {
+  if (value.startsWith("associated:")) return value.slice("associated:".length);
+  if (value.startsWith("category:")) return value.slice("category:".length).replace("Cross Vertical", "Cross-Vertical");
+  if (value.startsWith("state:")) return verticalStateLabel(value.slice("state:".length) as Parameters<typeof verticalStateLabel>[0]);
+  return "Any Vertical issue";
 }

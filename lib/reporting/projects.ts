@@ -90,19 +90,24 @@ export function projectContactValues(values: readonly string[], people: readonly
 
 const WRIKE_USER_ID_PATTERN = /^KU[A-Z0-9]+$/i;
 
-export function projectAssignedIdValues(values: readonly string[], people: readonly ProjectPersonOption[]) {
+export function projectOverviewContactValues(values: readonly string[], people: readonly ProjectPersonOption[]) {
   return values.map((sourceValue) => {
     const value = sourceValue.trim();
     const personById = people.find((person) => person.wrikeId.toLocaleLowerCase() === value.toLocaleLowerCase());
-    if (personById) return { id: personById.wrikeId, label: personById.resolved ? personById.name : `Unresolved Wrike user ${personById.wrikeId}`, resolved: personById.resolved };
-    const personByName = people.find((person) => person.resolved && person.name.trim().toLocaleLowerCase() === value.toLocaleLowerCase());
-    if (personByName) return { id: value, label: personByName.name, resolved: true };
-    if (WRIKE_USER_ID_PATTERN.test(value)) return { id: value, label: `Unresolved Wrike user ${value}`, resolved: false };
-    return { id: value, label: value, resolved: true };
+    if (personById) {
+      const readableName = personById.name.trim() && personById.name.toLocaleLowerCase() !== personById.wrikeId.toLocaleLowerCase()
+        ? personById.name
+        : "Unresolved user";
+      return { id: personById.wrikeId, label: readableName, resolved: personById.resolved, referenceId: personById.resolved ? null : personById.wrikeId };
+    }
+    const personByName = people.find((person) => person.name.trim().toLocaleLowerCase() === value.toLocaleLowerCase());
+    if (personByName) return { id: value, label: personByName.name, resolved: personByName.resolved, referenceId: personByName.resolved ? null : personByName.wrikeId };
+    if (WRIKE_USER_ID_PATTERN.test(value)) return { id: value, label: "Unresolved user", resolved: false, referenceId: value };
+    return { id: value, label: value, resolved: false, referenceId: null };
   });
 }
 
-export function projectFilterHref(filters: ReportingFilters, changes: Record<string, string | number | boolean | null | undefined>, returnTo?: string) {
+export function projectFilterHref(filters: ReportingFilters, changes: Record<string, string | number | boolean | readonly string[] | null | undefined>, returnTo?: string) {
   const target: Record<string, unknown> = { ...filters, page: 1, customFields: { ...(filters.customFields ?? {}) } };
   for (const [key, value] of Object.entries(changes)) {
     if (key.startsWith("cf_")) {

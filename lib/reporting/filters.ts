@@ -7,6 +7,13 @@ const optionalDate = z.preprocess(emptyToUndefined, z.string().regex(/^\d{4}-\d{
 const optionalInteger = z.preprocess(emptyToUndefined, z.coerce.number().int().nonnegative().optional());
 const optionalEnum = <T extends [string, ...string[]]>(values: T) => z.preprocess(emptyToUndefined, z.enum(values).optional());
 const optionalBoolean = z.preprocess((value) => value === "true" || value === true ? true : undefined, z.boolean().optional());
+const verticalSelectionTokens: [string, ...string[]] = [
+  `associated:${APPROVED_VERTICALS[0]}`,
+  ...APPROVED_VERTICALS.slice(1).map((value) => `associated:${value}`),
+  ...VERTICAL_REPORTING_FILTER_OPTIONS.map((value) => `category:${value}`),
+  ...VERTICAL_STATE_FILTER_OPTIONS.map((value) => `state:${value}`),
+  "legacy:unresolved"
+];
 
 export const reportingFiltersSchema = z.object({
   q: z.preprocess(emptyToUndefined, z.string().trim().max(200).optional()),
@@ -37,6 +44,7 @@ export const reportingFiltersSchema = z.object({
   associatedVertical: optionalEnum([...APPROVED_VERTICALS]),
   verticalState: optionalEnum([...VERTICAL_STATE_FILTER_OPTIONS]),
   unresolvedVerticalOnly: optionalBoolean,
+  verticalSelections: stringArray.pipe(z.array(z.enum(verticalSelectionTokens)).max(25)).optional(),
   groupCustomFieldId: z.preprocess(emptyToUndefined, z.string().uuid().optional()),
   sort: z.enum(["updated", "title", "due", "actual"]).default("updated"),
   page: z.coerce.number().int().min(1).default(1),
@@ -73,6 +81,12 @@ export function parseReportingFilters(values: SearchValues): ReportingFilters {
   };
   const parsed = reportingFiltersSchema.safeParse(normalized);
   return parsed.success ? parsed.data : reportingFiltersSchema.parse({});
+}
+
+export function parseProjectReportingFilters(values: SearchValues): ReportingFilters {
+  const hasExplicitPageSize = values.pageSize != null && values.pageSize !== "";
+  const parsed = parseReportingFilters(hasExplicitPageSize ? values : { ...values, pageSize: "100" });
+  return hasExplicitPageSize ? parsed : { ...parsed, pageSize: 100 };
 }
 
 export function filtersForRpc(filters: ReportingFilters) {

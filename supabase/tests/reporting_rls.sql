@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(15);
+select plan(16);
 
 insert into auth.users(id,email) values
   ('00000000-0000-0000-0000-000000000011','admin@example.test'),
@@ -121,11 +121,26 @@ insert into public.wrike_time_entries(id,organization_id,wrike_id,task_id,task_w
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000011',true);
 select results_eq(
-  $$select cohort_size,target_minutes,cohort_average_minutes from public.reporting_project_length_percentile('00000000-0000-0000-0000-000000000041')$$,
+  $$select cohort_size,target_minutes,cohort_average_minutes from public.reporting_project_length_percentiles(array['00000000-0000-0000-0000-000000000041'::uuid])$$,
   $$values (5::bigint,90::bigint,90.00::numeric)$$,
-  'same-length benchmark uses five visible organization courses and valid visible time'
+  'batch same-length benchmark uses five visible organization courses and valid visible time'
 );
-select is((select count(*) from public.reporting_project_length_percentile('00000000-0000-0000-0000-000000000042')),0::bigint,'cross-organization benchmark targets remain hidden');
+select is((select count(*) from public.reporting_project_length_percentiles(array['00000000-0000-0000-0000-000000000042'::uuid])),0::bigint,'cross-organization batch benchmark targets remain hidden');
+
+reset role;
+insert into public.wrike_normalized_custom_fields(id,organization_id,normalized_key,title) values
+  ('00000000-0000-0000-0000-000000000095','00000000-0000-0000-0000-000000000021','vertical','Vertical');
+insert into public.wrike_task_normalized_custom_field_values(task_id,normalized_field_id,display_values,source_wrike_field_ids,source_titles,source_values) values
+  ('00000000-0000-0000-0000-000000000041','00000000-0000-0000-0000-000000000095',array['P1A'],array['V1'],array['Vertical'],'[]'::jsonb),
+  ('00000000-0000-0000-0000-000000000043','00000000-0000-0000-0000-000000000095',array['EMS1'],array['V1'],array['Vertical'],'[]'::jsonb);
+update public.wrike_tasks set vertical_state='missing' where id='00000000-0000-0000-0000-000000000044';
+set local role authenticated;
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000011',true);
+select results_eq(
+  $$select id from public.wrike_tasks where id in ('00000000-0000-0000-0000-000000000041','00000000-0000-0000-0000-000000000043','00000000-0000-0000-0000-000000000044') and public.matches_reporting_vertical_filters(id,'{"verticalSelections":["associated:P1A","state:missing"]}'::jsonb) order by id$$,
+  $$values ('00000000-0000-0000-0000-000000000041'::uuid), ('00000000-0000-0000-0000-000000000044'::uuid)$$,
+  'mixed membership and state Vertical selections use OR semantics'
+);
 
 reset role;
 insert into public.reporting_conversations(id,organization_id,user_id,title) values

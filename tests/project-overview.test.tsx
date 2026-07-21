@@ -13,7 +13,7 @@ import {
   percentileRank,
   projectLengthBenchmark
 } from "@/lib/reporting/project-overview";
-import { projectAssignedIdValues, projectContactValues, projectFieldRole, projectOverviewFieldKeys } from "@/lib/reporting/projects";
+import { projectContactValues, projectFieldRole, projectOverviewContactValues, projectOverviewFieldKeys } from "@/lib/reporting/projects";
 import { normalizeWrikeCustomFieldTitle } from "@/lib/wrike/custom-field-normalization";
 import { resolveResponsibleUsers } from "@/lib/wrike/reference-data";
 
@@ -70,20 +70,21 @@ describe("project Overview metadata", () => {
     expect(resolveResponsibleUsers(["KU1", "MISSING"], [{ wrike_id: "KU1", display_name: "Alex Smith", email: null, avatar_url: null, synced_at: "2026-07-21T00:00:00Z" }]).map((person) => [person.fullName, person.resolved])).toEqual([["Alex Smith", true], ["MISSING", false]]);
   });
 
-  it("connects the exact ID Assigned field to readable dropdown values and Wrike users", () => {
+  it("shows Wrike-provided Overview contact names while retaining unresolved identity markers", () => {
     expect(normalizeWrikeCustomFieldTitle("[LCT] ID Assigned (M)")).toMatchObject({ normalizedTitle: "ID Assigned", normalizedKey: "id assigned" });
     expect(projectFieldRole("id assigned")).toBe("owner");
     const people = [
       { wrikeId: "KU1", name: "Alex Smith", resolved: true },
       { wrikeId: "KU2", name: "Unresolved person", resolved: false }
     ];
-    expect(projectAssignedIdValues(["Katie Willis", "KU1", "KU2", "KUMISSING"], people)).toEqual([
-      { id: "Katie Willis", label: "Katie Willis", resolved: true },
-      { id: "KU1", label: "Alex Smith", resolved: true },
-      { id: "KU2", label: "Unresolved Wrike user KU2", resolved: false },
-      { id: "KUMISSING", label: "Unresolved Wrike user KUMISSING", resolved: false }
+    expect(projectOverviewContactValues(["Katie Willis", "KU1", "KU2", "KUMISSING"], people)).toEqual([
+      { id: "Katie Willis", label: "Katie Willis", resolved: false, referenceId: null },
+      { id: "KU1", label: "Alex Smith", resolved: true, referenceId: null },
+      { id: "KU2", label: "Unresolved person", resolved: false, referenceId: "KU2" },
+      { id: "KUMISSING", label: "Unresolved user", resolved: false, referenceId: "KUMISSING" }
     ]);
-    expect(projectAssignedIdValues(["alex smith"], people)[0]).toMatchObject({ label: "Alex Smith", resolved: true });
+    expect(projectOverviewContactValues(["alex smith"], people)[0]).toMatchObject({ label: "Alex Smith", resolved: true });
+    expect(projectOverviewContactValues(["Christopher Baldini"], [])[0]).toEqual({ id: "Christopher Baldini", label: "Christopher Baldini", resolved: false, referenceId: null });
   });
 
   it("uses canonical Vertical membership and an exact Legal Reviewer role", () => {
@@ -108,6 +109,7 @@ describe("project Overview metadata", () => {
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
     for (const removed of ["Course type", "Vertical reporting category", "Planned effort", "Allocated effort", "Assigned users", "Owner / Instructional Designer"]) expect(source).not.toContain(`label=\"${removed}\"`);
     expect(source).not.toContain("fieldByRole.get(\"courseType\")");
+    expect(source).toContain('<MetadataItem label="SME">{contactFieldValue(fieldByRole.get("sme"), people)}</MetadataItem>');
   });
 
   it("unifies time metrics with Overview and collapses secondary project data", () => {
