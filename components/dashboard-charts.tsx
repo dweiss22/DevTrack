@@ -34,14 +34,14 @@ export function DashboardOverviewCharts({ analytics, filters }: { analytics: Das
 export function DashboardTimeChart({ analytics, filters }: { analytics: DashboardTimeAnalytics; filters: ReportingFilters }) {
   const router = useRouter();
   const rows = assignedDashboardRows(analytics.averageTimeByReportingYear, "label");
-  return <div className="dashboard-charts"><ChartCard title="Average Time Spent by Reporting Year" description="Each completed project contributes one total-time value before the yearly average is calculated. Select a point to view its projects." empty={!rows.length} notice={!analytics.timeDataSynchronized ? "Time-entry synchronization has not completed, so averages are not shown as zero." : undefined}>
+  return <div className="dashboard-charts"><ChartCard title="Average Time Spent by Reporting Year" description="Each completed project contributes one total-time value before the yearly average is calculated. Select a point to view its projects." empty={!rows.length}>
     {analytics.timeDataSynchronized && <ResponsiveContainer width="100%" height={300}><LineChart data={rows} margin={{ top: 12, right: 22, left: 8, bottom: 4 }} onClick={(state) => navigateToYear(router.push, filters, state?.activeLabel, "completed")}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" /><YAxis tickFormatter={(minutes) => `${Math.round(Number(minutes) / 60)}h`} /><Tooltip content={<AverageTimeTooltip />} /><Line type="monotone" dataKey="averageMinutes" name="Average hours per project" stroke="#0c8f78" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} /></LineChart></ResponsiveContainer>}
     <AccessibleTable caption="Average project time by reporting year" headers={["Reporting year", "Projects", "Average hours", "Combined hours"]} rows={rows.map((row) => [<DrilldownLink href={yearHref(filters, row.label, "completed")} label={row.label} />, row.projectCount, row.averageMinutes == null ? "Not synchronized" : hours(row.averageMinutes), hours(row.totalMinutes)])} />
   </ChartCard></div>;
 }
 
-function ChartCard({ title, description, empty, notice, children }: { title: string; description: string; empty: boolean; notice?: string; children: React.ReactNode }) {
-  return <article className="card dashboard-chart" aria-labelledby={`${slug(title)}-title`}><div className="chart-heading"><div><h2 id={`${slug(title)}-title`}>{title}</h2><p>{description}</p></div></div>{notice && <p className="chart-notice">{notice}</p>}{empty ? <p className="chart-empty">No assigned project values are available for this chart.</p> : children}</article>;
+function ChartCard({ title, description, empty, children }: { title: string; description: string; empty: boolean; children: React.ReactNode }) {
+  return <article className="card dashboard-chart" aria-labelledby={`${slug(title)}-title`}><div className="chart-heading"><div><h2 id={`${slug(title)}-title`}>{title}</h2><p>{description}</p></div></div>{empty ? <p className="chart-empty">No assigned project values are available for this chart.</p> : children}</article>;
 }
 
 function DonutChart({ title, field, data, filters }: { title: string; field: DashboardField | "verticalReportingCategory"; data: DashboardCategory[]; filters: ReportingFilters }) {
