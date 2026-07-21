@@ -24,6 +24,7 @@ import { markResolvedWrikeReferences, upsertUnresolvedWrikeReferences } from "@/
 import type { WrikeCustomFieldDefinition, WrikeFolderDefinition, WrikeTask, WrikeTimeEntry } from "@/lib/wrike/types";
 
 export const TASK_IMPORT_FOLDER_IDS = SELECTED_WRIKE_FOLDER_IDS;
+export const VERTICAL_COMPLETENESS_MIGRATION = "202607210001_vertical_completeness_and_repair.sql";
 
 export const FOLDER_METADATA_ROOT_ID = "IEACHQK7I46YBWEN";
 export const EXPECTED_LCT_FIELD_ID = "IEACHQK7JUAHNWFH";
@@ -204,6 +205,7 @@ export async function validateBeforeReset<T>(loadAndValidate: () => Promise<T>, 
 
 export async function importConfiguredFolderTasks(organizationId: string) {
   const db = createAdminClient();
+  await requireVerticalCompletenessSchema(db);
   const leaseToken = crypto.randomUUID();
   const startedAt = new Date();
   const tracker: ImportTracker = {
@@ -241,6 +243,23 @@ export async function importConfiguredFolderTasks(organizationId: string) {
     throw tracker.failures.length ? new FolderImportError(message, tracker.failures) : error;
   } finally {
     await db.rpc("release_wrike_sync_lease", { target_organization_id: organizationId, target_token: leaseToken });
+  }
+}
+
+async function requireVerticalCompletenessSchema(db: ReturnType<typeof createAdminClient>) {
+  const [taskSchema, runSchema, repairSchema] = await Promise.all([
+    db.from("wrike_tasks").select("custom_fields_sync_state,custom_fields_verified_at,custom_fields_sync_diagnostics,vertical_state,last_folder_import_run_id").limit(0),
+    db.from("wrike_folder_task_import_runs").select("task_custom_field_diagnostics").limit(0),
+    db.from("wrike_vertical_repair_runs").select("id").limit(0)
+  ]);
+  const error = taskSchema.error ?? runSchema.error ?? repairSchema.error;
+  if (error) throw new WrikeMigrationRequiredError(VERTICAL_COMPLETENESS_MIGRATION, error.message);
+}
+
+export class WrikeMigrationRequiredError extends Error {
+  constructor(public migration: string, databaseMessage?: string) {
+    super(`Associated Vertical database migration required. Apply Supabase migration ${migration}, reload the PostgREST schema cache, and retry the import.${databaseMessage ? ` Database response: ${databaseMessage}` : ""}`);
+    this.name = "WrikeMigrationRequiredError";
   }
 }
 

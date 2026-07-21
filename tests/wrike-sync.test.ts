@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { chooseTimelogDescendantStrategy, deduplicateByWrikeId, folderTasksPath, folderTimelogsPath, mapWithConcurrency, TASK_FIELDS, TASK_IMPORT_FOLDER_IDS, verifyTaskRequestContract } from "@/lib/wrike/folder-task-import";
+import { chooseTimelogDescendantStrategy, deduplicateByWrikeId, folderTasksPath, folderTimelogsPath, mapWithConcurrency, TASK_FIELDS, TASK_IMPORT_FOLDER_IDS, verifyTaskRequestContract, VERTICAL_COMPLETENESS_MIGRATION, WrikeMigrationRequiredError } from "@/lib/wrike/folder-task-import";
 import { OUT_OF_SCOPE_WRIKE_FOLDER_IDS, scopedWrikeFolderIds, SELECTED_WRIKE_FOLDERS, SELECTED_WRIKE_FOLDER_IDS } from "@/lib/wrike/selected-folders";
 import { allocatedMinutes, entryMinutes, plannedMinutes, taskPath } from "@/lib/wrike/sync";
 
 describe("Wrike synchronization contracts", () => {
+  it("reports an actionable schema mismatch before importing", () => {
+    const error = new WrikeMigrationRequiredError(VERTICAL_COMPLETENESS_MIGRATION, "column does not exist");
+    expect(error.message).toContain("202607210001_vertical_completeness_and_repair.sql");
+    expect(error.message).toContain("reload the PostgREST schema cache");
+  });
   it("requests reporting fields, descendants, subtasks, and an incremental overlap boundary", () => {
     const path = taskPath({ id: "scope", label: "Courses", scope_type: "folder", source_ids: ["folder/1"] }, "2026-07-01T00:00:00.000Z");
     expect(path).toContain("/folders/folder%2F1/tasks?");

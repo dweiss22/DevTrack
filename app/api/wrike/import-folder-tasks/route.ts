@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { FolderImportError, importConfiguredFolderTasks } from "@/lib/wrike/folder-task-import";
+import { FolderImportError, importConfiguredFolderTasks, WrikeMigrationRequiredError } from "@/lib/wrike/folder-task-import";
 
 export async function POST() {
   const { profile } = await requireAdmin();
@@ -10,7 +10,8 @@ export async function POST() {
   } catch (error) {
     return NextResponse.json({
       error: error instanceof Error ? error.message : "Folder task and timelog import failed.",
-      folderFailures: error instanceof FolderImportError ? error.folderFailures : []
-    }, { status: 500 });
+      folderFailures: error instanceof FolderImportError ? error.folderFailures : [],
+      migration: error instanceof WrikeMigrationRequiredError ? error.migration : undefined
+    }, { status: error instanceof WrikeMigrationRequiredError ? 503 : 500 });
   }
 }
