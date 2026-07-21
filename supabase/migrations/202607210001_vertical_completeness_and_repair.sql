@@ -32,7 +32,7 @@ create table if not exists public.wrike_vertical_repair_runs (
 alter table public.wrike_vertical_repair_runs enable row level security;
 create policy "vertical repair runs admin read" on public.wrike_vertical_repair_runs for select
   using (organization_id=public.current_organization_id() and exists(
-    select 1 from public.application_users viewer where viewer.auth_user_id=auth.uid() and viewer.role='admin'
+    select 1 from public.application_users viewer where viewer.id=auth.uid() and viewer.role='admin'
   ));
 grant select on public.wrike_vertical_repair_runs to authenticated;
 grant all on public.wrike_vertical_repair_runs to service_role;
@@ -215,7 +215,7 @@ create or replace function public.reporting_vertical_data_quality()
 returns jsonb language plpgsql stable security definer set search_path=public as $$
 declare viewer_organization_id uuid; result jsonb;
 begin
-  select viewer.organization_id into viewer_organization_id from public.application_users viewer where viewer.auth_user_id=auth.uid() and viewer.role='admin';
+  select viewer.organization_id into viewer_organization_id from public.application_users viewer where viewer.id=auth.uid() and viewer.role='admin';
   if viewer_organization_id is null then raise exception 'Administrator access is required' using errcode='42501'; end if;
   with tasks as materialized (
     select task.id,task.wrike_id,task.title,task.vertical_state,task.custom_fields_sync_state,task.custom_fields_sync_diagnostics,task.last_folder_import_run_id,
