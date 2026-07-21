@@ -9,11 +9,13 @@ import { mergeNormalizedCustomFields, type NormalizedCustomFieldValue } from "@/
 import type { ResolvedCustomField, ResolvedFolder } from "@/lib/wrike/metadata";
 import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory } from "@/lib/wrike/reference-data";
 import { safeProjectsReturnTo } from "@/lib/reporting/dashboard-navigation";
+import type { VerticalState } from "@/lib/wrike/vertical-normalization";
 
 type ProjectDetailRow = {
   title: string; status: string; custom_status_id: string | null; responsible_wrike_ids: string[];
   description: string | null; permalink: string | null; due_date: string | null; completed_at: string | null;
   planned_minutes: number | null; allocated_minutes: number | null; raw_data: unknown;
+  vertical_state: VerticalState | null; custom_fields_sync_state: string | null; custom_fields_verified_at: string | null;
   enriched_metadata: { folders?: ResolvedFolder[]; customFields?: ResolvedCustomField[]; customFieldsNormalized?: NormalizedCustomFieldValue[] } | null;
   wrike_time_entries: { id: string; entry_date: string; minutes: number; category: string | null; comment: string | null; user_wrike_id: string | null; wrike_users: { display_name: string; email: string | null } | null }[];
 };
@@ -38,7 +40,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const mergedCustomFields = row.enriched_metadata?.customFieldsNormalized ?? mergeNormalizedCustomFields(customFieldsRaw);
   const canonicalVertical = verticalRows ? {
     normalizedKey: "vertical", normalizedTitle: "Vertical", displayValues: verticalRows.normalized_verticals ?? [], sourceFieldIds: [], sourceTitles: [], sources: [], conflict: false, conflictMetadata: null,
-    verticalNormalization: { originalValue: null, normalizedVerticals: verticalRows.normalized_verticals ?? [], reportingCategory: verticalRows.vertical_reporting_category ?? "Unresolved Vertical", isCrossVertical: verticalRows.vertical_reporting_category === "Cross Vertical", hasUnresolvedVertical: verticalRows.has_unresolved_vertical ?? true, rejectedTokens: verticalRows.unresolved_vertical_tokens ?? [] }
+    verticalNormalization: { originalValue: null, normalizedVerticals: verticalRows.normalized_verticals ?? [], reportingCategory: verticalRows.vertical_reporting_category ?? "Unresolved Vertical", isCrossVertical: verticalRows.vertical_reporting_category === "Cross Vertical", hasUnresolvedVertical: verticalRows.has_unresolved_vertical ?? true, rejectedTokens: verticalRows.unresolved_vertical_tokens ?? [], verticalState: verticalRows.has_unresolved_vertical ? ((verticalRows.unresolved_vertical_tokens ?? []).length ? "unrecognized" : "missing") : (verticalRows.vertical_reporting_category === "Cross Vertical" ? "cross_vertical" : "resolved"), crossVerticalTokens: [] }
   } satisfies NormalizedCustomFieldValue : null;
   const customFields = canonicalVertical ? [...mergedCustomFields.filter((field) => field.normalizedKey !== "vertical"), canonicalVertical] : mergedCustomFields;
   const unresolvedCustomFields = customFieldsRaw.filter((field) => !field.resolved && !field.ignored);
@@ -51,7 +53,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
     <div className="admin-grid">
       <section className="card"><h2>Reporting details</h2><p><strong>Assignees:</strong> {assignees.length ? assignees.map((item, index) => <span key={item.wrikeUserId}>{index > 0 && ", "}{item.resolved ? item.fullName : <UnresolvedReferenceLabel id={item.wrikeUserId} type="user" />}</span>) : "Unassigned"}</p><p><strong>Planned effort:</strong> {row.planned_minutes == null ? "Not available" : `${hours(row.planned_minutes)} hours`}</p><p><strong>Allocated effort:</strong> {row.allocated_minutes == null ? "Not available" : `${hours(row.allocated_minutes)} hours`}</p><p><strong>Completion:</strong> {row.completed_at ? new Date(row.completed_at).toLocaleString() : "Not completed"}</p><p>{row.description || "No project description supplied by Wrike."}</p></section>
       <section className="card"><h2>Wrike folders</h2><TaskFolderList folders={folders} /></section>
-      <section className="card"><h2>Wrike custom fields</h2><TaskCustomFieldList fields={customFields} unresolvedFields={unresolvedCustomFields} /></section>
+      <section className="card"><h2>Wrike custom fields</h2><TaskCustomFieldList fields={customFields} unresolvedFields={unresolvedCustomFields} verticalState={row.vertical_state} showAdminDiagnostics={profile.role === "admin"} /></section>
     </div>
     {profile.role === "admin" && <section className="card"><h2>Administrator: Wrike source metadata</h2><p><strong>Responsible users:</strong> {assignees.length ? assignees.map((item, index) => <span key={item.wrikeUserId}>{index > 0 && ", "}{item.resolved ? item.fullName : <UnresolvedReferenceLabel id={item.wrikeUserId} type="user" />}</span>) : "None"}<br /><strong>Custom status:</strong> <StatusBadge name={statusReference.name} id={row.custom_status_id} color={statusReference.color} resolved={statusReference.resolved} /></p><details><summary>View original Wrike identifiers and payload</summary><p><strong>Responsible IDs:</strong> {(row.responsible_wrike_ids ?? []).join(", ") || "None"}<br /><strong>Custom status ID:</strong> {row.custom_status_id ?? "None"}</p><h3>Resolved and unresolved raw custom fields</h3><pre>{JSON.stringify(customFieldsRaw, null, 2)}</pre><h3>Original task response</h3><pre>{JSON.stringify(row.raw_data, null, 2)}</pre></details></section>}
     <section className="card"><h2>Visible time entries</h2>{row.wrike_time_entries.length ? <table><thead><tr><th>Date</th><th>Person</th><th>Category</th><th>Hours</th><th>Comment</th></tr></thead><tbody>{row.wrike_time_entries.map((entry) => {

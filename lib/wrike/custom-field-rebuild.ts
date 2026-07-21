@@ -7,6 +7,7 @@ import {
 } from "@/lib/wrike/custom-field-persistence";
 import { resolveCustomFieldDisplayValue, type ResolvedCustomField } from "@/lib/wrike/metadata";
 import type { WrikeCustomFieldDefinition, WrikeTask } from "@/lib/wrike/types";
+import { classifyVerticalState } from "@/lib/wrike/task-custom-fields";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -26,9 +27,10 @@ export async function rebuildNormalizedCustomFieldsFromRaw(db: AdminClient, orga
     }
   }
   const selectedTasks = (tasks ?? []).filter((task) => {
-    if (!affectedWrikeFieldId) return true;
     const raw = task.raw_data as WrikeTask | null;
-    return (raw?.customFields ?? []).some((field) => field.id === affectedWrikeFieldId);
+    if (!raw || !Array.isArray(raw.customFields)) return false;
+    if (!affectedWrikeFieldId) return true;
+    return raw.customFields.some((field) => field.id === affectedWrikeFieldId);
   });
   const normalizedSources = (fields ?? []).filter((field) => !field.is_unresolved || mappings.has(field.wrike_id));
   const logicalIdByKey = await persistNormalizedCustomFieldDefinitions(db, organizationId, normalizedSources, rebuiltAt);
@@ -54,8 +56,11 @@ export async function rebuildNormalizedCustomFieldsFromRaw(db: AdminClient, orga
   const result = await persistNormalizedTaskCustomFields(db, logicalIdByKey, taskFields.map((task) => ({ taskId: task.taskId, taskWrikeId: task.taskWrikeId, fields: task.normalized })), rebuiltAt);
   for (const task of taskFields) {
     const enriched = task.enriched && typeof task.enriched === "object" ? task.enriched as Record<string, unknown> : {};
+    const vertical = task.normalized.find((field) => field.normalizedKey === "vertical")?.verticalNormalization;
+    const unresolvedVerticalDefinition = task.fields.some((field) => !field.resolved && field.title.trim().toLocaleLowerCase().includes("vertical"));
     const { error } = await db.from("wrike_tasks").update({
       enriched_metadata: { ...enriched, customFields: task.fields, customFieldsNormalized: task.normalized },
+      vertical_state: classifyVerticalState({ customFieldsSyncState: "complete", vertical, unresolvedCustomFieldDefinitions: unresolvedVerticalDefinition }),
       updated_at: rebuiltAt
     }).eq("id", task.taskId).eq("organization_id", organizationId);
     if (error) throw new Error(`Supabase could not update reprocessed task ${task.taskWrikeId}: ${error.message}`);

@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { TaskCustomFieldList, TaskFolderList } from "@/components/task-metadata";
 import { ReportFilters } from "@/components/report-filters";
+import { normalizeVerticalValue } from "@/lib/wrike/vertical-normalization";
+import type { NormalizedCustomFieldValue } from "@/lib/wrike/custom-field-normalization";
 
 describe("task metadata display", () => {
   it("renders readable Wrike titles instead of resolved IDs", () => {
@@ -21,5 +23,14 @@ describe("task metadata display", () => {
     expect(markup).toContain('name="cf_F1"');
     expect(markup).toContain("Storyline");
     expect(markup).not.toContain("[LCT] Authoring Tool");
+  });
+  it("labels retained Vertical values as previously synchronized and limits original rejected tokens to administrators", () => {
+    const vertical: NormalizedCustomFieldValue = { normalizedKey: "vertical", normalizedTitle: "Vertical", displayValues: ["P1A"], sourceFieldIds: ["V1"], sourceTitles: ["Vertical"], sources: [{ wrikeFieldId: "V1", originalTitle: "Vertical", sourceDesignation: null, rawValue: "P1A, Secret token", displayValue: "P1A, Secret token", displayValues: ["P1A, Secret token"] }], conflict: false, conflictMetadata: null, verticalNormalization: normalizeVerticalValue("P1A, Secret token") };
+    const member = renderToStaticMarkup(<TaskCustomFieldList fields={[vertical]} verticalState="synchronization_incomplete" />);
+    const admin = renderToStaticMarkup(<TaskCustomFieldList fields={[vertical]} verticalState="synchronization_incomplete" showAdminDiagnostics />);
+    expect(member).toContain("Previously synchronized value");
+    expect(member).not.toContain("Secret token");
+    expect(admin).toContain("Original unrecognized Vertical values");
+    expect(admin).toContain("Secret token");
   });
 });

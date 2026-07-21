@@ -18,6 +18,7 @@ import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory, syn
 import { uniqueWrikeIds, type WrikeUnresolvedReferenceInput } from "@/lib/wrike/reference-resolution";
 import { isOutOfScopeWrikeFolder, scopedWrikeFolderIds, SELECTED_WRIKE_FOLDERS, SELECTED_WRIKE_FOLDER_BY_ID, SELECTED_WRIKE_FOLDER_IDS, type SelectedWrikeFolder } from "@/lib/wrike/selected-folders";
 import { WRIKE_TASK_FIELDS } from "@/lib/wrike/task-fields";
+import { classifyVerticalState, customFieldsResponseState, resolveTaskCustomFields, taskDetailsPath, taskNeedsCustomFieldHydration, type TaskCustomFieldObservation } from "@/lib/wrike/task-custom-fields";
 import { allocatedMinutes, plannedMinutes } from "@/lib/wrike/sync";
 import { markResolvedWrikeReferences, upsertUnresolvedWrikeReferences } from "@/lib/wrike/unresolved-references";
 import type { WrikeCustomFieldDefinition, WrikeFolderDefinition, WrikeTask, WrikeTimeEntry } from "@/lib/wrike/types";
@@ -210,7 +211,7 @@ export async function importConfiguredFolderTasks(organizationId: string) {
     timelogRequests: 0, timelogRecords: 0, uniqueTimelogs: 0, duplicateTimelogs: 0,
     foldersProcessed: 0, failures: [], descendantStrategy: "unknown", descendantDiagnostics: {}, taskRequestContract: null,
     workflowRequests: 0, userRequests: 0, categoryRequests: 0, referenceDiagnostics: null, referenceWarningCount: 0,
-    customFieldConflictCount: 0, customFieldNormalizationDiagnostics: {}, unresolvedReferenceCount: 0, referenceResolutionDiagnostics: {}
+    customFieldConflictCount: 0, customFieldNormalizationDiagnostics: {}, customFieldSyncDiagnostics: {}, unresolvedReferenceCount: 0, referenceResolutionDiagnostics: {}
   };
   const { data: claimed, error: leaseError } = await db.rpc("claim_wrike_sync_lease", { target_organization_id: organizationId, target_token: leaseToken, lease_minutes: 30 });
   if (leaseError) throw new Error(`Unable to acquire the import lock: ${leaseError.message}`);
@@ -253,6 +254,7 @@ type ImportTracker = {
   workflowRequests: number; userRequests: number; categoryRequests: number;
   referenceDiagnostics: ReferenceSyncDiagnostics | null; referenceWarningCount: number;
   customFieldConflictCount: number; customFieldNormalizationDiagnostics: Record<string, unknown>;
+  customFieldSyncDiagnostics: Record<string, unknown>;
   unresolvedReferenceCount: number; referenceResolutionDiagnostics: Record<string, unknown>;
 };
 
@@ -294,6 +296,7 @@ function runSummary(tracker: ImportTracker, startedAt: Date, completedAt: Date, 
     reference_warning_count: tracker.referenceWarningCount,
     custom_field_conflict_count: tracker.customFieldConflictCount,
     custom_field_normalization_diagnostics: tracker.customFieldNormalizationDiagnostics,
+    task_custom_field_diagnostics: tracker.customFieldSyncDiagnostics,
     unresolved_reference_count: tracker.unresolvedReferenceCount,
     reference_resolution_diagnostics: tracker.referenceResolutionDiagnostics
   };
@@ -332,7 +335,7 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
       return { accessToken: refreshed.accessToken, apiBaseUrl: refreshed.apiBaseUrl };
     },
     onRequest: ({ path }) => {
-      if (/\/tasks(?:\?|$)/.test(path)) tracker.taskRequests++;
+      if (/\/tasks(?:\/|\?|$)/.test(path)) tracker.taskRequests++;
       if (/\/timelogs(?:\?|$)/.test(path)) tracker.timelogRequests++;
       if (path === "/workflows") tracker.workflowRequests++;
       if (/^\/users\//.test(path)) tracker.userRequests++;
@@ -377,7 +380,49 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
 
   const topLevelTaskRecords = [...taskByFolder.values()].flat();
   const topLevelTimelogRecords = [...timelogByFolder.values()].flat();
-  const tasks = deduplicateByWrikeId(topLevelTaskRecords);
+  const observationsByTaskId = new Map<string, TaskCustomFieldObservation[]>();
+  for (const [sourceFolderId, folderTasks] of taskByFolder) for (const task of folderTasks) {
+    const observation = { task, sourceFolderId };
+    const observations = observationsByTaskId.get(task.id);
+    if (observations) observations.push(observation);
+    else observationsByTaskId.set(task.id, [observation]);
+  }
+  const observedTaskIds = [...observationsByTaskId.keys()];
+  const previousTaskByWrikeId = new Map<string, WrikeTask>();
+  const previousCustomFieldsVerifiedAt = new Map<string, string | null>();
+  for (let offset = 0; offset < observedTaskIds.length; offset += 250) {
+    const { data, error } = await db.from("wrike_tasks").select("wrike_id,raw_data,custom_fields_verified_at").eq("organization_id", organizationId).in("wrike_id", observedTaskIds.slice(offset, offset + 250));
+    if (error) throw new Error(`Supabase could not load prior task payloads: ${error.message}`);
+    for (const task of data ?? []) {
+      if (task.raw_data && typeof task.raw_data === "object") previousTaskByWrikeId.set(task.wrike_id, task.raw_data as WrikeTask);
+      previousCustomFieldsVerifiedAt.set(task.wrike_id, task.custom_fields_verified_at);
+    }
+  }
+  const hydrationIds = observedTaskIds.filter((taskId) => taskNeedsCustomFieldHydration(observationsByTaskId.get(taskId)!));
+  const detailByTaskId = new Map<string, WrikeTask>();
+  const hydrationFailedIds = new Set<string>();
+  for (let offset = 0; offset < hydrationIds.length; offset += 100) {
+    const batch = hydrationIds.slice(offset, offset + 100);
+    try {
+      const response = await client.request<{ data: WrikeTask[] }>(taskDetailsPath(batch));
+      for (const task of response.data) detailByTaskId.set(task.id, task);
+      for (const taskId of batch) if (!detailByTaskId.has(taskId)) hydrationFailedIds.add(taskId);
+    } catch (error) {
+      batch.forEach((taskId) => hydrationFailedIds.add(taskId));
+      logWrikeEvent("warn", "wrike_task_detail_hydration_failed", {
+        taskCount: batch.length,
+        status: error instanceof WrikeApiError ? error.status : null,
+        message: error instanceof Error ? error.message : "Unknown task detail hydration error"
+      });
+    }
+  }
+  const resolvedTasks = observedTaskIds.map((taskId) => resolveTaskCustomFields(
+    observationsByTaskId.get(taskId)!,
+    detailByTaskId.get(taskId),
+    previousTaskByWrikeId.get(taskId)
+  ));
+  const resolutionByTaskId = new Map(resolvedTasks.map((resolved) => [resolved.task.id, resolved]));
+  const tasks = resolvedTasks.map((resolved) => resolved.task);
   const taskById = new Map(tasks.map((task) => [task.id, task]));
   const savedStrategy = session.connection.timelog_descendant_strategy as DescendantStrategy | undefined;
   let descendantEvidenceCount = 0;
@@ -472,6 +517,44 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
   const manualMappings = await loadCustomFieldManualMappings(db, organizationId);
   const enrichmentMappings = new Map([...manualMappings].map(([wrikeId, mapping]) => [wrikeId, { action: mapping.action, normalizedTitle: mapping.normalizedTitle }]));
   const enrichedByTaskId = new Map(tasks.map((task) => [task.id, enrichTaskMetadata(task, metadata.folderDefinitionsById, metadata.customFieldDefinitionsById, enrichmentMappings)]));
+  const verticalStateByTaskId = new Map(tasks.map((task) => {
+    const enriched = enrichedByTaskId.get(task.id)!;
+    const vertical = enriched.customFieldsNormalized.find((field) => field.normalizedKey === "vertical")?.verticalNormalization;
+    const unresolvedDefinitions = enriched.customFields.some((field) => !field.resolved && !field.ignored);
+    return [task.id, classifyVerticalState({
+      customFieldsSyncState: resolutionByTaskId.get(task.id)?.syncState ?? "unknown",
+      vertical,
+      unresolvedCustomFieldDefinitions: unresolvedDefinitions
+    })] as const;
+  }));
+  const initialStates = topLevelTaskRecords.map(customFieldsResponseState);
+  tracker.customFieldSyncDiagnostics = {
+    tasksDiscovered: tasks.length,
+    initialResponses: {
+      present: initialStates.filter((state) => state === "present").length,
+      empty: initialStates.filter((state) => state === "empty").length,
+      omitted: initialStates.filter((state) => state === "omitted").length,
+      invalid: initialStates.filter((state) => state === "invalid").length
+    },
+    tasksRequiringHydration: hydrationIds.length,
+    tasksHydrated: resolvedTasks.filter((task) => task.hydrationSucceeded).length,
+    hydrationFailed: hydrationFailedIds.size,
+    tasksRetainingPreviousCustomFields: resolvedTasks.filter((task) => task.retainedPrevious).length,
+    tasksWithResponseDisagreement: resolvedTasks.filter((task) => task.disagreement).length,
+    genuinelyEmptyCustomFields: resolvedTasks.filter((task) => task.authoritative && task.responseState === "empty").length,
+    verticalStates: Object.fromEntries(["resolved", "cross_vertical", "missing", "unrecognized", "synchronization_incomplete"].map((state) => [state, [...verticalStateByTaskId.values()].filter((value) => value === state).length])),
+    generalNormalizedToCrossVertical: [...enrichedByTaskId.values()].filter((enriched) => enriched.customFieldsNormalized.some((field) => field.normalizedKey === "vertical" && field.verticalNormalization?.crossVerticalTokens.some((token) => token.trim().toLocaleLowerCase() === "general"))).length,
+    examples: resolvedTasks.filter((task) => task.syncState === "incomplete" || task.disagreement).slice(0, 25).map((task) => ({
+      taskId: task.task.id,
+      title: task.task.title,
+      syncState: task.syncState,
+      responseState: task.responseState,
+      hydrationRequired: task.hydrationRequired,
+      retainedPrevious: task.retainedPrevious,
+      sourceFolderIds: task.observations.map((observation) => observation.sourceFolderId)
+    })),
+    examplesTruncated: resolvedTasks.filter((task) => task.syncState === "incomplete" || task.disagreement).length > 25
+  };
 
   const importedAt = new Date().toISOString();
   const parentIdsByFolderId = new Map<string, string[]>();
@@ -600,7 +683,9 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
   if (previousMappingError) throw new Error(`Supabase could not load existing task source folders: ${previousMappingError.message}`);
   for (let offset = 0; offset < tasks.length; offset += 250) {
     const batch = tasks.slice(offset, offset + 250);
-    const rows = batch.map((task) => ({
+    const rows = batch.map((task) => {
+      const resolution = resolutionByTaskId.get(task.id)!;
+      return {
       organization_id: organizationId,
       wrike_id: task.id,
       title: task.title,
@@ -623,10 +708,26 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
       allocated_minutes: allocatedMinutes(task),
       raw_data: task,
       enriched_metadata: enrichedByTaskId.get(task.id),
+      custom_fields_sync_state: resolution.syncState,
+      custom_fields_verified_at: resolution.authoritative ? importedAt : previousCustomFieldsVerifiedAt.get(task.id) ?? null,
+      custom_fields_sync_diagnostics: {
+        runId,
+        responseState: resolution.responseState,
+        authoritative: resolution.authoritative,
+        hydrationRequired: resolution.hydrationRequired,
+        hydrationSucceeded: resolution.hydrationSucceeded,
+        retainedPrevious: resolution.retainedPrevious,
+        disagreement: resolution.disagreement,
+        selectedSource: resolution.hydrationSucceeded ? "task_detail" : resolution.authoritative ? "folder_list" : resolution.retainedPrevious ? "prior" : "incomplete",
+        observations: resolution.observations
+      },
+      vertical_state: verticalStateByTaskId.get(task.id),
+      last_folder_import_run_id: runId,
       is_deleted: false,
       last_seen_at: importedAt,
       updated_at: importedAt
-    }));
+      };
+    });
     const { data, error } = await db.from("wrike_tasks").upsert(rows, { onConflict: "organization_id,wrike_id" }).select("id,wrike_id");
     if (error) throw new Error(`Supabase could not save Wrike tasks: ${error.message}`);
     (data ?? []).forEach((task) => taskIdMap.set(task.wrike_id, task.id));
@@ -635,12 +736,19 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
   const importedTaskIds = [...taskIdMap.values()];
   for (let offset = 0; offset < importedTaskIds.length; offset += 250) {
     const ids = importedTaskIds.slice(offset, offset + 250);
-    const [{ error: locationDeleteError }, { error: customDeleteError }, { error: assigneeDeleteError }] = await Promise.all([
+    const [{ error: locationDeleteError }, { error: assigneeDeleteError }] = await Promise.all([
       db.from("wrike_task_locations").delete().in("task_id", ids),
-      db.from("wrike_task_custom_field_values").delete().in("task_id", ids),
       db.from("wrike_task_assignees").delete().in("task_id", ids)
     ]);
-    if (locationDeleteError || customDeleteError || assigneeDeleteError) throw new Error("Supabase could not reconcile existing task metadata relationships.");
+    if (locationDeleteError || assigneeDeleteError) throw new Error("Supabase could not reconcile existing task metadata relationships.");
+  }
+  const authoritativeTaskIds = tasks.filter((task) => resolutionByTaskId.get(task.id)?.authoritative).flatMap((task) => {
+    const id = taskIdMap.get(task.id);
+    return id ? [id] : [];
+  });
+  for (let offset = 0; offset < authoritativeTaskIds.length; offset += 250) {
+    const { error } = await db.from("wrike_task_custom_field_values").delete().in("task_id", authoritativeTaskIds.slice(offset, offset + 250));
+    if (error) throw new Error("Supabase could not reconcile authoritative task custom fields.");
   }
 
   const referenceUserIdMap = new Map(references.userRows.flatMap((user) => user.id ? [[user.wrike_id, user.id] as const] : []));
@@ -662,7 +770,7 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     if (error) throw new Error(`Supabase could not save task folder locations: ${error.message}`);
   }
 
-  const customValues = tasks.flatMap((task) => (enrichedByTaskId.get(task.id)?.customFields ?? []).flatMap((field) => {
+  const customValues = tasks.filter((task) => resolutionByTaskId.get(task.id)?.authoritative).flatMap((task) => (enrichedByTaskId.get(task.id)?.customFields ?? []).flatMap((field) => {
     const taskId = taskIdMap.get(task.id); const customFieldId = customFieldIdMap.get(field.id);
     if (!taskId || !customFieldId || field.rawValue == null) return [];
     return [{
@@ -681,10 +789,16 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     const { error } = await db.from("wrike_task_custom_field_values").upsert(customValues.slice(offset, offset + 500), { onConflict: "task_id,custom_field_id" });
     if (error) throw new Error(`Supabase could not save readable custom-field values: ${error.message}`);
   }
-  const normalizedResult = await persistNormalizedTaskCustomFields(db, normalizedFieldIdByKey, tasks.flatMap((task) => {
+  const normalizedResult = await persistNormalizedTaskCustomFields(db, normalizedFieldIdByKey, tasks.filter((task) => resolutionByTaskId.get(task.id)?.authoritative).flatMap((task) => {
     const taskId = taskIdMap.get(task.id); const fields = enrichedByTaskId.get(task.id)?.customFieldsNormalized;
     return taskId && fields ? [{ taskId, taskWrikeId: task.id, fields }] : [];
   }), importedAt);
+  const verticalFieldId = normalizedFieldIdByKey.get("vertical");
+  const incompleteTaskIds = tasks.filter((task) => verticalStateByTaskId.get(task.id) === "synchronization_incomplete").flatMap((task) => taskIdMap.get(task.id) ? [taskIdMap.get(task.id)!] : []);
+  if (verticalFieldId) for (let offset = 0; offset < incompleteTaskIds.length; offset += 250) {
+    const { error } = await db.from("wrike_task_normalized_custom_field_values").update({ has_unresolved_vertical: true, updated_at: importedAt }).eq("normalized_field_id", verticalFieldId).in("task_id", incompleteTaskIds.slice(offset, offset + 250));
+    if (error) throw new Error(`Supabase could not project incomplete Vertical states: ${error.message}`);
+  }
   tracker.customFieldConflictCount = normalizedResult.conflictCount;
   tracker.customFieldNormalizationDiagnostics = {
     logicalFieldCount: normalizedFieldIdByKey.size,
@@ -901,6 +1015,7 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
     referenceWarningCount: tracker.referenceWarningCount,
     customFieldConflictCount: tracker.customFieldConflictCount,
     customFieldNormalizationDiagnostics: tracker.customFieldNormalizationDiagnostics,
+    customFieldSyncDiagnostics: tracker.customFieldSyncDiagnostics,
     unresolvedReferenceCount: tracker.unresolvedReferenceCount,
     referenceResolutionDiagnostics: tracker.referenceResolutionDiagnostics
   };

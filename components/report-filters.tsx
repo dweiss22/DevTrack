@@ -33,7 +33,7 @@ export function ReportFilters({ filters, users = [], scopes = [], folders = [], 
     <label>Max planned hours<input type="number" min="0" step="0.25" name="maxPlannedHours" defaultValue={filters.maxPlannedMinutes == null ? "" : filters.maxPlannedMinutes / 60} /></label>
     {!taskOnly && categories.length > 0 && <label>Category<select name="categoryIds" defaultValue={filters.categoryIds?.[0] ?? ""}><option value="">All categories</option>{categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>}
     {verticalMode === "reporting" ? <label>Vertical Reporting Category<select name="verticalReportingCategory" defaultValue={filters.verticalReportingCategory ?? ""}><option value="">All reporting categories</option>{VERTICAL_REPORTING_FILTER_OPTIONS.map((value) => <option value={value} key={value}>{value}</option>)}</select></label> : <label>Associated Vertical<select name="associatedVertical" defaultValue={filters.associatedVertical ?? ""}><option value="">All associated Verticals</option>{APPROVED_VERTICALS.map((value) => <option value={value} key={value}>{value}</option>)}</select></label>}
-    <label>Vertical diagnostics<select name="unresolvedVerticalOnly" defaultValue={filters.unresolvedVerticalOnly ? "true" : ""}><option value="">All records</option><option value="true">Missing or unrecognized Vertical</option></select></label>
+    <label>Vertical state<select name="verticalState" defaultValue={filters.verticalState ?? ""}><option value="">All records</option><option value="resolved">Resolved Vertical</option><option value="cross_vertical">Cross-Vertical</option><option value="missing">Vertical not assigned</option><option value="unrecognized">Vertical value needs review</option><option value="synchronization_incomplete">Vertical data not fully synchronized</option></select></label>
     {customFields.filter((field) => field.name.trim().toLocaleLowerCase() !== "vertical").map((field) => <label key={field.id}>{field.name}<select name={`cf_${field.id}`} defaultValue={filters.customFields?.[field.id] ?? ""}><option value="">All values</option>{field.values.map((value) => <option value={value} key={value}>{value}</option>)}</select></label>)}
     <label>Sort<select name="sort" defaultValue={filters.sort}><option value="updated">Recently updated</option><option value="title">Project title</option><option value="due">Due date</option>{!taskOnly && <option value="actual">Most time</option>}</select></label>
     <label>Rows<select name="pageSize" defaultValue={String(filters.pageSize)}><option>25</option><option>50</option><option>100</option><option>200</option></select></label>
@@ -48,7 +48,12 @@ function dashboardSelectionLabel(filters: ReportingFilters) {
   if (filters.dashboardField && filters.dashboardValue) parts.push(`${titleCase(filters.dashboardField)}: ${filters.dashboardValue}`);
   if (filters.verticalReportingCategory) parts.push(`Vertical Reporting Category: ${filters.verticalReportingCategory}`);
   if (filters.associatedVertical) parts.push(`Associated Vertical: ${filters.associatedVertical}`);
-  if (filters.unresolvedVerticalOnly) parts.push("Missing or unrecognized Vertical");
+  if (filters.verticalState === "resolved") parts.push("Resolved Vertical");
+  else if (filters.verticalState === "cross_vertical") parts.push("Cross-Vertical");
+  else if (filters.verticalState === "missing") parts.push("Vertical not assigned");
+  else if (filters.verticalState === "unrecognized") parts.push("Vertical value needs review");
+  else if (filters.verticalState === "synchronization_incomplete") parts.push("Vertical data not fully synchronized");
+  else if (filters.unresolvedVerticalOnly) parts.push("Unresolved Vertical (legacy)");
   return parts.join(" · ");
 }
 

@@ -13,7 +13,7 @@ describe("Wrike synchronization contracts", () => {
     expect(decodeURIComponent(path)).toContain("updatedDate=");
   });
   it("uses exact task-id paths and normalizes effort and time to minutes", () => {
-    expect(taskPath({ id: "scope", label: "List", scope_type: "list", source_ids: ["A", "B"] })).toMatch(/^\/tasks\/A,B\?/);
+    expect(taskPath({ id: "scope", label: "List", scope_type: "list", source_ids: ["A", "B"] })).toBe('/tasks/A,B?plainTextCustomFields=true&fields=%5B%22effortAllocation%22%5D');
     expect(plannedMinutes({ id: "T", title: "Task", status: "Active", effortAllocation: { totalEffort: 125, allocatedEffort: 90 } })).toBe(125);
     expect(allocatedMinutes({ id: "T", title: "Task", status: "Active", effortAllocation: { totalEffort: 125, allocatedEffort: 90 } })).toBe(90);
     expect(entryMinutes({ id: "E", taskId: "T", trackedDate: "2026-07-01", hours: 1.25 })).toBe(75);

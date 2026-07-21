@@ -95,9 +95,12 @@ function navigateToStatus(push: (href: string) => void, filters: ReportingFilter
 }
 
 const yearHref = (filters: ReportingFilters, label: string, classification?: DashboardClassification) => dashboardDrilldownHref(filters, { kind: "year", year: Number(label), classification });
-const categoryHref = (filters: ReportingFilters, field: DashboardField | "verticalReportingCategory", value: string) => field === "verticalReportingCategory"
-  ? dashboardDrilldownHref(filters, { kind: "verticalCategory", value: value as NonNullable<ReportingFilters["verticalReportingCategory"]> })
-  : dashboardDrilldownHref(filters, { kind: "category", field, value });
+const categoryHref = (filters: ReportingFilters, field: DashboardField | "verticalReportingCategory", value: string) => {
+  if (field !== "verticalReportingCategory") return dashboardDrilldownHref(filters, { kind: "category", field, value });
+  const diagnosticState = ({ "Vertical not assigned": "missing", "Vertical value needs review": "unrecognized", "Vertical data not fully synchronized": "synchronization_incomplete" } as const)[value as "Vertical not assigned" | "Vertical value needs review" | "Vertical data not fully synchronized"];
+  if (diagnosticState) return dashboardDrilldownHref(filters, { kind: "verticalState", value: diagnosticState });
+  return dashboardDrilldownHref(filters, { kind: "verticalCategory", value: (value === "Cross-Vertical" ? "Cross Vertical" : value) as NonNullable<ReportingFilters["verticalReportingCategory"]> });
+};
 const hours = (minutes: number) => (minutes / 60).toLocaleString(undefined, { maximumFractionDigits: 1 });
 const percent = (value: number, total: number) => total ? `${(value / total * 100).toFixed(1)}%` : "0%";
 const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");

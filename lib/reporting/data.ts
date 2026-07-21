@@ -1,12 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { filtersForRpc, type ReportingFilters } from "@/lib/reporting/filters";
 import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory, type ResolvedTaskStatus, type ResolvedTimelogCategory, type ResolvedWrikeUser } from "@/lib/wrike/reference-data";
+import type { VerticalState } from "@/lib/wrike/vertical-normalization";
 
 export type ReportingTaskRow = {
   task_id: string; title: string; status: string; status_name: string; status_reference: ResolvedTaskStatus; custom_status_id: string | null; responsible_wrike_ids: string[]; responsible_users: ResolvedWrikeUser[]; due_date: string | null; completed_at: string | null;
   planned_minutes: number | null; actual_minutes: number; updated_at_wrike: string | null;
   assignees: { id: string; name: string }[]; locations: { folderId: string | null; projectId: string | null; wrikeId: string; title: string; scope: string | null; resolved: boolean }[];
-  custom_values: Record<string, { title: string; values: string[]; conflict: boolean; sourceFieldIds: string[]; sourceTitles: string[]; normalizedVerticals?: string[] | null; verticalReportingCategory?: string | null; hasUnresolvedVertical?: boolean | null; unresolvedVerticalTokens?: string[] | null }>; total_count: number;
+  vertical_state?: VerticalState;
+  custom_values: Record<string, { title: string; values: string[]; conflict: boolean; sourceFieldIds: string[]; sourceTitles: string[]; normalizedVerticals?: string[] | null; verticalReportingCategory?: string | null; hasUnresolvedVertical?: boolean | null; unresolvedVerticalTokens?: string[] | null; verticalState?: VerticalState | null }>; total_count: number;
 };
 export type ReportingTimeRow = { entry_id: string; entry_date: string; minutes: number; category: string | null; category_name: string | null; category_reference: ResolvedTimelogCategory | null; comment: string | null; task_id: string; task_title: string; task_status: string; task_status_name: string; status_reference: ResolvedTaskStatus; user_id: string | null; user_wrike_id: string | null; user_name: string | null; user_reference: ResolvedWrikeUser | null; total_count: number };
 export type TimeSummaryRow = { group_key: string; label: string; minutes: number; entry_count: number; wrike_user_id?: string | null; resolved?: boolean };
@@ -18,12 +20,13 @@ export async function loadTaskRows(supabase: SupabaseClient, filters: ReportingF
   if (!rows.length) return [];
   const locationFolderIds = [...new Set(rows.flatMap((row) => row.locations.flatMap((location) => location.folderId ? [location.folderId] : [])))];
   const [{ data: tasks }, { data: users }, { data: statuses }, { data: folders }] = await Promise.all([
-    supabase.from("wrike_tasks").select("id,responsible_wrike_ids").in("id", rows.map((row) => row.task_id)),
+    supabase.from("wrike_tasks").select("id,responsible_wrike_ids,vertical_state").in("id", rows.map((row) => row.task_id)),
     supabase.from("wrike_users").select("wrike_id,display_name,email,avatar_url,synced_at,is_active,is_unresolved,raw_data"),
     supabase.from("wrike_workflow_statuses").select("wrike_id,title,workflow_id,color,dashboard_classification,synced_at,is_unresolved"),
     locationFolderIds.length ? supabase.from("wrike_folders").select("id,title,is_unresolved").in("id", locationFolderIds) : Promise.resolve({ data: [], error: null })
   ]);
   const responsibleByTask = new Map((tasks ?? []).map((task) => [task.id, task.responsible_wrike_ids ?? []]));
+  const verticalStateByTask = new Map((tasks ?? []).map((task) => [task.id, task.vertical_state as VerticalState]));
   const folderById = new Map((folders ?? []).map((folder) => [folder.id, folder]));
   return rows.map((row) => {
     const responsible_wrike_ids = responsibleByTask.get(row.task_id) ?? [];
@@ -33,7 +36,7 @@ export async function loadTaskRows(supabase: SupabaseClient, filters: ReportingF
       const folder = location.folderId ? folderById.get(location.folderId) : null;
       return folder ? { ...location, title: folder.title, resolved: !folder.is_unresolved } : location;
     });
-    return { ...row, locations, status_name: status_reference.name, status_reference, responsible_wrike_ids, responsible_users, assignees: responsible_users.map((user) => ({ id: user.wrikeUserId, name: user.fullName })) };
+    return { ...row, vertical_state: verticalStateByTask.get(row.task_id), locations, status_name: status_reference.name, status_reference, responsible_wrike_ids, responsible_users, assignees: responsible_users.map((user) => ({ id: user.wrikeUserId, name: user.fullName })) };
   });
 }
 

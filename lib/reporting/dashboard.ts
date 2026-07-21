@@ -13,6 +13,9 @@ export type DashboardMetrics = {
   unresolvedStatusProjects: number;
   customFieldConflictProjects: number;
   unresolvedVerticalProjects: number;
+  missingVerticalProjects: number;
+  unrecognizedVerticalProjects: number;
+  incompleteVerticalProjects: number;
   timeDataSynchronized: boolean;
 };
 
@@ -53,7 +56,7 @@ export type DashboardOverview = {
 export type DashboardTimeAnalytics = { averageTimeByReportingYear: ReportingYearTime[]; timeDataSynchronized: boolean };
 
 export const EMPTY_DASHBOARD_ANALYTICS: DashboardAnalytics = {
-  metrics: { totalProjects: 0, activeProjects: 0, completedProjects: 0, stalledOrCanceledProjects: 0, unresolvedStatusProjects: 0, customFieldConflictProjects: 0, unresolvedVerticalProjects: 0, timeDataSynchronized: false },
+  metrics: { totalProjects: 0, activeProjects: 0, completedProjects: 0, stalledOrCanceledProjects: 0, unresolvedStatusProjects: 0, customFieldConflictProjects: 0, unresolvedVerticalProjects: 0, missingVerticalProjects: 0, unrecognizedVerticalProjects: 0, incompleteVerticalProjects: 0, timeDataSynchronized: false },
   projectsByReportingYear: [],
   averageTimeByReportingYear: [],
   projectsByStatus: [],

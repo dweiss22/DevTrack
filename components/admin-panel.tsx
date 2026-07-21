@@ -20,6 +20,7 @@ type FolderRun = {
   timelog_descendant_strategy: "unknown" | "folder_recursive" | "explicit_tree"; timelog_descendant_diagnostics: Record<string, unknown>;
   reference_data_diagnostics: ReferenceDiagnostics; reference_warning_count: number; error_summary: string | null; created_at: string;
   custom_field_conflict_count: number; custom_field_normalization_diagnostics: { logicalFieldCount?: number; normalizedTaskValueCount?: number; conflictCount?: number };
+  task_custom_field_diagnostics?: Record<string, unknown>;
   unresolved_reference_count: number; reference_resolution_diagnostics: { unresolvedByType?: Record<string, number>; manualMappings?: number; ignoredCustomFields?: number };
 };
 type ConfiguredFolder = { id: string; title: string };
@@ -28,9 +29,10 @@ type UnresolvedReference = { id: string; reference_type: "custom_field" | "user"
 type NormalizedField = { id: string; title: string; normalized_key: string };
 type WorkflowStatus = { wrike_id: string; title: string; status_group: string | null; color: string | null; dashboard_classification: "active" | "completed" | "stalled_or_canceled" | null; classification_source: "automatic" | "manual" | null; workflow_id: string };
 type ManualMapping = { id: string; wrike_id: string; action: "map_existing" | "create_new" | "ignore"; target_normalized_field_id: string | null; manual_label: string | null; reprocess_status: string; reprocess_error: string | null; updated_at: string };
-type Props = { connection: Connection; folderRuns: FolderRun[]; folders: ConfiguredFolder[]; unresolvedReferences: UnresolvedReference[]; normalizedFields: NormalizedField[]; workflowStatuses: WorkflowStatus[]; manualMappings: ManualMapping[] };
+type RepairRun = { id: string; status: string; examined_count: number; repaired_count: number; unchanged_count: number; retained_count: number; still_incomplete_count: number; started_at: string; completed_at: string | null; error_summary: string | null };
+type Props = { connection: Connection; folderRuns: FolderRun[]; folders: ConfiguredFolder[]; unresolvedReferences: UnresolvedReference[]; normalizedFields: NormalizedField[]; workflowStatuses: WorkflowStatus[]; manualMappings: ManualMapping[]; verticalDiagnostics: Record<string, unknown> | null; verticalDiagnosticsError: string | null; repairRuns: RepairRun[] };
 
-export function AdminPanel({ connection, folderRuns, folders, unresolvedReferences, normalizedFields, workflowStatuses, manualMappings }: Props) {
+export function AdminPanel({ connection, folderRuns, folders, unresolvedReferences, normalizedFields, workflowStatuses, manualMappings, verticalDiagnostics, verticalDiagnosticsError, repairRuns }: Props) {
   const connected = connection?.status === "connected";
   const needsUserScope = connected && !connection?.oauth_scopes?.includes("amReadOnlyUser");
   const [message, setMessage] = useState("");
@@ -65,6 +67,20 @@ export function AdminPanel({ connection, folderRuns, folders, unresolvedReferenc
       if (!response.ok) throw new Error(payload.error ?? "Health check failed.");
       setMessage(`Wrike connection is healthy: ${payload.account?.name ?? "account"} via ${payload.apiHost} (${payload.latencyMs} ms).`);
     } catch (reason) { setError(true); setMessage(reason instanceof Error ? reason.message : "Health check failed."); }
+  }
+
+  async function repairVerticals() {
+    setImporting(true); setComplete(false); setError(false);
+    setMessage("Reprocessing verified stored Vertical data and hydrating only incomplete Wrike tasks.");
+    try {
+      const response = await fetch("/api/admin/wrike/repair-verticals", { method: "POST" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Vertical repair failed.");
+      setComplete(true);
+      setMessage(`Vertical repair complete: ${payload.examined} examined, ${payload.repaired} repaired, ${payload.unchanged} unchanged, ${payload.retained} retained, and ${payload.stillIncomplete} still incomplete.`);
+      location.reload();
+    } catch (reason) { setError(true); setMessage(reason instanceof Error ? reason.message : "Vertical repair failed."); }
+    finally { setImporting(false); }
   }
 
   async function saveCustomFieldMapping(event: FormEvent<HTMLFormElement>, wrikeFieldId: string) {
@@ -110,6 +126,7 @@ export function AdminPanel({ connection, folderRuns, folders, unresolvedReferenc
       {needsUserScope && <p className="notice error">Reconnect Wrike to grant <code>amReadOnlyUser</code>. Tasks and timelogs can still import, but authoritative user details cannot refresh. <a href="/api/wrike/connect">Reconnect Wrike</a></p>}
       {complete && <div className="filter-bar compact"><a className="button" href="/projects">View imported projects</a></div>}
     </section>
+    <section className="card"><div><p className="eyebrow">ASSOCIATED VERTICAL</p><h2>Diagnostics and explicit repair</h2><p>This administrator-only action rebuilds verified stored values locally, then requests task details only for incomplete records. It does not change folder associations, time entries, or manual mappings, and never runs automatically.</p></div><div className="filter-bar"><button onClick={repairVerticals} disabled={!connected || importing}>{importing ? "Repair running…" : "Repair Vertical data"}</button></div>{verticalDiagnosticsError ? <p className="notice error">Vertical diagnostics require the latest database migration: {verticalDiagnosticsError}</p> : verticalDiagnostics ? <details><summary>Current organization-scoped diagnostic summary</summary><pre>{JSON.stringify(verticalDiagnostics, null, 2)}</pre></details> : <p className="empty">No diagnostic result is available.</p>}{repairRuns.length ? <table><thead><tr><th>Started</th><th>Status</th><th>Examined</th><th>Repaired</th><th>Unchanged</th><th>Retained</th><th>Incomplete</th></tr></thead><tbody>{repairRuns.map((run) => <tr key={run.id}><td>{new Date(run.started_at).toLocaleString()}</td><td>{run.status}{run.error_summary ? <><br /><span className="error">{run.error_summary}</span></> : null}</td><td>{run.examined_count}</td><td>{run.repaired_count}</td><td>{run.unchanged_count}</td><td>{run.retained_count}</td><td>{run.still_incomplete_count}</td></tr>)}</tbody></table> : null}</section>
     <div className="admin-grid">
       <section className="card"><h2>Wrike connection</h2>{connected ? <><p>Connected to <strong>{connection?.account_name ?? "Wrike"}</strong>.</p><p className="muted">Host: {connection?.api_host}<br />Scopes: {connection?.oauth_scopes?.join(", ") || "wsReadOnly (legacy connection)"}<br />Token expires: {connection?.token_expires_at ? new Date(connection.token_expires_at).toLocaleString() : "unknown"}</p><div className="filter-bar"><button className="secondary" onClick={health}>Run health check</button><a className="button secondary" href="/api/wrike/connect">Reconnect</a><button className="secondary" onClick={async () => { await fetch("/api/wrike/disconnect", { method: "POST" }); location.reload(); }}>Disconnect</button></div></> : <><p>Connect Wrike with read-only access before importing folder data.</p><a className="button" href="/api/wrike/connect">Connect Wrike</a></>}</section>
       <section className="card"><h2>Configured folder allowlist</h2><p className="muted">Only these task and timelog source folders are queried.</p><ol className="detail-list">{folders.map((folder) => <li key={folder.id}><strong>{folder.title}</strong><br /><code>{folder.id}</code></li>)}</ol></section>

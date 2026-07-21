@@ -22,6 +22,7 @@ const allYearsDrilldownMigration = fs.readFileSync(path.join(process.cwd(), "sup
 const currentWrikeUserNamesMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200007_current_wrike_user_names.sql"), "utf8");
 const ignoredFolderReferencesMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200008_ignore_out_of_scope_folder_references.sql"), "utf8");
 const reportingFilterOptionsPerformanceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607200009_reporting_filter_options_performance.sql"), "utf8");
+const verticalCompletenessMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210001_vertical_completeness_and_repair.sql"), "utf8");
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -214,5 +215,14 @@ describe("reporting migration contract", () => {
     expect(reportingFilterOptionsPerformanceMigration).toContain("join visible_tasks visible_task");
     expect(reportingFilterOptionsPerformanceMigration).toContain("security definer");
     expect(reportingFilterOptionsPerformanceMigration).not.toContain("public.can_access_wrike_task(task.id)");
+  });
+  it("tracks custom-field completeness, five Vertical states, explicit repair audits, and administrator diagnostics", () => {
+    for (const state of ["resolved", "cross_vertical", "missing", "unrecognized", "synchronization_incomplete"]) expect(verticalCompletenessMigration).toContain(state);
+    for (const alias of ["GENERAL", "CROSS VERTICAL", "CROSS-VERTICAL", "ALL VERTICALS"]) expect(verticalCompletenessMigration).toContain(alias);
+    expect(verticalCompletenessMigration).toContain("custom_fields_sync_diagnostics");
+    expect(verticalCompletenessMigration).toContain("wrike_vertical_repair_runs");
+    expect(verticalCompletenessMigration).toContain("reporting_vertical_data_quality");
+    expect(verticalCompletenessMigration).toContain("vertical repair runs admin read");
+    expect(verticalCompletenessMigration).toContain("verticalState");
   });
 });

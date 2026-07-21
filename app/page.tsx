@@ -32,7 +32,11 @@ async function OverviewSection({ promise, filters }: { promise: ReturnType<typeo
   const result = await promise;
   if (result.error) return <DashboardQueryError error={result.error} />;
   const metrics = result.data.metrics;
-  const notices = dashboardOverviewNotices(metrics, dashboardDrilldownHref(filters, { kind: "unresolvedVertical" }));
+  const notices = dashboardOverviewNotices(metrics, {
+    missing: dashboardDrilldownHref(filters, { kind: "verticalState", value: "missing" }),
+    unrecognized: dashboardDrilldownHref(filters, { kind: "verticalState", value: "unrecognized" }),
+    synchronization_incomplete: dashboardDrilldownHref(filters, { kind: "verticalState", value: "synchronization_incomplete" })
+  });
   return <>
     <DashboardNoticeRegistration source="overview" notices={notices} />
     <section className="dashboard-stat-bar" aria-label="Current project statistics">

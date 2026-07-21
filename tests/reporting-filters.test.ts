@@ -14,8 +14,8 @@ describe("reporting filters", () => {
     });
   });
   it("parses dashboard drill-down filters used by the Projects report", () => {
-    expect(parseReportingFilters({ workflowIds: "IEACHQK7K4BHMLHM", reportingYear: "2026", dashboardClassification: "active", verticalReportingCategory: "Cross Vertical", associatedVertical: "EMS1", unresolvedVerticalOnly: "true" })).toMatchObject({
-      workflowIds: ["IEACHQK7K4BHMLHM"], reportingYear: 2026, dashboardClassification: "active", verticalReportingCategory: "Cross Vertical", associatedVertical: "EMS1", unresolvedVerticalOnly: true
+    expect(parseReportingFilters({ workflowIds: "IEACHQK7K4BHMLHM", reportingYear: "2026", dashboardClassification: "active", verticalReportingCategory: "Cross Vertical", associatedVertical: "EMS1", verticalState: "unrecognized", unresolvedVerticalOnly: "true" })).toMatchObject({
+      workflowIds: ["IEACHQK7K4BHMLHM"], reportingYear: 2026, dashboardClassification: "active", verticalReportingCategory: "Cross Vertical", associatedVertical: "EMS1", verticalState: "unrecognized", unresolvedVerticalOnly: true
     });
   });
 });

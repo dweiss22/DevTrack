@@ -14,32 +14,37 @@ import {
 } from "@/lib/reporting/dashboard-notices";
 
 describe("Dashboard notice pin", () => {
+  const hrefs = { missing: "/projects?verticalState=missing", unrecognized: "/projects?verticalState=unrecognized", synchronization_incomplete: "/projects?verticalState=synchronization_incomplete" };
+
   it("creates no notices when all dashboard data is resolved", () => {
-    expect(dashboardOverviewNotices({ unresolvedStatusProjects: 0, customFieldConflictProjects: 0, unresolvedVerticalProjects: 0 }, "/projects")).toEqual([]);
+    expect(dashboardOverviewNotices({ unresolvedStatusProjects: 0, customFieldConflictProjects: 0, missingVerticalProjects: 0, unrecognizedVerticalProjects: 0, incompleteVerticalProjects: 0 }, hrefs)).toEqual([]);
     expect(dashboardTimeNotices(true)).toEqual([]);
   });
 
   it("uses singular wording for one affected project", () => {
-    const notices = dashboardOverviewNotices({ unresolvedStatusProjects: 1, customFieldConflictProjects: 1, unresolvedVerticalProjects: 1 }, "/projects?verticalState=unresolved");
+    const notices = dashboardOverviewNotices({ unresolvedStatusProjects: 1, customFieldConflictProjects: 1, missingVerticalProjects: 1, unrecognizedVerticalProjects: 1, incompleteVerticalProjects: 1 }, hrefs);
     expect(notices.map((notice) => notice.message)).toEqual([
       "1 project has an unclassified or unresolved Wrike status.",
       "1 project has conflicting Dashboard custom-field sources.",
-      "1 project has a missing or unrecognized Vertical.",
+      "1 project has no Associated Vertical.",
+      "1 project contains an unrecognized Associated Vertical value.",
+      "1 project has unverified custom-field data; retained values may be from an earlier synchronization.",
     ]);
   });
 
   it("creates all nonfatal notices and retains the Vertical drill-down", () => {
     const notices = [
-      ...dashboardOverviewNotices({ unresolvedStatusProjects: 2, customFieldConflictProjects: 3, unresolvedVerticalProjects: 4 }, "/projects?verticalState=unresolved"),
+      ...dashboardOverviewNotices({ unresolvedStatusProjects: 2, customFieldConflictProjects: 3, missingVerticalProjects: 4, unrecognizedVerticalProjects: 5, incompleteVerticalProjects: 6 }, hrefs),
       ...dashboardTimeNotices(false),
     ];
-    expect(notices.map((notice) => notice.id)).toEqual(["unresolved-statuses", "custom-field-conflicts", "unresolved-verticals", "time-data-not-synchronized"]);
-    expect(notices[2]).toMatchObject({ href: "/projects?verticalState=unresolved", actionLabel: "Review affected projects" });
+    expect(notices.map((notice) => notice.id)).toEqual(["unresolved-statuses", "custom-field-conflicts", "missing-verticals", "unrecognized-verticals", "incomplete-vertical-sync", "time-data-not-synchronized"]);
+    expect(notices.slice(2, 5).map((notice) => notice.href)).toEqual(Object.values(hrefs));
+    expect(notices[2]).toMatchObject({ actionLabel: "Review affected projects" });
   });
 
   it("combines notice sources and removes only the unmounted source", () => {
     let sources: DashboardNoticeSources = {};
-    sources = replaceDashboardNoticeSource(sources, "overview", dashboardOverviewNotices({ unresolvedStatusProjects: 2, customFieldConflictProjects: 0, unresolvedVerticalProjects: 0 }, "/projects"));
+    sources = replaceDashboardNoticeSource(sources, "overview", dashboardOverviewNotices({ unresolvedStatusProjects: 2, customFieldConflictProjects: 0, missingVerticalProjects: 0, unrecognizedVerticalProjects: 0, incompleteVerticalProjects: 0 }, hrefs));
     sources = replaceDashboardNoticeSource(sources, "time", dashboardTimeNotices(false));
     expect(dashboardNoticesFromSources(sources).map((notice) => notice.id)).toEqual(["unresolved-statuses", "time-data-not-synchronized"]);
 

@@ -2,7 +2,9 @@ export const APPROVED_VERTICALS = ["P1A", "C1A", "D1A", "FR1A", "EMS1", "LGU", "
 
 export type ApprovedVertical = typeof APPROVED_VERTICALS[number];
 export type VerticalReportingCategory = ApprovedVertical | "Cross Vertical" | "Unresolved Vertical";
+export type VerticalState = "resolved" | "cross_vertical" | "missing" | "unrecognized" | "synchronization_incomplete";
 export const VERTICAL_REPORTING_FILTER_OPTIONS = [...APPROVED_VERTICALS, "Cross Vertical"] as const;
+export const VERTICAL_STATE_FILTER_OPTIONS = ["resolved", "cross_vertical", "missing", "unrecognized", "synchronization_incomplete"] as const;
 
 export type NormalizedVerticalResult = {
   originalValue: unknown;
@@ -11,6 +13,8 @@ export type NormalizedVerticalResult = {
   isCrossVertical: boolean;
   hasUnresolvedVertical: boolean;
   rejectedTokens: string[];
+  verticalState: Exclude<VerticalState, "synchronization_incomplete">;
+  crossVerticalTokens: string[];
 };
 
 const VERTICAL_ALIASES: Readonly<Record<string, ApprovedVertical>> = {
@@ -24,6 +28,8 @@ const VERTICAL_ALIASES: Readonly<Record<string, ApprovedVertical>> = {
   LEXIPOL: "Lexipol",
   WELLNESS: "Wellness"
 };
+
+const CROSS_VERTICAL_ALIASES = new Set(["GENERAL", "CROSS VERTICAL", "CROSS-VERTICAL", "ALL VERTICALS"]);
 
 function cleanToken(value: string) {
   let token = value.trim().replace(/\\(["'])/g, "$1");
@@ -54,11 +60,19 @@ export function normalizeVerticalValue(value: unknown): NormalizedVerticalResult
   const approved = new Set<ApprovedVertical>();
   const rejectedTokens: string[] = [];
   const rejectedKeys = new Set<string>();
+  let semanticCrossVertical = false;
+  const crossVerticalTokens: string[] = [];
 
   for (const token of tokensFromValue(value)) {
     const cleaned = cleanToken(token);
     if (!cleaned) continue;
-    const normalized = VERTICAL_ALIASES[cleaned.toLocaleUpperCase()];
+    const aliasKey = cleaned.toLocaleUpperCase();
+    if (CROSS_VERTICAL_ALIASES.has(aliasKey)) {
+      semanticCrossVertical = true;
+      if (!crossVerticalTokens.some((value) => value.toLocaleUpperCase() === aliasKey)) crossVerticalTokens.push(cleaned);
+      continue;
+    }
+    const normalized = VERTICAL_ALIASES[aliasKey];
     if (normalized) approved.add(normalized);
     else {
       const key = cleaned.toLocaleLowerCase();
@@ -69,17 +83,36 @@ export function normalizeVerticalValue(value: unknown): NormalizedVerticalResult
     }
   }
 
-  const normalizedVerticals = APPROVED_VERTICALS.filter((vertical) => approved.has(vertical));
-  const isCrossVertical = normalizedVerticals.length > 1;
+  const normalizedVerticals = semanticCrossVertical ? [...APPROVED_VERTICALS] : APPROVED_VERTICALS.filter((vertical) => approved.has(vertical));
+  const isCrossVertical = semanticCrossVertical || normalizedVerticals.length > 1;
   const reportingCategory: VerticalReportingCategory = isCrossVertical
     ? "Cross Vertical"
     : normalizedVerticals[0] ?? "Unresolved Vertical";
+  const verticalState = rejectedTokens.length
+    ? "unrecognized"
+    : normalizedVerticals.length === 0
+      ? "missing"
+      : isCrossVertical
+        ? "cross_vertical"
+        : "resolved";
   return {
     originalValue: value,
     normalizedVerticals,
     reportingCategory,
     isCrossVertical,
     hasUnresolvedVertical: normalizedVerticals.length === 0 || rejectedTokens.length > 0,
-    rejectedTokens
+    rejectedTokens,
+    verticalState,
+    crossVerticalTokens
   };
+}
+
+export function verticalStateLabel(state: VerticalState) {
+  switch (state) {
+    case "cross_vertical": return "Cross-Vertical";
+    case "missing": return "Vertical not assigned";
+    case "unrecognized": return "Vertical value needs review";
+    case "synchronization_incomplete": return "Vertical data not fully synchronized";
+    default: return "Resolved";
+  }
 }

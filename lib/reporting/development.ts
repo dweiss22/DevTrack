@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { ONLINE_LEARNING_WORKFLOW_ID } from "@/lib/reporting/constants";
 import { loadCustomFieldOptions, type CustomFieldFilterOption, type StatusFilterOption } from "@/lib/reporting/options";
-import { APPROVED_VERTICALS, VERTICAL_REPORTING_FILTER_OPTIONS } from "@/lib/wrike/vertical-normalization";
+import { APPROVED_VERTICALS, VERTICAL_REPORTING_FILTER_OPTIONS, VERTICAL_STATE_FILTER_OPTIONS, type VerticalState } from "@/lib/wrike/vertical-normalization";
 
 const optionalText = z.preprocess((value) => value === "" ? undefined : value, z.string().trim().max(200).optional());
 const optionalDate = z.preprocess((value) => value === "" ? undefined : value, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional());
@@ -26,6 +26,7 @@ export const developmentFiltersSchema = z.object({
   unresolvedOnly: z.preprocess((value) => value === "true" || value === "on", z.boolean().default(false)),
   verticalReportingCategory: optionalEnum([...VERTICAL_REPORTING_FILTER_OPTIONS]),
   associatedVertical: optionalEnum([...APPROVED_VERTICALS]),
+  verticalState: optionalEnum([...VERTICAL_STATE_FILTER_OPTIONS]),
   unresolvedVerticalOnly: z.preprocess((value) => value === "true" || value === "on", z.boolean().default(false)),
   customFields: z.record(z.string(), z.string().max(200)).optional(),
   sort: z.enum(["updated", "title", "status", "priority", "start", "due", "completed", "actual"]).default("updated"),
@@ -85,7 +86,8 @@ export type DevelopmentProjectRow = {
   completionClassification: "completed" | "incomplete"; statusUnmapped: boolean;
   assignees: DevelopmentReference[]; priority: string | null; startDate: string | null; dueDate: string | null; completedAt: string | null;
   actualMinutes: number; permalink: string | null; updatedAt: string | null; locations: DevelopmentReference[];
-  customValues: Record<string, { title: string; values: string[]; conflict: boolean; normalizedVerticals?: string[] | null; verticalReportingCategory?: string | null; hasUnresolvedVertical?: boolean | null; unresolvedVerticalTokens?: string[] | null }>;
+  verticalState?: VerticalState;
+  customValues: Record<string, { title: string; values: string[]; conflict: boolean; normalizedVerticals?: string[] | null; verticalReportingCategory?: string | null; hasUnresolvedVertical?: boolean | null; unresolvedVerticalTokens?: string[] | null; verticalState?: VerticalState | null }>;
 };
 export type DevelopmentProjectResult = { rows: DevelopmentProjectRow[]; total: number };
 export type DevelopmentLoadResult<T> = { data: T; error: null } | { data: null; error: { title: string; message: string; code: string | null } };
@@ -136,21 +138,24 @@ export async function loadDevelopmentProjects(supabase: SupabaseClient, filters:
   if (error) return failure("Development projects could not be loaded", error);
   const result = data as DevelopmentProjectResult | null;
   const rows = result?.rows ?? [];
-  const { data: verticalRows, error: verticalError } = rows.length ? await supabase
-    .from("wrike_task_normalized_custom_field_values")
-    .select("task_id,normalized_verticals,vertical_reporting_category,has_unresolved_vertical,unresolved_vertical_tokens,normalized_field:wrike_normalized_custom_fields!inner(normalized_key)")
-    .in("task_id", rows.map((row) => row.taskId))
-    .eq("normalized_field.normalized_key", "vertical") : { data: [], error: null };
+  const [verticalResult, taskStateResult] = rows.length ? await Promise.all([
+    supabase.from("wrike_task_normalized_custom_field_values").select("task_id,normalized_verticals,vertical_reporting_category,has_unresolved_vertical,unresolved_vertical_tokens,normalized_field:wrike_normalized_custom_fields!inner(normalized_key)").in("task_id", rows.map((row) => row.taskId)).eq("normalized_field.normalized_key", "vertical"),
+    supabase.from("wrike_tasks").select("id,vertical_state").in("id", rows.map((row) => row.taskId))
+  ]) : [{ data: [], error: null }, { data: [], error: null }];
+  const verticalError = verticalResult.error ?? taskStateResult.error;
   if (verticalError) return failure("Development Vertical data could not be loaded", verticalError);
+  const verticalRows = verticalResult.data;
   const verticalByTask = new Map((verticalRows ?? []).map((value) => [value.task_id, value]));
+  const stateByTask = new Map((taskStateResult.data ?? []).map((task) => [task.id, task.vertical_state as VerticalState]));
   return { data: { rows: rows.map((row) => {
     const value = verticalByTask.get(row.taskId);
     const existing = Object.entries(row.customValues).find(([, field]) => field.title.trim().toLocaleLowerCase() === "vertical");
     const key = existing?.[0] ?? "__vertical";
-    return { ...row, customValues: { ...row.customValues, [key]: {
+    const verticalState = stateByTask.get(row.taskId) ?? "synchronization_incomplete";
+    return { ...row, verticalState, customValues: { ...row.customValues, [key]: {
       title: "Vertical", values: value?.normalized_verticals ?? existing?.[1].values ?? [], conflict: existing?.[1].conflict ?? false,
       normalizedVerticals: value?.normalized_verticals ?? [], verticalReportingCategory: value?.vertical_reporting_category ?? "Unresolved Vertical",
-      hasUnresolvedVertical: value?.has_unresolved_vertical ?? true, unresolvedVerticalTokens: value?.unresolved_vertical_tokens ?? []
+      hasUnresolvedVertical: verticalState === "missing" || verticalState === "unrecognized" || verticalState === "synchronization_incomplete", unresolvedVerticalTokens: value?.unresolved_vertical_tokens ?? [], verticalState
     } } };
   }), total: Number(result?.total ?? 0) }, error: null };
   } catch (error) { return failure("Development projects could not be loaded", errorFromUnknown(error)); }

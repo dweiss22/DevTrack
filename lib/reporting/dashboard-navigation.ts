@@ -7,6 +7,7 @@ export type DashboardDrilldown =
   | { kind: "year"; year: number; classification?: DashboardClassification }
   | { kind: "category"; field: DashboardField; value: string }
   | { kind: "verticalCategory"; value: NonNullable<ReportingFilters["verticalReportingCategory"]> }
+  | { kind: "verticalState"; value: NonNullable<ReportingFilters["verticalState"]> }
   | { kind: "unresolvedVertical" };
 
 export function dashboardDrilldownHref(filters: ReportingFilters, drilldown: DashboardDrilldown) {
@@ -24,6 +25,8 @@ export function dashboardDrilldownHref(filters: ReportingFilters, drilldown: Das
     target.dashboardValue = drilldown.value;
   } else if (drilldown.kind === "verticalCategory") {
     target.verticalReportingCategory = drilldown.value;
+  } else if (drilldown.kind === "verticalState") {
+    target.verticalState = drilldown.value;
   } else {
     target.unresolvedVerticalOnly = true;
   }

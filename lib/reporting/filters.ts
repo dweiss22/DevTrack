@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { APPROVED_VERTICALS, VERTICAL_REPORTING_FILTER_OPTIONS } from "@/lib/wrike/vertical-normalization";
+import { APPROVED_VERTICALS, VERTICAL_REPORTING_FILTER_OPTIONS, VERTICAL_STATE_FILTER_OPTIONS } from "@/lib/wrike/vertical-normalization";
 
 const emptyToUndefined = (value: unknown) => value === "" ? undefined : value;
 const stringArray = z.union([z.string(), z.array(z.string())]).transform((value) => (Array.isArray(value) ? value : value.split(",")).map((item) => item.trim()).filter(Boolean));
@@ -35,6 +35,7 @@ export const reportingFiltersSchema = z.object({
   dashboardValue: z.preprocess(emptyToUndefined, z.string().trim().max(200).optional()),
   verticalReportingCategory: optionalEnum([...VERTICAL_REPORTING_FILTER_OPTIONS]),
   associatedVertical: optionalEnum([...APPROVED_VERTICALS]),
+  verticalState: optionalEnum([...VERTICAL_STATE_FILTER_OPTIONS]),
   unresolvedVerticalOnly: optionalBoolean,
   groupCustomFieldId: z.preprocess(emptyToUndefined, z.string().uuid().optional()),
   sort: z.enum(["updated", "title", "due", "actual"]).default("updated"),

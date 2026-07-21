@@ -156,7 +156,19 @@ The left navigation is organized as Dashboard, Development, SME Collaboration, O
 
 The Dashboard uses RLS-aware overview and time RPCs across all valid Reporting Years rather than loading raw facts into the browser. The Development dashboard has one manual Reporting Year filter, displayed in the synchronized `YYYY Courses` format. Overview metrics and categorical charts stream independently from recorded-time analytics so a slow time query does not blank the page. Reporting, Course Type, Authoring Tool, and Vertical use the normalized custom-field layer, so `(M)` and `(L)` sources are merged and conflicts remain available for administrative review.
 
-Apply all migrations through `202607200009_reporting_filter_options_performance.sql`. The Reporting performance migrations require values to match `YYYY Courses`, recompute stored years, keep Development year-scoped, aggregate the main Dashboard across every valid year with reconciling chart drill-downs, and keep custom-field filter discovery below the hosted statement timeout.
+Apply all migrations through `202607210001_vertical_completeness_and_repair.sql`. The Reporting performance migrations require values to match `YYYY Courses`, recompute stored years, keep Development year-scoped, aggregate the main Dashboard across every valid year with reconciling chart drill-downs, and keep custom-field filter discovery below the hosted statement timeout.
+
+### Associated Vertical production runbook
+
+The migration and deployment do not run a Wrike import or Vertical repair automatically. Production totals and the final root cause for **De-escalation Strategies and Techniques** remain pending until an administrator performs this read-only-first procedure:
+
+1. Apply `202607210001_vertical_completeness_and_repair.sql` and deploy the application.
+2. Open **Data → Associated Vertical** and save the baseline organization-scoped diagnostic output. Do not select Repair yet.
+3. In the focused example result, inspect folder associations, raw `customFields` property state, normalized rows, definition availability, latest import provenance, and response-disagreement evidence. The diagnostic contains bounded evidence rather than complete payloads or credentials.
+4. Select **Repair Vertical data** or run one normal, fully successful combined import. Repair reprocesses verified stored arrays first and hydrates only incomplete tasks; it keeps manual mappings, folder associations, and time entries.
+5. Save the post-repair diagnostic output and reconcile each Dashboard Vertical slice with its filtered Projects drill-down.
+
+`General`, `Cross Vertical`, `Cross-Vertical`, and `All Verticals` are the only semantic all-Vertical aliases. They expand to the approved membership set for Associated Vertical filtering while their original source values remain unchanged. Missing, unrecognized, and synchronization-incomplete data remain distinct states; legacy unresolved links continue to match all three.
 
 ## Scheduling and deployment
 
@@ -180,5 +192,5 @@ No live Wrike access is required for automated tests. Production validation requ
 - **“Wrike OAuth is not configured”**: check client ID, secret, app URL, and token encryption key.
 - **Callback fails**: ensure the callback URL in Wrike exactly matches `NEXT_PUBLIC_APP_URL/api/wrike/callback`, including protocol.
 - **Token refresh fails**: reconnect from Administration; an expired/revoked connection is marked accordingly without exposing the underlying token.
-- **No data after import**: first apply migrations through `202607200009_reporting_filter_options_performance.sql`. Then verify Reporting values use `YYYY Courses` and that the connecting administrator can read workflows, spaces, the Learning folder tree, custom-field definitions, and every configured task/timelog folder before selecting **Import folder tasks and timelogs**. Reconnect if Data administration reports that `amReadOnlyUser` is missing. A successful OAuth connection alone does not run the APIs.
+- **No data after import**: first apply migrations through `202607210001_vertical_completeness_and_repair.sql`. Then verify Reporting values use `YYYY Courses` and that the connecting administrator can read workflows, spaces, the Learning folder tree, custom-field definitions, and every configured task/timelog folder before selecting **Import folder tasks and timelogs**. Reconnect if Data administration reports that `amReadOnlyUser` is missing. A successful OAuth connection alone does not run the APIs.
 - **User cannot see reports**: make sure their Auth user ID is in `application_users` for the correct organization. RLS intentionally prevents cross-organization reads.

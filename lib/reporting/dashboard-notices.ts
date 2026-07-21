@@ -10,9 +10,9 @@ export type DashboardNotice = {
 
 export type DashboardNoticeSources = Record<string, DashboardNotice[]>;
 
-type DashboardNoticeMetrics = Pick<DashboardOverview["metrics"], "unresolvedStatusProjects" | "customFieldConflictProjects" | "unresolvedVerticalProjects">;
+type DashboardNoticeMetrics = Pick<DashboardOverview["metrics"], "unresolvedStatusProjects" | "customFieldConflictProjects" | "missingVerticalProjects" | "unrecognizedVerticalProjects" | "incompleteVerticalProjects">;
 
-export function dashboardOverviewNotices(metrics: DashboardNoticeMetrics, unresolvedVerticalHref: string): DashboardNotice[] {
+export function dashboardOverviewNotices(metrics: DashboardNoticeMetrics, verticalHrefs: Record<"missing" | "unrecognized" | "synchronization_incomplete", string>): DashboardNotice[] {
   const notices: DashboardNotice[] = [];
 
   if (metrics.unresolvedStatusProjects > 0) {
@@ -33,13 +33,35 @@ export function dashboardOverviewNotices(metrics: DashboardNoticeMetrics, unreso
     });
   }
 
-  if (metrics.unresolvedVerticalProjects > 0) {
-    const count = metrics.unresolvedVerticalProjects;
+  if (metrics.missingVerticalProjects > 0) {
+    const count = metrics.missingVerticalProjects;
     notices.push({
-      id: "unresolved-verticals",
-      title: "Verticals need review",
-      message: `${count} project${count === 1 ? " has" : "s have"} a missing or unrecognized Vertical.`,
-      href: unresolvedVerticalHref,
+      id: "missing-verticals",
+      title: "Vertical not assigned",
+      message: `${count} project${count === 1 ? " has" : "s have"} no Associated Vertical.`,
+      href: verticalHrefs.missing,
+      actionLabel: "Review affected projects",
+    });
+  }
+
+  if (metrics.unrecognizedVerticalProjects > 0) {
+    const count = metrics.unrecognizedVerticalProjects;
+    notices.push({
+      id: "unrecognized-verticals",
+      title: "Vertical values need review",
+      message: `${count} project${count === 1 ? " contains" : "s contain"} an unrecognized Associated Vertical value.`,
+      href: verticalHrefs.unrecognized,
+      actionLabel: "Review affected projects",
+    });
+  }
+
+  if (metrics.incompleteVerticalProjects > 0) {
+    const count = metrics.incompleteVerticalProjects;
+    notices.push({
+      id: "incomplete-vertical-sync",
+      title: "Vertical data not fully synchronized",
+      message: `${count} project${count === 1 ? " has" : "s have"} unverified custom-field data; retained values may be from an earlier synchronization.`,
+      href: verticalHrefs.synchronization_incomplete,
       actionLabel: "Review affected projects",
     });
   }

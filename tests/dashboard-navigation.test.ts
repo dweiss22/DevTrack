@@ -51,6 +51,11 @@ describe("Online Learning dashboard calculations", () => {
     expect(safeProjectsReturnTo("//malicious.example/projects")).toBeUndefined();
   });
 
+  it("builds distinct Vertical-state drill-downs", () => {
+    const href = dashboardDrilldownHref({ sort: "updated", page: 1, pageSize: 50 }, { kind: "verticalState", value: "synchronization_incomplete" });
+    expect(new URL(href, "https://devtrack.test").searchParams.get("verticalState")).toBe("synchronization_incomplete");
+  });
+
   it("turns a missing Dashboard RPC into an actionable migration notice", async () => {
     const rpc = async () => ({ data: null, error: { code: "PGRST202", message: "Could not find public.reporting_online_learning_dashboard_v2" } });
     const result = await loadDashboardAnalyticsResult({ rpc } as never, { sort: "updated", page: 1, pageSize: 50 });

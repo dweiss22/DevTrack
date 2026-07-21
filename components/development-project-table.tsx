@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { StatusBadge, UnresolvedReferenceLabel } from "@/components/wrike-reference";
 import { developmentFiltersToQuery, type DevelopmentFilters, type DevelopmentProjectRow } from "@/lib/reporting/development";
+import { verticalStateLabel } from "@/lib/wrike/vertical-normalization";
 
 type CustomColumn = { key: string; label: string };
 const CORE_COLUMNS = [
@@ -32,8 +33,8 @@ function cell(row: DevelopmentProjectRow, key: string, returnTo: string): React.
     case "year": return row.reportingYear ?? "Missing/Unresolved";
     case "status": return row.status.resolved ? <StatusBadge name={row.status.name} id={row.status.id} color={row.status.color} /> : <span className="status-badge unresolved"><UnresolvedReferenceLabel id={row.status.id} type="custom_status" label="Unknown Status" /></span>;
     case "completion": return <span className={`classification-badge ${row.completionClassification}`}>{title(row.completionClassification)}{row.statusUnmapped ? " · Mapping review" : ""}</span>;
-    case "verticals": return <span title={vertical?.hasUnresolvedVertical ? `Unrecognized: ${vertical.unresolvedVerticalTokens?.join(", ") || "missing value"}` : undefined}>{vertical?.normalizedVerticals?.join(", ") || vertical?.values.join(", ") || "—"}{vertical?.hasUnresolvedVertical ? " ⚠" : ""}</span>;
-    case "verticalCategory": return vertical?.verticalReportingCategory ?? "Unresolved Vertical";
+    case "verticals": return <span title={vertical?.hasUnresolvedVertical ? "Vertical value needs review" : undefined}>{vertical?.normalizedVerticals?.join(", ") || vertical?.values.join(", ") || "—"}{vertical?.hasUnresolvedVertical ? " ⚠" : ""}</span>;
+    case "verticalCategory": return row.verticalState ? verticalStateLabel(row.verticalState) : vertical?.verticalReportingCategory ?? "Vertical data not fully synchronized";
     case "assignees": return row.assignees.length ? row.assignees.map((user,index) => <span key={user.id}>{index ? ", " : ""}{user.resolved ? user.name : <UnresolvedReferenceLabel id={user.id} type="user" label="Unresolved user" />}</span>) : "—";
     case "priority": return row.priority ?? "—"; case "start": return date(row.startDate); case "due": return date(row.dueDate); case "completed": return date(row.completedAt);
     case "hours": return (row.actualMinutes / 60).toLocaleString(undefined,{ maximumFractionDigits: 1 });
