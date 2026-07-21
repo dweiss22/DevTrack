@@ -18,7 +18,7 @@ import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory, syn
 import { uniqueWrikeIds, type WrikeUnresolvedReferenceInput } from "@/lib/wrike/reference-resolution";
 import { isOutOfScopeWrikeFolder, scopedWrikeFolderIds, SELECTED_WRIKE_FOLDERS, SELECTED_WRIKE_FOLDER_BY_ID, SELECTED_WRIKE_FOLDER_IDS, type SelectedWrikeFolder } from "@/lib/wrike/selected-folders";
 import { WRIKE_TASK_FIELDS } from "@/lib/wrike/task-fields";
-import { classifyVerticalState, customFieldsResponseState, resolveTaskCustomFields, taskDetailsPath, taskNeedsCustomFieldHydration, type TaskCustomFieldObservation } from "@/lib/wrike/task-custom-fields";
+import { CUSTOM_FIELD_DETAIL_VERIFICATION_VERSION, classifyVerticalState, customFieldsResponseState, resolveTaskCustomFields, taskDetailsPath, taskNeedsCustomFieldHydration, type TaskCustomFieldObservation } from "@/lib/wrike/task-custom-fields";
 import { allocatedMinutes, plannedMinutes } from "@/lib/wrike/sync";
 import { markResolvedWrikeReferences, upsertUnresolvedWrikeReferences } from "@/lib/wrike/unresolved-references";
 import type { WrikeCustomFieldDefinition, WrikeFolderDefinition, WrikeTask, WrikeTimeEntry } from "@/lib/wrike/types";
@@ -409,15 +409,21 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
   const observedTaskIds = [...observationsByTaskId.keys()];
   const previousTaskByWrikeId = new Map<string, WrikeTask>();
   const previousCustomFieldsVerifiedAt = new Map<string, string | null>();
+  const previousCustomFieldDiagnostics = new Map<string, unknown>();
   for (let offset = 0; offset < observedTaskIds.length; offset += 250) {
-    const { data, error } = await db.from("wrike_tasks").select("wrike_id,raw_data,custom_fields_verified_at").eq("organization_id", organizationId).in("wrike_id", observedTaskIds.slice(offset, offset + 250));
+    const { data, error } = await db.from("wrike_tasks").select("wrike_id,raw_data,custom_fields_verified_at,custom_fields_sync_diagnostics").eq("organization_id", organizationId).in("wrike_id", observedTaskIds.slice(offset, offset + 250));
     if (error) throw new Error(`Supabase could not load prior task payloads: ${error.message}`);
     for (const task of data ?? []) {
       if (task.raw_data && typeof task.raw_data === "object") previousTaskByWrikeId.set(task.wrike_id, task.raw_data as WrikeTask);
       previousCustomFieldsVerifiedAt.set(task.wrike_id, task.custom_fields_verified_at);
+      previousCustomFieldDiagnostics.set(task.wrike_id, task.custom_fields_sync_diagnostics);
     }
   }
-  const hydrationIds = observedTaskIds.filter((taskId) => taskNeedsCustomFieldHydration(observationsByTaskId.get(taskId)!));
+  const hydrationIds = observedTaskIds.filter((taskId) => taskNeedsCustomFieldHydration(
+    observationsByTaskId.get(taskId)!,
+    previousTaskByWrikeId.get(taskId),
+    previousCustomFieldDiagnostics.get(taskId)
+  ));
   const detailByTaskId = new Map<string, WrikeTask>();
   const hydrationFailedIds = new Set<string>();
   for (let offset = 0; offset < hydrationIds.length; offset += 100) {
@@ -438,7 +444,8 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
   const resolvedTasks = observedTaskIds.map((taskId) => resolveTaskCustomFields(
     observationsByTaskId.get(taskId)!,
     detailByTaskId.get(taskId),
-    previousTaskByWrikeId.get(taskId)
+    previousTaskByWrikeId.get(taskId),
+    previousCustomFieldDiagnostics.get(taskId)
   ));
   const resolutionByTaskId = new Map(resolvedTasks.map((resolved) => [resolved.task.id, resolved]));
   const tasks = resolvedTasks.map((resolved) => resolved.task);
@@ -737,8 +744,13 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
         hydrationSucceeded: resolution.hydrationSucceeded,
         retainedPrevious: resolution.retainedPrevious,
         disagreement: resolution.disagreement,
-        selectedSource: resolution.hydrationSucceeded ? "task_detail" : resolution.authoritative ? "folder_list" : resolution.retainedPrevious ? "prior" : "incomplete",
-        observations: resolution.observations
+        selectedSource: resolution.selectedSource,
+        authoritativeFingerprint: resolution.authoritativeFingerprint,
+        detailVerificationVersion: resolution.detailVerificationFingerprint ? CUSTOM_FIELD_DETAIL_VERIFICATION_VERSION : null,
+        detailVerificationFingerprint: resolution.detailVerificationFingerprint,
+        observations: resolution.observations,
+        detail: resolution.detail,
+        previous: resolution.previous
       },
       vertical_state: verticalStateByTaskId.get(task.id),
       last_folder_import_run_id: runId,

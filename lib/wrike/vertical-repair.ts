@@ -4,13 +4,13 @@ import { mergeNormalizedCustomFields } from "@/lib/wrike/custom-field-normalizat
 import { loadCustomFieldManualMappings, persistNormalizedCustomFieldDefinitions, persistNormalizedTaskCustomFields } from "@/lib/wrike/custom-field-persistence";
 import { resolveCustomFieldDisplayValue, type ResolvedCustomField } from "@/lib/wrike/metadata";
 import { refreshWrikeSessionFor, wrikeSessionFor } from "@/lib/wrike/oauth";
-import { classifyVerticalState, taskDetailsPath } from "@/lib/wrike/task-custom-fields";
+import { CUSTOM_FIELD_DETAIL_VERIFICATION_VERSION, classifyVerticalState, customFieldsFingerprint, isTaskCustomFieldsDetailVerified, taskDetailsPath } from "@/lib/wrike/task-custom-fields";
 import type { WrikeCustomFieldDefinition, WrikeTask } from "@/lib/wrike/types";
 import type { VerticalState } from "@/lib/wrike/vertical-normalization";
 
 type TaskRow = {
   id: string; wrike_id: string; title: string; raw_data: WrikeTask | null; enriched_metadata: Record<string, unknown> | null;
-  custom_fields_sync_state: "complete" | "incomplete" | "unknown"; vertical_state: VerticalState | null;
+  custom_fields_sync_state: "complete" | "incomplete" | "unknown"; custom_fields_sync_diagnostics: Record<string, unknown> | null; vertical_state: VerticalState | null;
 };
 
 export type VerticalRepairResult = {
@@ -32,7 +32,7 @@ export async function repairVerticalData(organizationId: string): Promise<Vertic
 
   try {
     const [{ data: taskData, error: taskError }, { data: fieldData, error: fieldError }] = await Promise.all([
-      db.from("wrike_tasks").select("id,wrike_id,title,raw_data,enriched_metadata,custom_fields_sync_state,vertical_state").eq("organization_id", organizationId).eq("is_deleted", false),
+      db.from("wrike_tasks").select("id,wrike_id,title,raw_data,enriched_metadata,custom_fields_sync_state,custom_fields_sync_diagnostics,vertical_state").eq("organization_id", organizationId).eq("is_deleted", false),
       db.from("wrike_custom_fields").select("id,wrike_id,title,field_type,raw_data,is_unresolved").eq("organization_id", organizationId)
     ]);
     if (taskError) throw new Error(`Supabase could not load tasks for repair: ${taskError.message}`);
@@ -44,7 +44,11 @@ export async function repairVerticalData(organizationId: string): Promise<Vertic
     for (const field of fields) if (!field.is_unresolved && field.raw_data && typeof field.raw_data === "object") definitions.set(field.wrike_id, field.raw_data as WrikeCustomFieldDefinition);
     const logicalIds = await persistNormalizedCustomFieldDefinitions(db, organizationId, fields.filter((field) => !field.is_unresolved || mappings.has(field.wrike_id)), startedAt);
 
-    const completeTasks = tasks.filter((task) => task.custom_fields_sync_state === "complete" && Array.isArray(task.raw_data?.customFields));
+    const completeTasks = tasks.filter((task) => task.custom_fields_sync_state === "complete"
+      && task.raw_data
+      && Array.isArray(task.raw_data.customFields)
+      && isTaskCustomFieldsDetailVerified(task.raw_data, task.custom_fields_sync_diagnostics));
+    const completeTaskIds = new Set(completeTasks.map((task) => task.id));
     const completeResolved = completeTasks.map((task) => resolveTask(task, task.raw_data!, definitions, mappings));
     await persistNormalizedTaskCustomFields(db, logicalIds, completeResolved.map((task) => ({ taskId: task.row.id, taskWrikeId: task.row.wrike_id, fields: task.normalized })), startedAt);
 
@@ -55,7 +59,7 @@ export async function repairVerticalData(organizationId: string): Promise<Vertic
       await updateResolvedTask(db, organizationId, task, { vertical_state: task.state });
     }
 
-    const incompleteTasks = tasks.filter((task) => task.custom_fields_sync_state !== "complete" || !Array.isArray(task.raw_data?.customFields));
+    const incompleteTasks = tasks.filter((task) => !completeTaskIds.has(task.id));
     const hydratedById = new Map<string, WrikeTask>();
     if (incompleteTasks.length) {
       const session = await wrikeSessionFor(organizationId);
@@ -101,7 +105,18 @@ export async function repairVerticalData(organizationId: string): Promise<Vertic
         raw_data: task.raw,
         custom_fields_sync_state: "complete",
         custom_fields_verified_at: startedAt,
-        custom_fields_sync_diagnostics: { repairRunId: run.id, authoritative: true, selectedSource: "task_detail", repairedAt: startedAt },
+        custom_fields_sync_diagnostics: {
+          repairRunId: run.id,
+          authoritative: true,
+          selectedSource: "task_detail",
+          repairedAt: startedAt,
+          responseState: task.raw.customFields?.length ? "present" : "empty",
+          detailVerificationVersion: CUSTOM_FIELD_DETAIL_VERIFICATION_VERSION,
+          detailVerificationFingerprint: customFieldsFingerprint(task.raw),
+          authoritativeFingerprint: customFieldsFingerprint(task.raw),
+          customFieldCount: task.raw.customFields?.length ?? 0,
+          customFieldIds: [...new Set((task.raw.customFields ?? []).map((field) => field.id))].sort()
+        },
         vertical_state: task.state
       });
       repaired += hydratedResolved.length;
@@ -109,6 +124,25 @@ export async function repairVerticalData(organizationId: string): Promise<Vertic
 
     const stillIncomplete = incompleteTasks.length - hydratedResolved.length;
     const retained = incompleteTasks.filter((task) => !hydratedById.has(task.wrike_id) && Array.isArray(task.raw_data?.customFields)).length;
+    const unresolvedHydration = incompleteTasks.filter((task) => !hydratedById.has(task.wrike_id));
+    for (const task of unresolvedHydration) {
+      const { error } = await db.from("wrike_tasks").update({
+        custom_fields_sync_state: "incomplete",
+        vertical_state: "synchronization_incomplete",
+        custom_fields_sync_diagnostics: {
+          ...(task.custom_fields_sync_diagnostics ?? {}),
+          repairRunId: run.id,
+          authoritative: false,
+          selectedSource: Array.isArray(task.raw_data?.customFields) ? "prior" : "incomplete",
+          retainedPrevious: Array.isArray(task.raw_data?.customFields),
+          hydrationRequired: true,
+          hydrationSucceeded: false,
+          repairedAt: startedAt
+        },
+        updated_at: startedAt
+      }).eq("id", task.id).eq("organization_id", organizationId);
+      if (error) throw new Error(`Supabase could not preserve incomplete repaired task ${task.wrike_id}: ${error.message}`);
+    }
     const result: VerticalRepairResult = {
       examined: tasks.length,
       repaired,

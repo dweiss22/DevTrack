@@ -39,6 +39,8 @@ export function AdminPanel({ connection, folderRuns, folders, unresolvedReferenc
   const [error, setError] = useState(false);
   const [importing, setImporting] = useState(false);
   const [complete, setComplete] = useState(false);
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [customFieldDiagnostic, setCustomFieldDiagnostic] = useState<Record<string, unknown> | null>(null);
 
   async function importFolderTasks() {
     setImporting(true); setComplete(false); setError(false);
@@ -71,7 +73,7 @@ export function AdminPanel({ connection, folderRuns, folders, unresolvedReferenc
 
   async function repairVerticals() {
     setImporting(true); setComplete(false); setError(false);
-    setMessage("Reprocessing verified stored Vertical data and hydrating only incomplete Wrike tasks.");
+    setMessage("Reprocessing detail-verified Vertical data and hydrating incomplete or not-yet-verified Wrike tasks.");
     try {
       const response = await fetch("/api/admin/wrike/repair-verticals", { method: "POST" });
       const payload = await response.json();
@@ -81,6 +83,23 @@ export function AdminPanel({ connection, folderRuns, folders, unresolvedReferenc
       location.reload();
     } catch (reason) { setError(true); setMessage(reason instanceof Error ? reason.message : "Vertical repair failed."); }
     finally { setImporting(false); }
+  }
+
+  async function compareSuppliedTasks() {
+    setDiagnosing(true); setError(false); setCustomFieldDiagnostic(null);
+    setMessage("Comparing stored data with bounded, read-only Wrike list, detail, definition, and folder-context responses.");
+    try {
+      const params = new URLSearchParams();
+      params.append("taskId", "MAAAAAECJ2DX");
+      params.append("taskId", "MAAAAAAEMqHAo");
+      const response = await fetch(`/api/admin/wrike/custom-field-diagnostics?${params}`, { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Custom-field comparison failed.");
+      setCustomFieldDiagnostic(payload);
+      setMessage("Read-only custom-field comparison complete. No Wrike or DevTrack records were changed.");
+    } catch (reason) {
+      setError(true); setMessage(reason instanceof Error ? reason.message : "Custom-field comparison failed.");
+    } finally { setDiagnosing(false); }
   }
 
   async function saveCustomFieldMapping(event: FormEvent<HTMLFormElement>, wrikeFieldId: string) {
@@ -126,7 +145,8 @@ export function AdminPanel({ connection, folderRuns, folders, unresolvedReferenc
       {needsUserScope && <p className="notice error">Reconnect Wrike to grant <code>amReadOnlyUser</code>. Tasks and timelogs can still import, but authoritative user details cannot refresh. <a href="/api/wrike/connect">Reconnect Wrike</a></p>}
       {complete && <div className="filter-bar compact"><a className="button" href="/projects">View imported projects</a></div>}
     </section>
-    <section className="card"><div><p className="eyebrow">ASSOCIATED VERTICAL</p><h2>Diagnostics and explicit repair</h2><p>This administrator-only action rebuilds verified stored values locally, then requests task details only for incomplete records. It does not change folder associations, time entries, or manual mappings, and never runs automatically.</p></div><div className="filter-bar"><button onClick={repairVerticals} disabled={!connected || importing}>{importing ? "Repair running…" : "Repair Vertical data"}</button></div>{verticalDiagnosticsError ? <p className="notice error">Vertical diagnostics require the latest database migration: {verticalDiagnosticsError}</p> : verticalDiagnostics ? <details><summary>Current organization-scoped diagnostic summary</summary><pre>{JSON.stringify(verticalDiagnostics, null, 2)}</pre></details> : <p className="empty">No diagnostic result is available.</p>}{repairRuns.length ? <table><thead><tr><th>Started</th><th>Status</th><th>Examined</th><th>Repaired</th><th>Unchanged</th><th>Retained</th><th>Incomplete</th></tr></thead><tbody>{repairRuns.map((run) => <tr key={run.id}><td>{new Date(run.started_at).toLocaleString()}</td><td>{run.status}{run.error_summary ? <><br /><span className="error">{run.error_summary}</span></> : null}</td><td>{run.examined_count}</td><td>{run.repaired_count}</td><td>{run.unchanged_count}</td><td>{run.retained_count}</td><td>{run.still_incomplete_count}</td></tr>)}</tbody></table> : null}</section>
+    <section className="card"><div><p className="eyebrow">ASSOCIATED VERTICAL</p><h2>Diagnostics and explicit repair</h2><p>This administrator-only action rebuilds detail-verified stored values locally, then requests task details for incomplete or older list-only records. It does not change folder associations, time entries, or manual mappings, and never runs automatically.</p></div><div className="filter-bar"><button onClick={repairVerticals} disabled={!connected || importing}>{importing ? "Repair running…" : "Repair Vertical data"}</button></div>{verticalDiagnosticsError ? <p className="notice error">Vertical diagnostics require the latest database migration: {verticalDiagnosticsError}</p> : verticalDiagnostics ? <details><summary>Current organization-scoped diagnostic summary</summary><pre>{JSON.stringify(verticalDiagnostics, null, 2)}</pre></details> : <p className="empty">No diagnostic result is available.</p>}{repairRuns.length ? <table><thead><tr><th>Started</th><th>Status</th><th>Examined</th><th>Repaired</th><th>Unchanged</th><th>Retained</th><th>Incomplete</th></tr></thead><tbody>{repairRuns.map((run) => <tr key={run.id}><td>{new Date(run.started_at).toLocaleString()}</td><td>{run.status}{run.error_summary ? <><br /><span className="error">{run.error_summary}</span></> : null}</td><td>{run.examined_count}</td><td>{run.repaired_count}</td><td>{run.unchanged_count}</td><td>{run.retained_count}</td><td>{run.still_incomplete_count}</td></tr>)}</tbody></table> : null}</section>
+    <section className="card"><div><p className="eyebrow">CUSTOM-FIELD ACQUISITION</p><h2>Compare the two supplied tasks</h2><p>This bounded administrator diagnostic reads the stored rows and current Wrike task-list, task-detail, field-definition, and parent-folder context for <code>MAAAAAECJ2DX</code> and <code>MAAAAAAEMqHAo</code>. It returns field-level evidence without tokens or complete payloads and does not write data.</p></div><div className="filter-bar"><button className="secondary" onClick={compareSuppliedTasks} disabled={!connected || diagnosing}>{diagnosing ? "Comparing…" : "Run read-only comparison"}</button></div>{customFieldDiagnostic ? <details open><summary>Comparison evidence</summary><pre>{JSON.stringify(customFieldDiagnostic, null, 2)}</pre></details> : null}</section>
     <div className="admin-grid">
       <section className="card"><h2>Wrike connection</h2>{connected ? <><p>Connected to <strong>{connection?.account_name ?? "Wrike"}</strong>.</p><p className="muted">Host: {connection?.api_host}<br />Scopes: {connection?.oauth_scopes?.join(", ") || "wsReadOnly (legacy connection)"}<br />Token expires: {connection?.token_expires_at ? new Date(connection.token_expires_at).toLocaleString() : "unknown"}</p><div className="filter-bar"><button className="secondary" onClick={health}>Run health check</button><a className="button secondary" href="/api/wrike/connect">Reconnect</a><button className="secondary" onClick={async () => { await fetch("/api/wrike/disconnect", { method: "POST" }); location.reload(); }}>Disconnect</button></div></> : <><p>Connect Wrike with read-only access before importing folder data.</p><a className="button" href="/api/wrike/connect">Connect Wrike</a></>}</section>
       <section className="card"><h2>Configured folder allowlist</h2><p className="muted">Only these task and timelog source folders are queried.</p><ol className="detail-list">{folders.map((folder) => <li key={folder.id}><strong>{folder.title}</strong><br /><code>{folder.id}</code></li>)}</ol></section>

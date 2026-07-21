@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { NormalizedVerticalResult } from "@/lib/wrike/vertical-normalization";
 import type { WrikeTask } from "@/lib/wrike/types";
 import type { VerticalState } from "@/lib/wrike/vertical-normalization";
@@ -10,6 +11,15 @@ export type TaskCustomFieldObservation = {
   sourceFolderId: string;
 };
 
+export const CUSTOM_FIELD_DETAIL_VERIFICATION_VERSION = 2;
+
+export type CustomFieldPayloadEvidence = {
+  responseState: CustomFieldsResponseState;
+  customFieldCount: number | null;
+  customFieldIds: string[];
+  fingerprint: string | null;
+};
+
 export type ResolvedTaskCustomFields = {
   task: WrikeTask;
   authoritative: boolean;
@@ -19,7 +29,12 @@ export type ResolvedTaskCustomFields = {
   hydrationSucceeded: boolean;
   retainedPrevious: boolean;
   disagreement: boolean;
-  observations: { sourceFolderId: string; responseState: CustomFieldsResponseState; customFieldCount: number | null }[];
+  selectedSource: "task_detail" | "folder_list_verified" | "prior" | "incomplete";
+  authoritativeFingerprint: string | null;
+  detailVerificationFingerprint: string | null;
+  detail: CustomFieldPayloadEvidence | null;
+  previous: CustomFieldPayloadEvidence | null;
+  observations: (CustomFieldPayloadEvidence & { sourceFolderId: string })[];
 };
 
 const owns = (value: object, key: PropertyKey) => Object.prototype.hasOwnProperty.call(value, key);
@@ -30,17 +45,65 @@ export function customFieldsResponseState(task: WrikeTask): CustomFieldsResponse
   return task.customFields.length ? "present" : "empty";
 }
 
-function customFieldsSignature(task: WrikeTask) {
-  if (!Array.isArray(task.customFields)) return null;
-  return JSON.stringify([...task.customFields]
-    .map((field) => [field.id, field.value] as const)
-    .sort(([left], [right]) => left.localeCompare(right)));
+function stableJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .filter(([, item]) => item !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+    .join(",")}}`;
 }
 
-export function taskNeedsCustomFieldHydration(observations: readonly TaskCustomFieldObservation[]) {
+function customFieldsSignature(task: WrikeTask) {
+  if (!Array.isArray(task.customFields)) return null;
+  return stableJson([...task.customFields]
+    .map((field) => ({ id: field.id, value: field.value }))
+    .sort((left, right) => left.id.localeCompare(right.id)));
+}
+
+export function customFieldsFingerprint(task: WrikeTask) {
+  const signature = customFieldsSignature(task);
+  return signature == null ? null : createHash("sha256").update(signature).digest("hex");
+}
+
+function payloadEvidence(task: WrikeTask): CustomFieldPayloadEvidence {
+  return {
+    responseState: customFieldsResponseState(task),
+    customFieldCount: Array.isArray(task.customFields) ? task.customFields.length : null,
+    customFieldIds: Array.isArray(task.customFields) ? [...new Set(task.customFields.map((field) => field.id))].sort() : [],
+    fingerprint: customFieldsFingerprint(task)
+  };
+}
+
+export function detailVerificationFingerprint(diagnostics: unknown) {
+  if (!diagnostics || typeof diagnostics !== "object") return null;
+  const record = diagnostics as Record<string, unknown>;
+  return record.detailVerificationVersion === CUSTOM_FIELD_DETAIL_VERIFICATION_VERSION
+    && typeof record.detailVerificationFingerprint === "string"
+    ? record.detailVerificationFingerprint
+    : null;
+}
+
+export function isTaskCustomFieldsDetailVerified(task: WrikeTask, diagnostics: unknown) {
+  const fingerprint = customFieldsFingerprint(task);
+  return fingerprint !== null && fingerprint === detailVerificationFingerprint(diagnostics);
+}
+
+export function taskNeedsCustomFieldHydration(
+  observations: readonly TaskCustomFieldObservation[],
+  previousTask?: WrikeTask,
+  previousDiagnostics?: unknown
+) {
   const signatures = new Set(observations.map((observation) => customFieldsSignature(observation.task)));
-  return observations.every((observation) => customFieldsSignature(observation.task) == null)
-    || signatures.size > 1;
+  if (observations.every((observation) => customFieldsSignature(observation.task) == null) || signatures.size > 1) return true;
+  const complete = richestTask(observations.map((observation) => observation.task));
+  if (!complete) return true;
+  const currentFingerprint = customFieldsFingerprint(complete);
+  const priorDetailFingerprint = detailVerificationFingerprint(previousDiagnostics);
+  if (!currentFingerprint || currentFingerprint !== priorDetailFingerprint) return true;
+  return Boolean(previousTask && Array.isArray(previousTask.customFields)
+    && previousTask.customFields.length > (complete.customFields?.length ?? 0));
 }
 
 export function taskDetailsPath(taskIds: readonly string[]) {
@@ -66,18 +129,17 @@ function richestTask(tasks: readonly WrikeTask[]) {
 export function resolveTaskCustomFields(
   observations: readonly TaskCustomFieldObservation[],
   detailTask?: WrikeTask,
-  previousTask?: WrikeTask
+  previousTask?: WrikeTask,
+  previousDiagnostics?: unknown
 ): ResolvedTaskCustomFields {
   if (!observations.length) throw new Error("At least one folder task observation is required.");
   const base = newestTask(observations) ?? observations[0].task;
-  const hydrationRequired = taskNeedsCustomFieldHydration(observations);
+  const hydrationRequired = taskNeedsCustomFieldHydration(observations, previousTask, previousDiagnostics);
   const disagreement = new Set(observations.map((observation) => customFieldsSignature(observation.task))).size > 1;
   const detailState = detailTask ? customFieldsResponseState(detailTask) : null;
-  const observationEvidence = observations.map(({ task, sourceFolderId }) => ({
-    sourceFolderId,
-    responseState: customFieldsResponseState(task),
-    customFieldCount: Array.isArray(task.customFields) ? task.customFields.length : null
-  }));
+  const observationEvidence = observations.map(({ task, sourceFolderId }) => ({ sourceFolderId, ...payloadEvidence(task) }));
+  const detailEvidence = detailTask ? payloadEvidence(detailTask) : null;
+  const previousEvidence = previousTask ? payloadEvidence(previousTask) : null;
 
   if (detailTask && (detailState === "present" || detailState === "empty")) return {
     task: { ...base, ...detailTask, customFields: detailTask.customFields },
@@ -88,6 +150,11 @@ export function resolveTaskCustomFields(
     hydrationSucceeded: true,
     retainedPrevious: false,
     disagreement,
+    selectedSource: "task_detail",
+    authoritativeFingerprint: customFieldsFingerprint(detailTask),
+    detailVerificationFingerprint: customFieldsFingerprint(detailTask),
+    detail: detailEvidence,
+    previous: previousEvidence,
     observations: observationEvidence
   };
 
@@ -103,12 +170,20 @@ export function resolveTaskCustomFields(
       hydrationSucceeded: false,
       retainedPrevious: false,
       disagreement: false,
+      selectedSource: "folder_list_verified",
+      authoritativeFingerprint: customFieldsFingerprint(complete),
+      detailVerificationFingerprint: detailVerificationFingerprint(previousDiagnostics),
+      detail: detailEvidence,
+      previous: previousEvidence,
       observations: observationEvidence
     };
   }
 
   const currentComplete = richestTask(observations.map((observation) => observation.task));
-  const retained = richestTask([...(currentComplete ? [currentComplete] : []), ...(previousTask ? [previousTask] : [])]);
+  const previousComplete = previousTask && Array.isArray(previousTask.customFields) ? previousTask : undefined;
+  const retained = previousComplete && (!currentComplete || previousComplete.customFields!.length >= currentComplete.customFields!.length)
+    ? previousComplete
+    : currentComplete;
   const retainedPrevious = Boolean(retained && retained === previousTask);
   const fallbackState = detailState ?? customFieldsResponseState(base);
   return {
@@ -120,6 +195,11 @@ export function resolveTaskCustomFields(
     hydrationSucceeded: false,
     retainedPrevious,
     disagreement,
+    selectedSource: retainedPrevious ? "prior" : "incomplete",
+    authoritativeFingerprint: null,
+    detailVerificationFingerprint: retainedPrevious ? detailVerificationFingerprint(previousDiagnostics) : null,
+    detail: detailEvidence,
+    previous: previousEvidence,
     observations: observationEvidence
   };
 }

@@ -49,6 +49,10 @@ GET /folders/{folderId}/tasks
 
 In plain language, `descendants=true` includes work nested below the selected folder, `plainTextCustomFields=true` asks Wrike for readable custom-field text, and the `fields` JSON explicitly requests custom fields, responsible users, and DevTrack's other reporting fields. Before any network call, DevTrack verifies the selected ID is the only folder ID in the path and that all these options are present. Tasks are not required to have non-empty custom-field values.
 
+Folder-list arrays are acquisition observations, not sufficient proof of completeness on their first appearance. DevTrack verifies a new or changed array with `GET /tasks/{taskIds}?plainTextCustomFields=true&fields=["effortAllocation"]`, using only detail-endpoint-supported optional fields and batches of at most 100. A SHA-256 fingerprint over canonical field IDs and raw values lets an unchanged, previously detail-verified list payload skip later detail requests. Empty arrays must pass the same verification before they can clear stored values. Omitted, malformed, conflicting, failed, or poorer observations retain the richest prior payload, mark it previously synchronized, and do not replace readable or normalized relationships.
+
+Administrators can run a bounded, read-only comparison for up to ten task IDs. It scans at most twelve recorded source folders and five pages per folder, requests one batched task-detail response, loads account-visible definitions and up to fifty parent-folder contexts, and returns only field-level evidence. Tokens, unrelated response properties, and complete payloads are excluded.
+
 Each folder also starts with:
 
 ```text
