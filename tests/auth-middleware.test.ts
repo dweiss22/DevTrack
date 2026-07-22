@@ -17,10 +17,12 @@ describe("authentication middleware", () => {
   it("allows login and callback routes even when Supabase session refresh is unavailable", async () => {
     mocks.getUser.mockRejectedValue(new Error("temporary outage"));
     const login = await middleware(new NextRequest("https://devtrack.example/login"));
+    const trailingLogin = await middleware(new NextRequest("https://devtrack.example/login/"));
     const callback = await middleware(new NextRequest("https://devtrack.example/auth/callback?code=safe-code"));
     expect(login.status).toBe(200);
+    expect(trailingLogin.status).toBe(200);
     expect(callback.status).toBe(200);
-    expect(mocks.createServerClient).toHaveBeenCalledTimes(2);
+    expect(mocks.createServerClient).toHaveBeenCalledTimes(3);
   });
 
   it("redirects a logged-out protected request and preserves its internal path", async () => {

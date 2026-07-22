@@ -9,6 +9,7 @@ const source = (relativePath: string) => fs.readFileSync(path.join(process.cwd()
 describe("authentication entry workflow", () => {
   it("keeps login and callback routes public while preserving protected return paths", () => {
     expect(isPublicAuthenticationPath("/login")).toBe(true);
+    expect(isPublicAuthenticationPath("/login/")).toBe(true);
     expect(isPublicAuthenticationPath("/auth/callback")).toBe(true);
     expect(isPublicAuthenticationPath("/api/auth/login")).toBe(true);
     expect(isPublicAuthenticationPath("/projects")).toBe(false);

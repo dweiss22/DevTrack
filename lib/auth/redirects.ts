@@ -18,5 +18,6 @@ export function loginHref(next: string | null | undefined) {
 }
 
 export function isPublicAuthenticationPath(pathname: string) {
-  return PUBLIC_AUTHENTICATION_PATHS.has(pathname) || pathname.startsWith("/api/auth/");
+  const normalized = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  return PUBLIC_AUTHENTICATION_PATHS.has(normalized) || normalized.startsWith("/api/auth/");
 }
