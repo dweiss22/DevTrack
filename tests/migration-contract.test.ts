@@ -31,6 +31,7 @@ const projectsMultiselectMigration = fs.readFileSync(path.join(process.cwd(), "s
 const personIdentityMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220002_wrike_person_identities.sql"), "utf8");
 const sortableProjectTablesMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220003_sortable_project_tables.sql"), "utf8");
 const courseTypeFilteringMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220004_course_type_filtering.sql"), "utf8");
+const verticalLegacyAliasesMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220005_vertical_legacy_aliases.sql"), "utf8");
 
 function sqlFunctionDefinition(sql: string, name: string) {
   const start = sql.indexOf(`create or replace function public.${name}`);
@@ -193,6 +194,13 @@ describe("reporting migration contract", () => {
     expect(verticalNormalizationMigration).toContain("associatedVertical");
     expect(verticalNormalizationMigration).toContain("verticalReportingCategory");
     expect(verticalNormalizationMigration).toContain("unresolvedVerticalOnly");
+  });
+  it("recognizes verified legacy Vertical labels without clearing unrelated warnings", () => {
+    for (const mapping of ["('LE','P1A',1,false)", "('C','C1A',2,false)", "('FIRE','FR1A',4,false)", "('EMS','EMS1',5,false)"]) {
+      expect(verticalLegacyAliasesMigration).toContain(mapping);
+    }
+    expect(verticalLegacyAliasesMigration).toContain("cardinality(vertical.unresolved_vertical_tokens),0)=0");
+    expect(verticalLegacyAliasesMigration).toContain("task.vertical_state='unrecognized'");
   });
   it("strictly parses Reporting course years and scopes dashboard work before time aggregation", () => {
     expect(reportingPerformanceMigration).toContain("Courses$','i'");

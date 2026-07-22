@@ -19,11 +19,15 @@ export type NormalizedVerticalResult = {
 
 const VERTICAL_ALIASES: Readonly<Record<string, ApprovedVertical>> = {
   P1A: "P1A",
+  LE: "P1A",
   C1A: "C1A",
+  C: "C1A",
   D1A: "D1A",
   FR1A: "FR1A",
+  FIRE: "FR1A",
   EMS1: "EMS1",
   EMS1A: "EMS1",
+  EMS: "EMS1",
   LGU: "LGU",
   LEXIPOL: "Lexipol",
   WELLNESS: "Wellness"

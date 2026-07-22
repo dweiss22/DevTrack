@@ -20,6 +20,21 @@ describe("controlled Vertical normalization", () => {
     });
   });
 
+  it.each([
+    [["EMS1", "EMS"], "EMS1"],
+    [["FR1A", "Fire"], "FR1A"],
+    [["C1A", "C"], "C1A"],
+    [["P1A", "LE"], "P1A"]
+  ])("treats verified legacy source labels in %j as aliases for %s", (input, expected) => {
+    expect(normalizeVerticalValue(input)).toMatchObject({
+      normalizedVerticals: [expected],
+      reportingCategory: expected,
+      verticalState: "resolved",
+      hasUnresolvedVertical: false,
+      rejectedTokens: []
+    });
+  });
+
   it.each(["General", " general ", "Cross Vertical", "cross-vertical", "ALL   VERTICALS"])("expands semantic cross-Vertical alias %j without changing the original value", (input) => {
     expect(normalizeVerticalValue(input)).toMatchObject({
       originalValue: input,
