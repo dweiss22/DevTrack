@@ -1,8 +1,6 @@
-import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
 import { loadAuthenticationAvailability } from "@/lib/auth/providers";
 import { safeInternalPath } from "@/lib/auth/redirects";
-import { createClient } from "@/lib/supabase/server";
 
 const reasonMessages: Record<string, string> = {
   configuration_missing: "Sign-in is not configured for this environment. Contact a DevTrack administrator.",
@@ -17,15 +15,6 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const next = safeInternalPath(typeof query.next === "string" ? query.next : null);
   const reason = typeof query.reason === "string" ? query.reason : "";
   const availability = await loadAuthenticationAvailability();
-
-  if (!availability.configurationError) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
-    if (user) {
-      const { data: applicationUser } = await supabase.from("application_users").select("id").eq("id", user.id).maybeSingle();
-      redirect(applicationUser ? next : "/access-pending");
-    }
-  }
 
   const initialNotice = availability.configurationError && (reason === "configuration_missing" || reason === "service_unavailable") ? "" : reasonMessages[reason] ?? "";
   return <LoginForm availability={availability} returnTo={next} initialNotice={initialNotice} initialError={reason !== "password_updated"} />;

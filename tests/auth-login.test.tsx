@@ -59,6 +59,8 @@ describe("authentication entry workflow", () => {
     const loginPage = source("app/login/page.tsx");
     expect(loginPage).not.toContain("@/lib/reporting/");
     expect(loginPage).not.toContain("requireContext");
+    expect(loginPage).not.toContain("createClient");
+    expect(loginPage).not.toContain("redirect(");
     expect(loginPage).toContain("loadAuthenticationAvailability");
   });
 
