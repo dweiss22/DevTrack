@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import React from "react";
 import { describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import LoginPage from "@/app/login/page";
+import RootLoading from "@/app/loading";
 import { isPublicAuthenticationPath, loginHref, safeInternalPath } from "@/lib/auth/redirects";
 import { loadAuthenticationAvailability } from "@/lib/auth/providers";
 
@@ -57,11 +61,30 @@ describe("authentication entry workflow", () => {
 
   it("keeps the public login page independent of protected reporting loaders", () => {
     const loginPage = source("app/login/page.tsx");
+    const rootLoading = source("app/loading.tsx");
+    const updatePasswordPage = source("app/update-password/page.tsx");
     expect(loginPage).not.toContain("@/lib/reporting/");
     expect(loginPage).not.toContain("requireContext");
     expect(loginPage).not.toContain("createClient");
     expect(loginPage).not.toContain("redirect(");
     expect(loginPage).toContain("loadAuthenticationAvailability");
+    expect(rootLoading).not.toContain("requireContext");
+    expect(rootLoading).not.toContain("createClient");
+    expect(rootLoading).not.toContain("redirect(");
+    expect(rootLoading).not.toContain("AppShell");
+    expect(updatePasswordPage).not.toContain("createClient");
+    expect(updatePasswordPage).not.toContain("getUser");
+    expect(updatePasswordPage).not.toContain("redirect(");
+  });
+
+  it("renders the login page and its shared loading boundary without an authorization redirect", async () => {
+    vi.stubGlobal("React", React);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ external: { email: true, azure: false } }), { status: 200 }));
+    const login = await LoginPage({ searchParams: Promise.resolve({}) });
+    expect(renderToStaticMarkup(login)).toContain("Sign in");
+    expect(renderToStaticMarkup(<RootLoading />)).toContain("Preparing your page");
+    fetchMock.mockRestore();
+    vi.unstubAllGlobals();
   });
 
   it("establishes OAuth sessions and sends unapproved users to access pending", () => {

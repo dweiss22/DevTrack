@@ -5,10 +5,13 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 
 describe("administrator user presentation", () => {
-  it("preserves the authenticated role while rendering the route loading shell", () => {
-    const source = readFileSync(join(root, "app", "loading.tsx"), "utf8");
-    expect(source).toContain("await requireContext()");
-    expect(source).toContain('isAdmin={profile.role === "admin"}');
+  it("keeps admin authorization on the admin page and out of the shared loading shell", () => {
+    const loadingSource = readFileSync(join(root, "app", "loading.tsx"), "utf8");
+    const adminSource = readFileSync(join(root, "app", "admin", "page.tsx"), "utf8");
+    expect(loadingSource).not.toContain("requireContext");
+    expect(loadingSource).not.toContain("requireAdmin");
+    expect(adminSource).toContain("await requireAdmin()");
+    expect(adminSource).toContain("<AppShell isAdmin>");
   });
 
   it("resolves User Management names from authentication instead of rendering ids", () => {
