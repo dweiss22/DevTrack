@@ -7,7 +7,7 @@ language sql stable security invoker set search_path=public as $$
     select requested_id,row_number() over() as ordinal
     from unnest(coalesce(target_task_ids,'{}'::uuid[])) requested_id
   ), batches as (
-    select array_agg(task_id order by ordinal) as task_ids
+    select array_agg(requested_id order by ordinal) as task_ids
     from requested group by ((ordinal-1)/200)::integer
   )
   select result.task_id,

@@ -304,6 +304,7 @@ describe("reporting migration contract", () => {
   });
   it("sorts both project tables across all six visible columns and both directions", () => {
     expect(sortableProjectTablesMigration).toContain("reporting_project_sort_percentiles(target_task_ids uuid[])");
+    expect(sortableProjectTablesMigration).toContain("array_agg(requested_id order by ordinal) as task_ids");
     expect(sortableProjectTablesMigration).toContain("reporting_project_length_percentiles(batches.task_ids)");
     expect(sortableProjectTablesMigration).toContain("create or replace function public.reporting_task_rows");
     expect(sortableProjectTablesMigration).toContain("create or replace function public.reporting_development_project_rows");
