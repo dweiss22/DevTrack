@@ -29,7 +29,9 @@ export function reportingFailure(error: unknown, operation: string, migration?: 
       kind: "timeout",
       operation,
       title: `${operation} timed out`,
-      message: "The database canceled this query before it completed. Retry once, then review the query timing and Supabase statement-timeout logs if it repeats.",
+      message: migration
+        ? `The database canceled this query before it completed. Apply Supabase migration ${migration}, reload the PostgREST schema cache, and retry the optimized query.`
+        : "The database canceled this query before it completed. Retry once, then review the query timing and Supabase statement-timeout logs if it repeats.",
       diagnosticCode,
       technicalMessage
     };

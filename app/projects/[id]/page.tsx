@@ -9,8 +9,9 @@ import { TaskCustomFieldList, TaskFolderList } from "@/components/task-metadata"
 import { StatusBadge, UnresolvedReferenceLabel } from "@/components/wrike-reference";
 import { requireContext } from "@/lib/auth";
 import { hours } from "@/lib/metrics";
+import { loadProjectLengthPercentilesResult } from "@/lib/reporting/data";
 import { safeProjectsReturnTo } from "@/lib/reporting/dashboard-navigation";
-import { formatCourseLength, formatVerticalMembership, parseCourseLengthMinutes, projectLengthBenchmark, type ProjectLengthBenchmarkRow } from "@/lib/reporting/project-overview";
+import { formatCourseLength, formatVerticalMembership, parseCourseLengthMinutes } from "@/lib/reporting/project-overview";
 import { projectTimeMetrics, type ProjectTimeEntry } from "@/lib/reporting/project-time";
 import { extractFieldYear, projectFieldRole, projectOverviewContactValues, projectOverviewFieldKeys, type ProjectPersonOption } from "@/lib/reporting/projects";
 import { mergeNormalizedCustomFields, type NormalizedCustomFieldValue } from "@/lib/wrike/custom-field-normalization";
@@ -40,9 +41,9 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
     supabase.from("wrike_timelog_categories").select("wrike_id,title,synced_at,is_unresolved").eq("organization_id", profile.organization_id),
     supabase.from("wrike_workflow_statuses").select("wrike_id,title,workflow_id,color,dashboard_classification,synced_at,is_unresolved").eq("organization_id", profile.organization_id),
     supabase.from("wrike_task_normalized_custom_field_values").select("normalized_verticals,vertical_reporting_category,has_unresolved_vertical,unresolved_vertical_tokens,has_conflict,source_wrike_field_ids,source_titles,normalized_field:wrike_normalized_custom_fields!inner(normalized_key)").eq("task_id", id).eq("normalized_field.normalized_key", "vertical").maybeSingle(),
-    supabase.rpc("reporting_project_length_percentile", { target_task_id: id }).maybeSingle()
+    loadProjectLengthPercentilesResult(supabase, [id])
   ]);
-  for (const result of [projectResult, usersResult, categoriesResult, statusesResult, verticalResult, benchmarkResult]) if (result.error) throw result.error;
+  for (const result of [projectResult, usersResult, categoriesResult, statusesResult, verticalResult]) if (result.error) throw result.error;
   if (!projectResult.data) notFound();
   const row = projectResult.data as unknown as ProjectDetailRow;
   const users = usersResult.data ?? [];
@@ -80,7 +81,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   }).sort((left, right) => right.date.localeCompare(left.date));
   const metrics = projectTimeMetrics(timeEntries);
   const reportingYear = extractFieldYear(fieldByRole.get("reporting")?.displayValues ?? []);
-  const benchmark = projectLengthBenchmark((benchmarkResult.data as ProjectLengthBenchmarkRow | null) ?? null);
+  const benchmark = benchmarkResult.data.get(id) ?? null;
 
   return <AppShell isAdmin={profile.role === "admin"}>
     <nav className="breadcrumb" aria-label="Breadcrumb"><Link href={returnTo}>{returnLabel}</Link><span aria-hidden="true">/</span><span aria-current="page">Project detail</span></nav>

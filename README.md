@@ -69,7 +69,9 @@ set organization_id = excluded.organization_id,
     role = excluded.role;
 ```
 
-Give the first administrator the `admin` role and ordinary reporting users the `member` role. Configure and test reporting groups before enabling strict access from Administration. The application shows an **Access awaiting approval** screen until an Auth user is assigned here.
+Give the first administrator the `admin` role and ordinary reporting users the `member` role. Every authenticated application user can read all synchronized reporting data in their assigned organization; organization boundaries remain enforced by RLS. The application shows an **Access awaiting approval** screen until an Auth user is assigned here.
+
+See [Organization-wide reporting access](docs/organization-wide-reporting-access.md) for the database policy inventory, retained security boundaries, validation queries, and deployment sequence.
 
 Keep public signup disabled under **Authentication → Sign In / Providers → Email**. User creation should be performed by an administrator through the Supabase Dashboard. Provide passwords through an approved secure channel; never include them in source code or SQL saved in the repository.
 

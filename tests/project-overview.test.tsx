@@ -112,6 +112,13 @@ describe("project Overview metadata", () => {
     expect(source).toContain('<MetadataItem label="SME">{contactFieldValue(fieldByRole.get("sme"), people)}</MetadataItem>');
   });
 
+  it("keeps an optional percentile failure from taking down project detail", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "app/projects/[id]/page.tsx"), "utf8");
+    expect(source).toContain("loadProjectLengthPercentilesResult(supabase, [id])");
+    expect(source).toContain("const benchmark = benchmarkResult.data.get(id) ?? null");
+    expect(source).not.toContain("verticalResult, benchmarkResult]) if (result.error) throw result.error");
+  });
+
   it("unifies time metrics with Overview and collapses secondary project data", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "app/projects/[id]/page.tsx"), "utf8");
     const styles = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");

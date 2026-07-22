@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(27);
 
 insert into auth.users(id,email) values
   ('00000000-0000-0000-0000-000000000011','admin@example.test'),
@@ -36,12 +36,23 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000012',true);
 select is((select count(*) from public.wrike_tasks),1::bigint,'compatibility mode permits organization records');
 select is((select count(*) from public.wrike_tasks where organization_id='00000000-0000-0000-0000-000000000022'),0::bigint,'cross-organization tasks remain hidden');
+select is((select count(*) from public.reporting_groups),0::bigint,'deprecated reporting-group configuration is hidden from members');
+select is(has_table_privilege('authenticated','public.wrike_tasks','UPDATE'),false,'authenticated reporting members have no task update privilege');
+
+reset role;
+set local role anon;
+select set_config('request.jwt.claim.sub','',true);
+select is((select count(*) from public.wrike_tasks),0::bigint,'anonymous callers cannot read reporting tasks');
+
+reset role;
+set local role service_role;
+select is((select count(*) from public.wrike_tasks),2::bigint,'service role retains cross-organization maintenance access');
 
 reset role;
 update public.organizations set reporting_access_enforced=true where id='00000000-0000-0000-0000-000000000021';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000012',true);
-select is((select count(*) from public.wrike_tasks),0::bigint,'intersection requires both dimensions');
+select is((select count(*) from public.wrike_tasks),1::bigint,'deprecated strict-access setting does not reduce organization reporting access');
 
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000011',true);
 select is((select count(*) from public.wrike_tasks),1::bigint,'organization administrators retain reporting-wide access');
@@ -50,7 +61,7 @@ reset role;
 update public.reporting_groups set match_mode='union' where id='00000000-0000-0000-0000-000000000061';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000012',true);
-select is((select count(*) from public.wrike_tasks),1::bigint,'union grants access when the source dimension matches');
+select is((select count(*) from public.wrike_tasks),1::bigint,'reporting-group match mode does not alter organization reporting access');
 
 reset role;
 update public.reporting_groups set match_mode='intersection' where id='00000000-0000-0000-0000-000000000061';
@@ -58,20 +69,21 @@ insert into public.wrike_task_assignees(task_id,user_id) values
   ('00000000-0000-0000-0000-000000000041','00000000-0000-0000-0000-000000000031');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000012',true);
-select is((select count(*) from public.wrike_tasks),1::bigint,'intersection grants access after source and person match');
+select is((select count(*) from public.wrike_tasks),1::bigint,'reporting-group membership rules do not gate organization tasks');
+select is((select count(*) from public.wrike_task_assignees),1::bigint,'relationship rows are visible through organization-owned tasks');
 
 reset role;
 delete from public.reporting_group_wrike_users where group_id='00000000-0000-0000-0000-000000000061';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000012',true);
-select is((select count(*) from public.wrike_tasks),1::bigint,'source-only groups use their source restriction');
+select is((select count(*) from public.wrike_tasks),1::bigint,'source-only legacy groups do not gate organization tasks');
 
 reset role;
 insert into public.reporting_group_wrike_users(group_id,wrike_user_id) values ('00000000-0000-0000-0000-000000000061','00000000-0000-0000-0000-000000000031');
 delete from public.reporting_group_scopes where group_id='00000000-0000-0000-0000-000000000061';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000012',true);
-select is((select count(*) from public.wrike_tasks),1::bigint,'people-only groups use their people restriction');
+select is((select count(*) from public.wrike_tasks),1::bigint,'people-only legacy groups do not gate organization tasks');
 
 reset role;
 insert into public.reporting_group_scopes(group_id,scope_id) values ('00000000-0000-0000-0000-000000000061','00000000-0000-0000-0000-000000000051');
@@ -80,7 +92,7 @@ insert into public.wrike_time_entries(id,organization_id,wrike_id,task_id,task_w
   ('00000000-0000-0000-0000-000000000082','00000000-0000-0000-0000-000000000021','WE2','00000000-0000-0000-0000-000000000041','WT1','00000000-0000-0000-0000-000000000032','WU2',current_date,30,0.5);
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000012',true);
-select is((select count(*) from public.wrike_time_entries),1::bigint,'timelog visibility independently requires the entry author match');
+select is((select count(*) from public.wrike_time_entries),2::bigint,'members see all organization timelogs regardless of entry author');
 
 reset role;
 insert into public.wrike_custom_fields(id,organization_id,wrike_id,title,field_type) values ('00000000-0000-0000-0000-000000000091','00000000-0000-0000-0000-000000000021','CF1','[LCT]','DropDown');
@@ -117,15 +129,45 @@ insert into public.wrike_time_entries(id,organization_id,wrike_id,task_id,task_w
   ('00000000-0000-0000-0000-000000000083','00000000-0000-0000-0000-000000000021','WE3','00000000-0000-0000-0000-000000000043','WT3',current_date,30,0.5),
   ('00000000-0000-0000-0000-000000000084','00000000-0000-0000-0000-000000000021','WE4','00000000-0000-0000-0000-000000000044','WT4',current_date,60,1),
   ('00000000-0000-0000-0000-000000000085','00000000-0000-0000-0000-000000000021','WE5','00000000-0000-0000-0000-000000000045','WT5',current_date,120,2),
-  ('00000000-0000-0000-0000-000000000086','00000000-0000-0000-0000-000000000021','WE6','00000000-0000-0000-0000-000000000046','WT6',current_date,150,2.5);
+  ('00000000-0000-0000-0000-000000000086','00000000-0000-0000-0000-000000000021','WE6','00000000-0000-0000-0000-000000000046','WT6',current_date,150,2.5),
+  ('00000000-0000-0000-0000-000000000087','00000000-0000-0000-0000-000000000021','WE7','00000000-0000-0000-0000-000000000041','WT1',current_date,600,10);
+update public.wrike_time_entries set is_deleted=true where id='00000000-0000-0000-0000-000000000087';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000011',true);
 select results_eq(
   $$select cohort_size,target_minutes,cohort_average_minutes from public.reporting_project_length_percentiles(array['00000000-0000-0000-0000-000000000041'::uuid])$$,
   $$values (5::bigint,90::bigint,90.00::numeric)$$,
-  'batch same-length benchmark uses five visible organization courses and valid visible time'
+  'batch same-length benchmark uses five organization courses and ignores deleted time'
 );
 select is((select count(*) from public.reporting_project_length_percentiles(array['00000000-0000-0000-0000-000000000042'::uuid])),0::bigint,'cross-organization batch benchmark targets remain hidden');
+
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000012',true);
+select results_eq(
+  $$select cohort_size,target_minutes,cohort_average_minutes from public.reporting_project_length_percentiles(array['00000000-0000-0000-0000-000000000041'::uuid])$$,
+  $$values (5::bigint,90::bigint,90.00::numeric)$$,
+  'member percentile cohorts include all same-length organization tasks and timelogs'
+);
+select is((select count(*) from public.reporting_project_length_percentiles(array_fill('00000000-0000-0000-0000-000000000041'::uuid,array[100]))),1::bigint,'percentile RPC accepts a 100-ID batch');
+select is((select count(*) from public.reporting_project_length_percentiles(array_fill('00000000-0000-0000-0000-000000000041'::uuid,array[200]))),1::bigint,'percentile RPC accepts a 200-ID batch');
+
+reset role;
+update public.wrike_time_entries set minutes=90,hours=1.5 where id='00000000-0000-0000-0000-000000000084';
+set local role authenticated;
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000012',true);
+select results_eq(
+  $$select cohort_size,lower_count,tie_count from public.reporting_project_length_percentiles(array['00000000-0000-0000-0000-000000000041'::uuid])$$,
+  $$values (5::bigint,1::bigint,2::bigint)$$,
+  'percentile cohorts preserve midrank tie counts'
+);
+
+reset role;
+insert into public.wrike_tasks(id,organization_id,wrike_id,title,status,custom_fields_sync_state) values
+  ('00000000-0000-0000-0000-000000000047','00000000-0000-0000-0000-000000000021','WT7','Invalid length','Active','complete');
+insert into public.wrike_task_normalized_custom_field_values(task_id,normalized_field_id,display_values,source_wrike_field_ids,source_titles,source_values) values
+  ('00000000-0000-0000-0000-000000000047','00000000-0000-0000-0000-000000000093',array['not a length'],array['L1'],array['Course Length'],'[]'::jsonb);
+set local role authenticated;
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000012',true);
+select is((select count(*) from public.reporting_project_length_percentiles(array['00000000-0000-0000-0000-000000000047'::uuid])),0::bigint,'invalid course lengths are excluded from percentile cohorts');
 
 reset role;
 insert into public.wrike_normalized_custom_fields(id,organization_id,normalized_key,title) values

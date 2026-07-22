@@ -25,6 +25,16 @@ const reportingFilterOptionsPerformanceMigration = fs.readFileSync(path.join(pro
 const verticalCompletenessMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210001_vertical_completeness_and_repair.sql"), "utf8");
 const projectLengthPercentileMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210003_project_length_percentile.sql"), "utf8");
 const projectsListExperienceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210004_projects_list_experience.sql"), "utf8");
+const projectsPercentilePerformanceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210005_projects_percentile_performance.sql"), "utf8");
+const organizationWideReportingMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210006_organization_wide_reporting_access.sql"), "utf8");
+
+function sqlFunctionDefinition(sql: string, name: string) {
+  const start = sql.indexOf(`create or replace function public.${name}`);
+  expect(start, `${name} is defined`).toBeGreaterThanOrEqual(0);
+  const end = sql.indexOf("$$;", sql.indexOf("as $$", start));
+  expect(end, `${name} definition terminates`).toBeGreaterThan(start);
+  return sql.slice(start, end + 3);
+}
 describe("reporting migration contract", () => {
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
@@ -246,5 +256,50 @@ describe("reporting migration contract", () => {
     expect(projectsListExperienceMigration).toContain("rank() over (partition by length_minutes order by minutes)-1");
     expect(projectsListExperienceMigration).toContain("jsonb_array_elements_text(filters->'verticalSelections')");
     expect(projectsListExperienceMigration).toContain("matches_reporting_vertical_filters(filtered.task_id,filters)");
+  });
+  it("resolves percentile task and timelog access once instead of per entry", () => {
+    expect(projectsPercentilePerformanceMigration).toContain("wrike_time_entries_task_user_minutes_active_idx");
+    expect(projectsPercentilePerformanceMigration).toContain("security definer");
+    expect(projectsPercentilePerformanceMigration).toContain("candidate_groups as materialized");
+    expect(projectsPercentilePerformanceMigration).toContain("source_matches as materialized");
+    expect(projectsPercentilePerformanceMigration).toContain("person_rules as materialized");
+    expect(projectsPercentilePerformanceMigration).toContain("visible_entry_totals as materialized");
+    expect(projectsPercentilePerformanceMigration).toContain("reporting_accessible_task_ids()");
+    expect(projectsPercentilePerformanceMigration).not.toContain("can_access_wrike_time_entry");
+    expect(projectsPercentilePerformanceMigration).toContain("reload schema");
+  });
+  it("makes synchronized reporting organization-wide while preserving cross-organization RLS", () => {
+    expect(organizationWideReportingMigration).toContain('create policy "organization reporting task read"');
+    expect(organizationWideReportingMigration).toContain('create policy "organization reporting time entry read"');
+    expect(organizationWideReportingMigration).toContain("wrike_time_entries_org_task_minutes_active_idx");
+    expect(organizationWideReportingMigration).toContain("organization_id=(select public.current_organization_id())");
+    expect(organizationWideReportingMigration).toContain('create policy "deprecated reporting groups admin read"');
+    expect(organizationWideReportingMigration).toContain("Deprecated compatibility setting");
+    expect(organizationWideReportingMigration).not.toContain("drop table public.reporting_group");
+    expect(organizationWideReportingMigration).not.toContain("delete from public.reporting_group");
+    expect(initialMigration).toContain('create policy "connection admin access" on public.wrike_connections');
+    expect(organizationWideReportingMigration).not.toContain("on public.wrike_connections");
+    expect(organizationWideReportingMigration).not.toContain("on public.reporting_conversations");
+    expect(organizationWideReportingMigration).not.toContain("on public.reporting_messages");
+  });
+  it("removes reporting-group and per-row permission work from priority reporting RPCs", () => {
+    for (const name of [
+      "reporting_accessible_task_ids()",
+      "reporting_filtered_tasks_without_dashboard_drilldown(filters",
+      "reporting_time_rows(filters",
+      "reporting_time_summary(filters",
+      "reporting_online_learning_dashboard_tasks()",
+      "reporting_online_learning_dashboard_time_v4()",
+      "reporting_development_filtered_tasks(filters",
+      "reporting_development_year_options()",
+      "reporting_custom_field_options()",
+      "reporting_project_length_percentiles(target_task_ids"
+    ]) {
+      const definition = sqlFunctionDefinition(organizationWideReportingMigration, name);
+      expect(definition).not.toContain("reporting_group");
+      expect(definition).not.toContain("reporting_access_enforced");
+      expect(definition).not.toContain("can_access_wrike_task");
+      expect(definition).not.toContain("can_access_wrike_time_entry");
+    }
   });
 });

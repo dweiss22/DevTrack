@@ -69,15 +69,23 @@ describe("Projects list redesign", () => {
     expect(result.get("T1")?.percentile).toBe(70);
   });
 
+  it("caps a large percentile request at the supported 200 task IDs", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+    const ids = Array.from({ length: 225 }, (_, index) => `T${index + 1}`);
+    await loadProjectLengthPercentiles({ rpc } as never, ids);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith("reporting_project_length_percentiles", { target_task_ids: ids.slice(0, 200) });
+  });
+
   it("keeps Projects available when the optional percentile migration is missing", async () => {
     const databaseError = { code: "PGRST202", message: "Could not find reporting_project_length_percentiles in the schema cache" };
     const result = await loadProjectLengthPercentilesResult({ rpc: vi.fn().mockResolvedValue({ data: null, error: databaseError }) } as never, ["T1"]);
     expect(result.data.size).toBe(0);
     expect(result.error).toEqual(databaseError);
-    const failure = reportingFailure(result.error, "Development percentile query", "202607210004_projects_list_experience.sql");
+    const failure = reportingFailure(result.error, "Development percentile query", "202607210005_projects_percentile_performance.sql");
     const markup = renderToStaticMarkup(<ProjectsLoadFailure failure={failure} isAdmin nonfatal />);
     expect(markup).toContain("requires a database migration");
-    expect(markup).toContain("202607210004_projects_list_experience.sql");
+    expect(markup).toContain("202607210005_projects_percentile_performance.sql");
     expect(markup).toContain("Project rows remain available");
     expect(markup).toContain("PGRST202");
   });
