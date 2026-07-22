@@ -24,4 +24,10 @@ describe("reporting filters", () => {
     expect(filtersForRpc(filters)).toMatchObject({ verticalSelections: ["associated:P1A", "state:missing"] });
     expect(parseProjectReportingFilters({ verticalSelections: "invalid-token" }).pageSize).toBe(100);
   });
+  it("preserves repeated Projects years and custom-field selections", () => {
+    const fieldId = "00000000-0000-0000-0000-000000000001";
+    const filters = parseProjectReportingFilters({ reportingYears: ["2025", "2026"], [`cf_${fieldId}`]: ["Rise", "Storyline"] });
+    expect(filters).toMatchObject({ reportingYears: [2025, 2026], customFields: { [fieldId]: ["Rise", "Storyline"] } });
+    expect(filtersForRpc(filters)).toMatchObject({ reportingYears: [2025, 2026], customFields: { [fieldId]: ["Rise", "Storyline"] } });
+  });
 });

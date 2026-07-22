@@ -20,14 +20,19 @@ export async function loadTaskRows(supabase: SupabaseClient, filters: ReportingF
   const rows = (data ?? []) as Omit<ReportingTaskRow, "status_name" | "status_reference" | "responsible_wrike_ids" | "responsible_users">[];
   if (!rows.length) return [];
   const locationFolderIds = [...new Set(rows.flatMap((row) => row.locations.flatMap((location) => location.folderId ? [location.folderId] : [])))];
-  const [{ data: tasks }, { data: users }, { data: statuses }, { data: folders }] = await Promise.all([
+  const [{ data: tasks }, { data: users }, { data: statuses }, { data: folders }, { data: verticalValues }] = await Promise.all([
     supabase.from("wrike_tasks").select("id,responsible_wrike_ids,vertical_state").in("id", rows.map((row) => row.task_id)),
     supabase.from("wrike_users").select("wrike_id,display_name,email,avatar_url,synced_at,is_active,is_unresolved,raw_data"),
     supabase.from("wrike_workflow_statuses").select("wrike_id,title,workflow_id,color,dashboard_classification,synced_at,is_unresolved"),
-    locationFolderIds.length ? supabase.from("wrike_folders").select("id,title,is_unresolved").in("id", locationFolderIds) : Promise.resolve({ data: [], error: null })
+    locationFolderIds.length ? supabase.from("wrike_folders").select("id,title,is_unresolved").in("id", locationFolderIds) : Promise.resolve({ data: [], error: null }),
+    supabase.from("wrike_task_normalized_custom_field_values")
+      .select("task_id,display_values,has_conflict,source_wrike_field_ids,source_titles,normalized_verticals,vertical_reporting_category,has_unresolved_vertical,unresolved_vertical_tokens,normalized_field:wrike_normalized_custom_fields!inner(normalized_key)")
+      .in("task_id", rows.map((row) => row.task_id))
+      .eq("normalized_field.normalized_key", "vertical")
   ]);
   const responsibleByTask = new Map((tasks ?? []).map((task) => [task.id, task.responsible_wrike_ids ?? []]));
   const verticalStateByTask = new Map((tasks ?? []).map((task) => [task.id, task.vertical_state as VerticalState]));
+  const verticalByTask = new Map((verticalValues ?? []).map((value) => [value.task_id, value]));
   const folderById = new Map((folders ?? []).map((folder) => [folder.id, folder]));
   return rows.map((row) => {
     const responsible_wrike_ids = responsibleByTask.get(row.task_id) ?? [];
@@ -37,7 +42,22 @@ export async function loadTaskRows(supabase: SupabaseClient, filters: ReportingF
       const folder = location.folderId ? folderById.get(location.folderId) : null;
       return folder ? { ...location, title: folder.title, resolved: !folder.is_unresolved } : location;
     });
-    return { ...row, vertical_state: verticalStateByTask.get(row.task_id), locations, status_name: status_reference.name, status_reference, responsible_wrike_ids, responsible_users, assignees: responsible_users.map((user) => ({ id: user.wrikeUserId, name: user.fullName })) };
+    const verticalState = verticalStateByTask.get(row.task_id);
+    const verticalValue = verticalByTask.get(row.task_id);
+    const existingVertical = Object.entries(row.custom_values).find(([, field]) => field.title.trim().toLocaleLowerCase() === "vertical");
+    const custom_values = verticalValue ? { ...row.custom_values, [existingVertical?.[0] ?? "__vertical"]: {
+      title: "Vertical",
+      values: verticalValue.display_values ?? existingVertical?.[1].values ?? [],
+      conflict: verticalValue.has_conflict ?? existingVertical?.[1].conflict ?? false,
+      sourceFieldIds: verticalValue.source_wrike_field_ids ?? existingVertical?.[1].sourceFieldIds ?? [],
+      sourceTitles: verticalValue.source_titles ?? existingVertical?.[1].sourceTitles ?? [],
+      normalizedVerticals: verticalValue.normalized_verticals ?? existingVertical?.[1].normalizedVerticals ?? [],
+      verticalReportingCategory: verticalValue.vertical_reporting_category ?? existingVertical?.[1].verticalReportingCategory ?? null,
+      hasUnresolvedVertical: verticalState ? ["missing", "unrecognized", "synchronization_incomplete"].includes(verticalState) : verticalValue.has_unresolved_vertical,
+      unresolvedVerticalTokens: verticalValue.unresolved_vertical_tokens ?? existingVertical?.[1].unresolvedVerticalTokens ?? [],
+      verticalState: verticalState ?? null
+    } } : row.custom_values;
+    return { ...row, custom_values, vertical_state: verticalState, locations, status_name: status_reference.name, status_reference, responsible_wrike_ids, responsible_users, assignees: responsible_users.map((user) => ({ id: user.wrikeUserId, name: user.fullName })) };
   });
 }
 

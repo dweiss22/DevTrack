@@ -63,28 +63,28 @@ describe("project Overview metadata", () => {
     expect(status).toContain("In Review");
     expect(status).toContain("#123456");
     const people = [{ wrikeId: "KU1", name: "Alex Smith", resolved: true }];
-    expect(projectContactValues(["KU1", "MISSING"], people)).toEqual([
+    expect(projectContactValues(["KU1", "KUMISSING"], people)).toMatchObject([
       { id: "KU1", label: "Alex Smith", resolved: true },
-      { id: "MISSING", label: "Unresolved Wrike user MISSING", resolved: false }
+      { id: "KUMISSING", label: "KUMISSING — Name unavailable", resolved: false }
     ]);
     expect(resolveResponsibleUsers(["KU1", "MISSING"], [{ wrike_id: "KU1", display_name: "Alex Smith", email: null, avatar_url: null, synced_at: "2026-07-21T00:00:00Z" }]).map((person) => [person.fullName, person.resolved])).toEqual([["Alex Smith", true], ["MISSING", false]]);
   });
 
-  it("shows Wrike-provided Overview contact names while retaining unresolved identity markers", () => {
+  it("shows identities from Wrike or task data and marks only unknown IDs unresolved", () => {
     expect(normalizeWrikeCustomFieldTitle("[LCT] ID Assigned (M)")).toMatchObject({ normalizedTitle: "ID Assigned", normalizedKey: "id assigned" });
     expect(projectFieldRole("id assigned")).toBe("owner");
     const people = [
       { wrikeId: "KU1", name: "Alex Smith", resolved: true },
       { wrikeId: "KU2", name: "Unresolved person", resolved: false }
     ];
-    expect(projectOverviewContactValues(["Katie Willis", "KU1", "KU2", "KUMISSING"], people)).toEqual([
-      { id: "Katie Willis", label: "Katie Willis", resolved: false, referenceId: null },
+    expect(projectOverviewContactValues(["Katie Willis", "KU1", "KU2", "KUMISSING"], people)).toMatchObject([
+      { id: "Katie Willis", label: "Katie Willis", resolved: true, referenceId: null },
       { id: "KU1", label: "Alex Smith", resolved: true, referenceId: null },
-      { id: "KU2", label: "Unresolved person", resolved: false, referenceId: "KU2" },
-      { id: "KUMISSING", label: "Unresolved user", resolved: false, referenceId: "KUMISSING" }
+      { id: "KU2", label: "KU2", resolved: false, referenceId: "KU2" },
+      { id: "KUMISSING", label: "KUMISSING", resolved: false, referenceId: "KUMISSING" }
     ]);
     expect(projectOverviewContactValues(["alex smith"], people)[0]).toMatchObject({ label: "Alex Smith", resolved: true });
-    expect(projectOverviewContactValues(["Christopher Baldini"], [])[0]).toEqual({ id: "Christopher Baldini", label: "Christopher Baldini", resolved: false, referenceId: null });
+    expect(projectOverviewContactValues(["Christopher Baldini"], [])[0]).toMatchObject({ id: "Christopher Baldini", label: "Christopher Baldini", resolved: true, displayable: true, verified: false, referenceId: null });
   });
 
   it("uses canonical Vertical membership and an exact Legal Reviewer role", () => {

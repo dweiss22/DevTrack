@@ -194,18 +194,18 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
 .projects-search-input input:focus { box-shadow: none; }
 .projects-clear-search { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 43px; }
 .projects-primary-filters, .projects-advanced-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
-.vertical-multi-select { position: relative; min-width: 0; }
-.vertical-multi-label { display: block; margin-bottom: 6px; color: var(--ink); font-size: 12px; font-weight: 700; }
-.vertical-multi-select details { position: relative; }
-.vertical-multi-select summary { min-height: 43px; padding: 10px 34px 10px 11px; border: 1px solid #aebfd2; border-radius: 8px; background: #fff; color: var(--ink); cursor: pointer; list-style: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vertical-multi-select summary::-webkit-details-marker { display: none; }
-.vertical-multi-select summary:after { content: "⌄"; position: absolute; top: 8px; right: 12px; color: var(--muted); font-size: 17px; }
-.vertical-multi-select details[open] summary { border-color: var(--blue); box-shadow: 0 0 0 3px #2d72b820; }
-.vertical-multi-select summary:focus-visible { outline: 3px solid #76a9dc; outline-offset: 1px; }
-.vertical-multi-select fieldset { position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; left: 0; display: grid; max-height: 310px; gap: 3px; overflow: auto; margin: 0; padding: 8px; border: 1px solid #aebfd2; border-radius: 9px; background: #fff; box-shadow: 0 14px 34px #102f4d24; }
-.vertical-multi-select fieldset label { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: start; gap: 8px; padding: 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
-.vertical-multi-select fieldset label:hover { background: #eef5fb; }
-.vertical-multi-select fieldset input { margin-top: 2px; }
+.projects-multi-select { position: relative; min-width: 0; }
+.projects-multi-label { display: block; margin-bottom: 6px; color: var(--ink); font-size: 12px; font-weight: 700; }
+.projects-multi-select details { position: relative; }
+.projects-multi-select summary { min-height: 43px; padding: 10px 34px 10px 11px; border: 1px solid #aebfd2; border-radius: 8px; background: #fff; color: var(--ink); cursor: pointer; list-style: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.projects-multi-select summary::-webkit-details-marker { display: none; }
+.projects-multi-select summary:after { content: "⌄"; position: absolute; top: 8px; right: 12px; color: var(--muted); font-size: 17px; }
+.projects-multi-select details[open] summary { border-color: var(--blue); box-shadow: 0 0 0 3px #2d72b820; }
+.projects-multi-select summary:focus-visible { outline: 3px solid #76a9dc; outline-offset: 1px; }
+.projects-multi-select fieldset { position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; left: 0; display: grid; max-height: 310px; gap: 3px; overflow: auto; margin: 0; padding: 8px; border: 1px solid #aebfd2; border-radius: 9px; background: #fff; box-shadow: 0 14px 34px #102f4d24; }
+.projects-multi-select fieldset label { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: start; gap: 8px; padding: 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+.projects-multi-select fieldset label:hover { background: #eef5fb; }
+.projects-multi-select fieldset input { margin-top: 2px; }
 .projects-more-filters { display: grid; gap: 14px; }
 .projects-more-toggle { display: inline-flex; width: max-content; align-items: center; gap: 7px; padding: 8px 11px; }
 .projects-more-toggle span { display: grid; min-width: 20px; height: 20px; place-items: center; padding: 0 5px; border-radius: 999px; background: #fff; font-size: 11px; }
@@ -241,6 +241,8 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
 .projects-load-failure { max-width: 760px; }
 .projects-load-failure h2 { margin-top: 18px; font-size: 18px; }
 .projects-load-failure .button, .projects-load-failure button { margin-top: 18px; }
+.user-name-unavailable { display: inline-flex; align-items: center; gap: 6px; }
+.user-name-unavailable-marker { padding: 2px 6px; border: 1px solid #d6b36a; border-radius: 999px; background: #fff8e7; color: #79561a; font-size: 11px; font-weight: 700; }
 .projects-diagnostic-details { margin-top: 8px; }
 .projects-diagnostic-details summary { width: max-content; max-width: 100%; cursor: pointer; font-weight: 700; }
 .projects-diagnostic-details dl { display: grid; gap: 8px; margin: 10px 0 0; }

@@ -1,10 +1,14 @@
 import { filtersToQuery, type ReportingFilters } from "@/lib/reporting/filters";
 import type { CustomFieldFilterOption } from "@/lib/reporting/options";
+import { verticalStateLabel, type VerticalState } from "@/lib/wrike/vertical-normalization";
 
 export type ProjectPersonOption = {
   wrikeId: string;
   name: string;
   resolved: boolean;
+  displayable?: boolean;
+  verified?: boolean;
+  verificationSource?: "wrike_contact" | "email_match" | "task_name" | "configured_fallback" | "manual_mapping" | "unresolved";
 };
 
 export type ProjectFilterFields = {
@@ -66,26 +70,21 @@ export function reportingYearOptions(field: CustomFieldFilterOption | null) {
   return [...years].sort((left, right) => right - left);
 }
 
+export function projectFilterValues(value: string | string[] | undefined) {
+  return value == null ? [] : Array.isArray(value) ? value : [value];
+}
+
 export function projectPersonLabel(value: string, people: readonly ProjectPersonOption[]) {
-  const person = people.find((candidate) => candidate.wrikeId === value);
-  if (!person || !person.resolved) return `Unresolved Wrike user ${value}`;
-  return person.name;
+  return resolveProjectPerson(value, people).label;
 }
 
 export function projectPersonOptions(field: CustomFieldFilterOption | null, people: readonly ProjectPersonOption[]) {
-  return (field?.values ?? []).map((value) => ({
-    value,
-    label: projectPersonLabel(value, people),
-    resolved: Boolean(people.find((person) => person.wrikeId === value)?.resolved)
-  })).sort((left, right) => Number(right.resolved) - Number(left.resolved) || left.label.localeCompare(right.label));
+  return (field?.values ?? []).map((value) => ({ value, ...resolveProjectPerson(value, people) }))
+    .sort((left, right) => Number(right.resolved) - Number(left.resolved) || left.label.localeCompare(right.label));
 }
 
 export function projectContactValues(values: readonly string[], people: readonly ProjectPersonOption[]) {
-  return values.map((value) => ({
-    id: value,
-    label: projectPersonLabel(value, people),
-    resolved: Boolean(people.find((person) => person.wrikeId === value)?.resolved)
-  }));
+  return values.map((value) => ({ id: value, ...resolveProjectPerson(value, people) }));
 }
 
 const WRIKE_USER_ID_PATTERN = /^KU[A-Z0-9]+$/i;
@@ -95,16 +94,48 @@ export function projectOverviewContactValues(values: readonly string[], people: 
     const value = sourceValue.trim();
     const personById = people.find((person) => person.wrikeId.toLocaleLowerCase() === value.toLocaleLowerCase());
     if (personById) {
-      const readableName = personById.name.trim() && personById.name.toLocaleLowerCase() !== personById.wrikeId.toLocaleLowerCase()
-        ? personById.name
-        : "Unresolved user";
-      return { id: personById.wrikeId, label: readableName, resolved: personById.resolved, referenceId: personById.resolved ? null : personById.wrikeId };
+      const readableName = projectPersonName(personById);
+      if (readableName) return personDisplayState(personById.wrikeId, readableName, personById);
+      return unavailablePersonState(personById.wrikeId);
     }
     const personByName = people.find((person) => person.name.trim().toLocaleLowerCase() === value.toLocaleLowerCase());
-    if (personByName) return { id: value, label: personByName.name, resolved: personByName.resolved, referenceId: personByName.resolved ? null : personByName.wrikeId };
-    if (WRIKE_USER_ID_PATTERN.test(value)) return { id: value, label: "Unresolved user", resolved: false, referenceId: value };
-    return { id: value, label: value, resolved: false, referenceId: null };
+    if (personByName) return personDisplayState(value, personByName.name, personByName);
+    if (WRIKE_USER_ID_PATTERN.test(value)) return unavailablePersonState(value);
+    return { id: value, label: value, resolved: true, displayable: true, verified: false, verificationSource: "task_name" as const, referenceId: null };
   });
+}
+
+export function projectTableVerticalLabel(field: { values: string[]; normalizedVerticals?: string[] | null } | undefined, state?: VerticalState) {
+  if (state === "cross_vertical") return "Cross-Vertical";
+  const normalized = field?.normalizedVerticals?.filter(Boolean).join(", ");
+  if (normalized) return normalized;
+  const values = field?.values.filter(Boolean).join(", ");
+  if (values) return values;
+  return state && state !== "resolved" ? verticalStateLabel(state) : "—";
+}
+
+function resolveProjectPerson(sourceValue: string, people: readonly ProjectPersonOption[]) {
+  const value = sourceValue.trim();
+  const person = people.find((candidate) => candidate.wrikeId.toLocaleLowerCase() === value.toLocaleLowerCase())
+    ?? people.find((candidate) => candidate.name.trim().toLocaleLowerCase() === value.toLocaleLowerCase());
+  const name = person ? projectPersonName(person) : null;
+  if (name) return { label: name, resolved: true, displayable: true, verified: person?.verified ?? false, verificationSource: person?.verificationSource ?? "task_name" as const };
+  const displayable = !WRIKE_USER_ID_PATTERN.test(value);
+  return { label: displayable ? value : `${value} — Name unavailable`, resolved: displayable, displayable, verified: false, verificationSource: displayable ? "task_name" as const : "unresolved" as const };
+}
+
+function projectPersonName(person: ProjectPersonOption) {
+  const name = person.name.trim();
+  if (!name || name.toLocaleLowerCase() === person.wrikeId.toLocaleLowerCase() || /^(?:unresolved|unverified) (?:wrike )?(?:user|person)\b/i.test(name)) return null;
+  return name;
+}
+
+function personDisplayState(id: string, label: string, person: ProjectPersonOption) {
+  return { id, label, resolved: true, displayable: true, verified: person.verified ?? person.resolved, verificationSource: person.verificationSource ?? (person.resolved ? "wrike_contact" as const : "task_name" as const), referenceId: null };
+}
+
+function unavailablePersonState(id: string) {
+  return { id, label: id, resolved: false, displayable: false, verified: false, verificationSource: "unresolved" as const, referenceId: id };
 }
 
 export function projectFilterHref(filters: ReportingFilters, changes: Record<string, string | number | boolean | readonly string[] | null | undefined>, returnTo?: string) {
@@ -112,9 +143,9 @@ export function projectFilterHref(filters: ReportingFilters, changes: Record<str
   for (const [key, value] of Object.entries(changes)) {
     if (key.startsWith("cf_")) {
       const id = key.slice(3);
-      const custom = target.customFields as Record<string, string>;
+      const custom = target.customFields as Record<string, string | readonly string[]>;
       if (value == null || value === "") delete custom[id];
-      else custom[id] = String(value);
+      else custom[id] = Array.isArray(value) ? value : String(value);
       continue;
     }
     if (value == null || value === "") delete target[key];

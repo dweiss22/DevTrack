@@ -3,6 +3,7 @@ import { APPROVED_VERTICALS, VERTICAL_REPORTING_FILTER_OPTIONS, VERTICAL_STATE_F
 
 const emptyToUndefined = (value: unknown) => value === "" ? undefined : value;
 const stringArray = z.union([z.string(), z.array(z.string())]).transform((value) => (Array.isArray(value) ? value : value.split(",")).map((item) => item.trim()).filter(Boolean));
+const customFieldSelection = z.union([z.string().trim().min(1).max(200), z.array(z.string().trim().min(1).max(200)).max(100)]);
 const optionalDate = z.preprocess(emptyToUndefined, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional());
 const optionalInteger = z.preprocess(emptyToUndefined, z.coerce.number().int().nonnegative().optional());
 const optionalEnum = <T extends [string, ...string[]]>(values: T) => z.preprocess(emptyToUndefined, z.enum(values).optional());
@@ -34,8 +35,9 @@ export const reportingFiltersSchema = z.object({
   maxMinutes: optionalInteger,
   minPlannedMinutes: optionalInteger,
   maxPlannedMinutes: optionalInteger,
-  customFields: z.record(z.string(), z.string().max(200)).optional(),
+  customFields: z.record(z.string(), customFieldSelection).optional(),
   reportingYear: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1900).max(2199).optional()),
+  reportingYears: stringArray.pipe(z.array(z.coerce.number().int().min(1900).max(2199)).max(25)).optional(),
   validReportingYearOnly: optionalBoolean,
   dashboardClassification: optionalEnum(["active", "completed", "stalled_or_canceled"]),
   dashboardField: optionalEnum(["course type", "authoring tool"]),
@@ -52,10 +54,16 @@ export const reportingFiltersSchema = z.object({
 });
 
 export type ReportingFilters = z.infer<typeof reportingFiltersSchema>;
+export type CustomFieldSelection = string | string[];
 
 type SearchValues = Record<string, string | string[] | undefined>;
 export function parseReportingFilters(values: SearchValues): ReportingFilters {
-  const customFields = Object.fromEntries(Object.entries(values).filter(([key, value]) => key.startsWith("cf_") && typeof value === "string" && value.trim()).map(([key, value]) => [key.slice(3), value as string]));
+  const customFields = Object.fromEntries(Object.entries(values).flatMap(([key, source]) => {
+    if (!key.startsWith("cf_")) return [];
+    const values = (Array.isArray(source) ? source : source == null ? [] : [source]).map((value) => value.trim()).filter(Boolean);
+    if (!values.length) return [];
+    return [[key.slice(3), values.length === 1 ? values[0] : values] as const];
+  }));
   const verticalSelection = typeof values.verticalSelection === "string" ? values.verticalSelection : undefined;
   const verticalSelectionFilters = verticalSelection?.startsWith("associated:")
     ? { associatedVertical: verticalSelection.slice("associated:".length), verticalReportingCategory: undefined, verticalState: undefined, unresolvedVerticalOnly: undefined }
@@ -106,6 +114,9 @@ export function filtersToQuery(filters: Partial<ReportingFilters>) {
     if (Array.isArray(value)) value.forEach((item) => query.append(key, String(item)));
     else query.set(key, String(value));
   }
-  for (const [id, value] of Object.entries(filters.customFields ?? {})) if (value) query.set(`cf_${id}`, value);
+  for (const [id, value] of Object.entries(filters.customFields ?? {})) {
+    const values = Array.isArray(value) ? value : [value];
+    for (const item of values) if (item) query.append(`cf_${id}`, item);
+  }
   return query.toString();
 }

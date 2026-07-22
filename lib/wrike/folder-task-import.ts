@@ -14,6 +14,7 @@ import {
   type EnrichedTaskMetadata
 } from "@/lib/wrike/metadata";
 import { refreshWrikeSessionFor, wrikeSessionFor } from "@/lib/wrike/oauth";
+import { syncTaskPersonIdentities, taskPersonIdentityObservations } from "@/lib/wrike/person-identity";
 import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory, syncEncounteredWrikeUsers, syncWrikeReferenceData, type ReferenceSyncDiagnostics } from "@/lib/wrike/reference-data";
 import { uniqueWrikeIds, type WrikeUnresolvedReferenceInput } from "@/lib/wrike/reference-resolution";
 import { isOutOfScopeWrikeFolder, scopedWrikeFolderIds, SELECTED_WRIKE_FOLDERS, SELECTED_WRIKE_FOLDER_BY_ID, SELECTED_WRIKE_FOLDER_IDS, type SelectedWrikeFolder } from "@/lib/wrike/selected-folders";
@@ -543,6 +544,9 @@ async function runFolderTaskImport(db: ReturnType<typeof createAdminClient>, org
   const manualMappings = await loadCustomFieldManualMappings(db, organizationId);
   const enrichmentMappings = new Map([...manualMappings].map(([wrikeId, mapping]) => [wrikeId, { action: mapping.action, normalizedTitle: mapping.normalizedTitle }]));
   const enrichedByTaskId = new Map(tasks.map((task) => [task.id, enrichTaskMetadata(task, metadata.folderDefinitionsById, metadata.customFieldDefinitionsById, enrichmentMappings)]));
+  const identitySync = await syncTaskPersonIdentities(db, organizationId, client, taskPersonIdentityObservations(tasks, enrichedByTaskId));
+  references.diagnostics.users.identities = identitySync.diagnostics;
+  tracker.referenceWarningCount += identitySync.diagnostics.ambiguous + identitySync.diagnostics.notFound + identitySync.diagnostics.failed;
   const verticalStateByTaskId = new Map(tasks.map((task) => {
     const enriched = enrichedByTaskId.get(task.id)!;
     const vertical = enriched.customFieldsNormalized.find((field) => field.normalizedKey === "vertical")?.verticalNormalization;

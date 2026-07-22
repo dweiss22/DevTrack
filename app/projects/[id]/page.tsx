@@ -35,13 +35,14 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const returnTo = safeProjectsReturnTo(query.returnTo) ?? "/projects";
   const returnLabel = returnTo.startsWith("/development") ? "Development" : "Projects";
   const { supabase, profile } = await requireContext();
-  const [projectResult, usersResult, categoriesResult, statusesResult, verticalResult, benchmarkResult] = await Promise.all([
+  const [projectResult, usersResult, categoriesResult, statusesResult, verticalResult, benchmarkResult, identitiesResult] = await Promise.all([
     supabase.from("wrike_tasks").select("*,wrike_time_entries(id,wrike_id,entry_date,minutes,category,comment,user_wrike_id,wrike_users(display_name,email))").eq("id", id).eq("organization_id", profile.organization_id).eq("wrike_time_entries.is_deleted", false).maybeSingle(),
-    supabase.from("wrike_users").select("wrike_id,display_name,email,avatar_url,synced_at,is_active,is_unresolved,raw_data").eq("organization_id", profile.organization_id),
+    supabase.from("wrike_users").select("wrike_id,display_name,email,avatar_url,synced_at,is_active,is_unresolved,identity_verified,identity_verification_source,raw_data").eq("organization_id", profile.organization_id),
     supabase.from("wrike_timelog_categories").select("wrike_id,title,synced_at,is_unresolved").eq("organization_id", profile.organization_id),
     supabase.from("wrike_workflow_statuses").select("wrike_id,title,workflow_id,color,dashboard_classification,synced_at,is_unresolved").eq("organization_id", profile.organization_id),
     supabase.from("wrike_task_normalized_custom_field_values").select("normalized_verticals,vertical_reporting_category,has_unresolved_vertical,unresolved_vertical_tokens,has_conflict,source_wrike_field_ids,source_titles,normalized_field:wrike_normalized_custom_fields!inner(normalized_key)").eq("task_id", id).eq("normalized_field.normalized_key", "vertical").maybeSingle(),
-    loadProjectLengthPercentilesResult(supabase, [id])
+    loadProjectLengthPercentilesResult(supabase, [id]),
+    supabase.from("wrike_person_identities").select("identity_key,display_name,wrike_contact_id,is_displayable,is_verified,verification_source").eq("organization_id", profile.organization_id)
   ]);
   for (const result of [projectResult, usersResult, categoriesResult, statusesResult, verticalResult]) if (result.error) throw result.error;
   if (!projectResult.data) notFound();
@@ -57,7 +58,10 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const unresolvedCustomFields = customFieldsRaw.filter((field) => !field.resolved && !field.ignored);
   const assignees = resolveResponsibleUsers(row.responsible_wrike_ids ?? [], users);
   const statusReference = resolveTaskStatus(row.custom_status_id, row.status, statusesResult.data ?? []);
-  const people: ProjectPersonOption[] = users.map((person) => ({ wrikeId: person.wrike_id, name: person.display_name, resolved: !person.is_unresolved && person.display_name !== person.wrike_id }));
+  const people: ProjectPersonOption[] = [
+    ...users.map((person) => ({ wrikeId: person.wrike_id, name: person.display_name, resolved: !person.is_unresolved && person.display_name !== person.wrike_id, displayable: person.display_name !== person.wrike_id, verified: person.identity_verified, verificationSource: person.identity_verification_source ?? (person.is_unresolved ? "unresolved" as const : "configured_fallback" as const) })),
+    ...(!identitiesResult.error ? identitiesResult.data ?? [] : []).map((identity) => ({ wrikeId: identity.wrike_contact_id ?? identity.identity_key, name: identity.display_name, resolved: Boolean(identity.wrike_contact_id), displayable: identity.is_displayable, verified: identity.is_verified, verificationSource: identity.verification_source }))
+  ];
   const fieldByRole = new Map(customFields.map((field) => [projectFieldRole(field.normalizedKey), field]).filter((entry): entry is [NonNullable<ReturnType<typeof projectFieldRole>>, NormalizedCustomFieldValue] => entry[0] != null));
   const vertical = fieldByRole.get("vertical");
   const featuredFields = projectOverviewFieldKeys(customFields);

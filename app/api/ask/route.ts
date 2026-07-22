@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     loadCustomFieldOptions(supabase)
   ]);
   const references: AskReferences = {
-    users: (users ?? []).map((row) => ({ id: row.id, name: row.is_unresolved ? `Unresolved Wrike user ${row.wrike_id}` : row.display_name })),
+    users: (users ?? []).map((row) => ({ id: row.id, name: row.is_unresolved ? row.wrike_id : row.display_name })),
     scopes: (scopes ?? []).map((row) => ({ id: row.id, name: row.label })),
     projects: (projects ?? []).map((row) => ({ id: row.id, name: row.title })),
     statuses: (statusRows ?? []).map((row) => ({ id: row.wrike_id, name: row.is_unresolved ? `Unresolved Wrike status ${row.wrike_id}` : row.title })),

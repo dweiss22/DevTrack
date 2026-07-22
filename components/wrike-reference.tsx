@@ -3,6 +3,9 @@ import { CircleHelp } from "lucide-react";
 import { UNRESOLVED_REFERENCE_MESSAGES, type WrikeReferenceType } from "@/lib/wrike/reference-resolution";
 
 export function UnresolvedReferenceLabel({ id, type, className = "", label, showId = true }: { id: string; type: WrikeReferenceType; className?: string; label?: string; showId?: boolean }) {
+  if (type === "user") return <span className={`unresolved-reference user-name-unavailable ${className}`.trim()} aria-label={`${id}. Name unavailable for this Wrike contact.`}>
+    <code>{id}</code><span className="user-name-unavailable-marker">Name unavailable</span>
+  </span>;
   const explanation = UNRESOLVED_REFERENCE_MESSAGES[type];
   const accessibleLabel = label
     ? `${label}.${showId ? ` Wrike ID ${id}.` : ""} ${explanation}`

@@ -33,18 +33,18 @@ describe("central Wrike reference resolution", () => {
     expect(resolveWrikeReferenceByPrecedence<string>("FIELD001", {})).toMatchObject({ value: null, fallbackLabel: "FIELD001", resolutionSource: "unresolved" });
   });
 
-  it("renders unresolved IDs with focusable, screen-reader, hover-tooltip semantics", () => {
+  it("renders a raw user ID with a concise accessible marker and keeps tooltips for other reference types", () => {
     const markup = renderToStaticMarkup(<UnresolvedReferenceLabel id="UNKNOWN1" type="user" />);
-    expect(markup).toContain('tabindex="0"');
-    expect(markup).toContain('role="tooltip"');
-    expect(markup).toContain("This Wrike user could not be identified");
+    expect(markup).toContain("UNKNOWN1");
+    expect(markup).toContain("Name unavailable");
     expect(markup).toContain('aria-label="UNKNOWN1.');
+    expect(markup).not.toContain('role="tooltip"');
+    expect(markup).not.toContain("This Wrike user could not be identified");
+    expect(markup).not.toContain("lucide-circle-help");
     expect(renderToStaticMarkup(<StatusBadge name="UNKNOWN1" id="UNKNOWN1" resolved={false} />)).toContain("unresolved-reference");
-    const nameOnly = renderToStaticMarkup(<UnresolvedReferenceLabel id="Christopher Baldini" type="user" label="Christopher Baldini" showId={false} />);
-    expect(nameOnly).toContain("Christopher Baldini");
-    expect(nameOnly).toContain("unresolved-reference");
-    expect(nameOnly).not.toContain("Wrike ID Christopher Baldini");
-    expect(nameOnly).not.toContain("Wrike ID: Christopher Baldini");
+    const folder = renderToStaticMarkup(<UnresolvedReferenceLabel id="FOLDER01" type="folder" />);
+    expect(folder).toContain('role="tooltip"');
+    expect(folder).toContain("lucide-circle-help");
   });
 
   it("preserves historical people and refreshes only missing, unresolved, or older-than-24-hour records", () => {

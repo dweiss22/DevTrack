@@ -71,6 +71,7 @@ export type ReferenceSyncDiagnostics = {
     failed: number;
     failedIds: string[];
     nameMismatches: UserNameMismatch[];
+    identities?: { observed: number; deduplicated: number; cached: number; verified: number; ambiguous: number; notFound: number; failed: number };
     durationMs: number;
   };
   categories: { requests: number; received: number; upserted: number; paginationObserved: boolean; failed: boolean; durationMs: number };
@@ -310,6 +311,9 @@ export async function syncEncounteredWrikeUsers(
     raw_data: { referenceSource: "configured_fallback" },
     is_active: true,
     is_unresolved: false,
+    identity_verified: false,
+    identity_verification_source: "configured_fallback",
+    identity_verified_at: null,
     updated_at: nowIso
   }));
   let fallbackCreated = 0;
@@ -349,6 +353,9 @@ export async function syncEncounteredWrikeUsers(
         raw_data: user,
         is_active: accountProfile?.active ?? !user.deleted,
         is_unresolved: false,
+        identity_verified: true,
+        identity_verification_source: "wrike_contact",
+        identity_verified_at: nowIso,
         deleted_at: user.deleted ? nowIso : null,
         synced_at: nowIso,
         last_resolution_attempt_at: nowIso,
@@ -376,6 +383,9 @@ export async function syncEncounteredWrikeUsers(
       raw_data: { referenceSource: "unresolved_placeholder" },
       is_active: true,
       is_unresolved: true,
+      identity_verified: false,
+      identity_verification_source: "unresolved",
+      identity_verified_at: null,
       last_resolution_attempt_at: nowIso,
       last_resolution_error: failure.message,
       updated_at: nowIso

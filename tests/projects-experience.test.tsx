@@ -11,6 +11,7 @@ import {
   projectFilterFields,
   projectFilterHref,
   projectPersonOptions,
+  projectTableVerticalLabel,
   reportingYearOptions
 } from "@/lib/reporting/projects";
 
@@ -36,13 +37,14 @@ describe("Projects experience", () => {
     expect(projectFilterFields([{ id: "ID1", name: "ID Assigned", values: ["Katie Willis"] }]).owner?.name).toBe("ID Assigned");
   });
 
-  it("resolves contact options and labels missing references visibly", () => {
+  it("uses readable task identities and leaves only raw unknown Wrike IDs unresolved", () => {
     const fields = projectFilterFields(customFields);
-    expect(projectPersonOptions(fields.owner, people)).toEqual([
+    expect(projectPersonOptions(fields.owner, people)).toMatchObject([
       { value: "KUAAAAAA", label: "Alex Smith", resolved: true },
-      { value: "KUMISSING", label: "Unresolved Wrike user KUMISSING", resolved: false }
+      { value: "KUMISSING", label: "KUMISSING — Name unavailable", resolved: false }
     ]);
     expect(projectContactValues(["KUMISSING"], people)[0]).toMatchObject({ resolved: false, id: "KUMISSING" });
+    expect(projectContactValues(["Katie Willis"], people)[0]).toMatchObject({ id: "Katie Willis", label: "Katie Willis", resolved: true, displayable: true, verified: false });
   });
 
   it("keeps cumulative URL filters, resets pagination, and clears intentionally", () => {
@@ -65,13 +67,25 @@ describe("Projects experience", () => {
     expect(parseReportingFilters({ verticalSelection: "category:Cross Vertical" }).verticalReportingCategory).toBe("Cross Vertical");
   });
 
-  it("renders the primary and advanced controls with accessible unresolved labels", () => {
-    const filters = parseReportingFilters({ reportingYear: "2026", q: "academy", "cf_00000000-0000-0000-0000-000000000002": "KUMISSING" });
+  it("shows canonical Vertical membership and never exposes the resolved state", () => {
+    expect(projectTableVerticalLabel({ values: ["Legacy"], normalizedVerticals: ["P1A"] }, "resolved")).toBe("P1A");
+    expect(projectTableVerticalLabel({ values: ["EMS1"] }, "resolved")).toBe("EMS1");
+    expect(projectTableVerticalLabel(undefined, "resolved")).toBe("—");
+    expect(projectTableVerticalLabel(undefined, "missing")).toBe("Vertical not assigned");
+    expect(projectTableVerticalLabel({ values: ["P1A", "EMS1"] }, "cross_vertical")).toBe("Cross-Vertical");
+  });
+
+  it("renders Designer controls without unresolved prefixes on filter values", () => {
+    const filters = parseReportingFilters({ reportingYears: ["2025", "2026"], statuses: ["S1"], q: "academy", "cf_00000000-0000-0000-0000-000000000002": ["KUAAAAAA", "KUMISSING"] });
     const markup = renderToStaticMarkup(<ProjectsFilters filters={filters} statuses={statuses} customFields={customFields} people={people} facets={facets} returnTo="/" />);
     expect(markup).toContain('placeholder="Search project titles and associated people"');
-    expect(markup).toContain('name="reportingYear"');
+    expect(markup.match(/name="reportingYears"/g)).toHaveLength(2);
     expect(markup).toContain('name="statuses"');
-    expect(markup).toContain("Unresolved Wrike user KUMISSING");
+    expect(markup).toContain("Designer");
+    expect(markup).toContain('aria-label="Designer filter. 2 selected"');
+    expect(markup).toContain(">KUMISSING — Name unavailable</span>");
+    expect(markup).toContain("2 selected");
+    expect(markup).not.toContain("Unresolved Wrike user");
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).toContain("More Filters");
     expect(markup).toContain("Clear All");

@@ -71,7 +71,7 @@ export async function loadReportingOptions(supabase: SupabaseClient, organizatio
     loadCustomFieldOptions(supabase)
   ]);
   return {
-    users: (users.data ?? []).map((row) => ({ id: row.id, name: row.is_unresolved ? `Unresolved Wrike user ${row.wrike_id}` : row.display_name, wrikeId: row.wrike_id, resolved: !row.is_unresolved })),
+    users: (users.data ?? []).map((row) => ({ id: row.id, name: row.is_unresolved ? row.wrike_id : row.display_name, wrikeId: row.wrike_id, resolved: !row.is_unresolved })),
     scopes: (scopes.data ?? []).map((row) => ({ id: row.id, name: row.label })),
     statuses,
     categories: (categories.data ?? []).map((row) => ({ id: row.wrike_id, name: row.is_unresolved ? `Unresolved Wrike category ${row.wrike_id}` : row.title })),

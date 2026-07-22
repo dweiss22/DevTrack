@@ -27,6 +27,8 @@ const projectLengthPercentileMigration = fs.readFileSync(path.join(process.cwd()
 const projectsListExperienceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210004_projects_list_experience.sql"), "utf8");
 const projectsPercentilePerformanceMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210005_projects_percentile_performance.sql"), "utf8");
 const organizationWideReportingMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210006_organization_wide_reporting_access.sql"), "utf8");
+const projectsMultiselectMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220001_projects_multiselect_filters.sql"), "utf8");
+const personIdentityMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220002_wrike_person_identities.sql"), "utf8");
 
 function sqlFunctionDefinition(sql: string, name: string) {
   const start = sql.indexOf(`create or replace function public.${name}`);
@@ -267,6 +269,28 @@ describe("reporting migration contract", () => {
     expect(projectsPercentilePerformanceMigration).toContain("reporting_accessible_task_ids()");
     expect(projectsPercentilePerformanceMigration).not.toContain("can_access_wrike_time_entry");
     expect(projectsPercentilePerformanceMigration).toContain("reload schema");
+  });
+  it("supports OR selections within Projects filters and AND semantics across fields", () => {
+    expect(projectsMultiselectMigration).toContain("jsonb_each(requested)");
+    expect(projectsMultiselectMigration).toContain("jsonb_array_elements_text");
+    expect(projectsMultiselectMigration).toContain("selected.value=any(field_value.display_values)");
+    expect(projectsMultiselectMigration).toContain("matches_reporting_year_selections");
+    expect(projectsMultiselectMigration).toContain("'reportingYears'");
+    expect(projectsMultiselectMigration).toContain("matches_reporting_vertical_filters(filtered.task_id,filters)");
+  });
+  it("stores person displayability independently from Wrike verification", () => {
+    expect(personIdentityMigration).toContain("create table if not exists public.wrike_person_identities");
+    expect(personIdentityMigration).toContain("is_displayable boolean not null");
+    expect(personIdentityMigration).toContain("is_verified boolean not null");
+    for (const source of ["wrike_contact", "email_match", "task_name", "configured_fallback", "manual_mapping", "unresolved"]) expect(personIdentityMigration).toContain(source);
+    for (const status of ["unverified", "verified", "ambiguous", "not_found", "failed"]) expect(personIdentityMigration).toContain(status);
+    expect(personIdentityMigration).toContain("unique (organization_id,identity_key)");
+    expect(personIdentityMigration).toContain("last_verification_attempt_at timestamptz");
+    expect(personIdentityMigration).toContain("next_verification_attempt_at timestamptz");
+    expect(personIdentityMigration).toContain("verification_attempt_count integer");
+    expect(personIdentityMigration).toContain("first_name text");
+    expect(personIdentityMigration).toContain("contact_deleted boolean");
+    expect(personIdentityMigration).toContain("last_verified_at timestamptz");
   });
   it("makes synchronized reporting organization-wide while preserving cross-organization RLS", () => {
     expect(organizationWideReportingMigration).toContain('create policy "organization reporting task read"');

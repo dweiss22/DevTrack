@@ -36,7 +36,7 @@ export type WrikeUnresolvedReferenceInput = {
 
 export const UNRESOLVED_REFERENCE_MESSAGES: Record<WrikeReferenceType, string> = {
   custom_field: "The name of this Wrike field could not be identified. Its Wrike ID is being shown temporarily. This field can be mapped or corrected later.",
-  user: "This Wrike user could not be identified. The Wrike user ID is being shown temporarily and will be resolved during a future data sync.",
+  user: "Name unavailable for this Wrike contact.",
   custom_status: "The name and classification of this Wrike status could not be identified. Its Wrike custom status ID is being shown temporarily.",
   workflow: "This Wrike workflow could not be identified. Its Wrike ID is being shown temporarily.",
   folder: "This Wrike folder could not be identified. Its Wrike ID is being shown temporarily.",
