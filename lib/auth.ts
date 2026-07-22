@@ -8,8 +8,9 @@ export const requireContext = cache(async function requireContext() {
   const claims = data?.claims;
   const userId = typeof claims?.sub === "string" ? claims.sub : null;
   if (claimsError || !userId) redirect("/login");
-  const { data: profile, error } = await supabase.from("application_users").select("organization_id, role, display_name").eq("id", userId).single();
-  if (error || !profile) throw new Error("Your account is not assigned to an organization. Ask an administrator for access.");
+  const { data: profile, error } = await supabase.from("application_users").select("organization_id, role, display_name").eq("id", userId).maybeSingle();
+  if (error) throw new Error("DevTrack could not verify your organization access. Retry the request.");
+  if (!profile) redirect("/access-pending");
   const user = { id: userId, email: typeof claims?.email === "string" ? claims.email : null };
   return { user, profile, supabase };
 });

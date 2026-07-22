@@ -1,17 +1,32 @@
-"use client";
-import { useEffect, useState } from "react";
-import { DevTrackBrand } from "@/components/devtrack-brand";
+import { redirect } from "next/navigation";
+import { LoginForm } from "@/components/login-form";
+import { loadAuthenticationAvailability } from "@/lib/auth/providers";
+import { safeInternalPath } from "@/lib/auth/redirects";
+import { createClient } from "@/lib/supabase/server";
 
-export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [notice, setNotice] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+const reasonMessages: Record<string, string> = {
+  configuration_missing: "Sign-in is not configured for this environment. Contact a DevTrack administrator.",
+  service_unavailable: "Sign-in services are temporarily unavailable. Please retry.",
+  microsoft_unavailable: "Microsoft sign-in is temporarily unavailable. Please retry or use your DevTrack password.",
+  callback_failed: "Microsoft sign-in could not be completed. Please try again.",
+  password_updated: "Password updated successfully. You can now sign in."
+};
 
-  useEffect(() => {
-    const error = new URLSearchParams(window.location.search).get("error");
-    if (error) setNotice(error);
-  }, []);
+export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const query = await searchParams;
+  const next = safeInternalPath(typeof query.next === "string" ? query.next : null);
+  const reason = typeof query.reason === "string" ? query.reason : "";
+  const availability = await loadAuthenticationAvailability();
 
-  return <main className="login"><section className="card"><DevTrackBrand href="/login" className="login-brand" /><p className="eyebrow">SECURE REPORTING</p><h1>Sign in</h1><p>Use your Lexipol Microsoft account. First-time users will be authenticated, then sent for DevTrack access approval.</p><a className="button microsoft-button" href="/api/auth/microsoft">Continue with Microsoft</a><div className="login-divider"><span>or use administrator-issued credentials</span></div><form onSubmit={async (event) => { event.preventDefault(); setSubmitting(true); setNotice(""); try { const response = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) }); const body = await response.json(); if (!response.ok) return setNotice(body.error); window.location.assign(body.redirectTo); } catch { setNotice("Sign-in could not be completed. Please try again."); } finally { setSubmitting(false); } }}><label>Email<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /></label><label>Password<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required /></label><button disabled={submitting}>{submitting ? "Signing in..." : "Sign in"}</button></form>{notice && <p className="notice error" role="alert">{notice}</p>}</section></main>;
+  if (!availability.configurationError) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
+    if (user) {
+      const { data: applicationUser } = await supabase.from("application_users").select("id").eq("id", user.id).maybeSingle();
+      redirect(applicationUser ? next : "/access-pending");
+    }
+  }
+
+  const initialNotice = availability.configurationError && (reason === "configuration_missing" || reason === "service_unavailable") ? "" : reasonMessages[reason] ?? "";
+  return <LoginForm availability={availability} returnTo={next} initialNotice={initialNotice} initialError={reason !== "password_updated"} />;
 }

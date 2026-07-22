@@ -1,28 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
+import { safeInternalPath } from "@/lib/auth/redirects";
 import { createClient } from "@/lib/supabase/server";
 
-function safeNext(value: string | null) {
-  return value?.startsWith("/") && !value.startsWith("//") ? value : "/";
-}
-
-function loginError(origin: string, message: string) {
+function loginError(origin: string) {
   const login = new URL("/login", origin);
-  login.searchParams.set("error", message);
+  login.searchParams.set("reason", "callback_failed");
   return NextResponse.redirect(login);
 }
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = safeNext(url.searchParams.get("next"));
-  if (!code) return loginError(url.origin, "Microsoft authentication did not return a sign-in code. Please try again.");
+  const next = safeInternalPath(url.searchParams.get("next"));
+  if (!code) return loginError(url.origin);
 
-  const supabase = await createClient();
+  let supabase: Awaited<ReturnType<typeof createClient>>;
+  try { supabase = await createClient(); }
+  catch { return loginError(url.origin); }
   const { error } = await supabase.auth.exchangeCodeForSession(code);
-  if (error) return loginError(url.origin, "Microsoft authentication could not be completed. Please try again.");
+  if (error) return loginError(url.origin);
 
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return loginError(url.origin, "Microsoft authentication completed without a user account. Please try again.");
+  if (!user) return loginError(url.origin);
 
   const { data: applicationUser } = await supabase
     .from("application_users")

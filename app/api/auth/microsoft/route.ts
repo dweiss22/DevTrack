@@ -1,25 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
-
-function safeNext(value: string | null) {
-  return value?.startsWith("/") && !value.startsWith("//") ? value : "/";
-}
+import { safeInternalPath } from "@/lib/auth/redirects";
 
 export async function GET(request: NextRequest) {
-  const next = safeNext(request.nextUrl.searchParams.get("next"));
-  const callback = new URL("/auth/callback", env.NEXT_PUBLIC_APP_URL);
+  const next = safeInternalPath(request.nextUrl.searchParams.get("next"));
+  let callback: URL;
+  try { callback = new URL("/auth/callback", env.NEXT_PUBLIC_APP_URL); }
+  catch {
+    const login = new URL("/login", request.url);
+    login.searchParams.set("reason", "configuration_missing");
+    return NextResponse.redirect(login);
+  }
   if (next !== "/") callback.searchParams.set("next", next);
 
-  const supabase = await createClient();
+  let supabase: Awaited<ReturnType<typeof createClient>>;
+  try { supabase = await createClient(); }
+  catch {
+    const login = new URL("/login", request.url);
+    login.searchParams.set("reason", "configuration_missing");
+    return NextResponse.redirect(login);
+  }
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "azure",
     options: { scopes: "email", redirectTo: callback.toString() }
   });
 
   if (error || !data.url) {
-    const login = new URL("/login", env.NEXT_PUBLIC_APP_URL);
-    login.searchParams.set("error", "Microsoft sign-in is temporarily unavailable. Please try again or contact a DevTrack administrator.");
+    const login = new URL("/login", request.url);
+    login.searchParams.set("reason", "microsoft_unavailable");
     return NextResponse.redirect(login);
   }
 
