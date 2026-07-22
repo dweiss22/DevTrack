@@ -23,6 +23,11 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return loginError(url.origin);
 
+  // A valid recovery session must reach password setup before application
+  // approval is evaluated. The update-password API performs the session check
+  // again and routes unapproved learners to access pending after the update.
+  if (next === "/update-password") return NextResponse.redirect(new URL(next, url.origin));
+
   const { data: applicationUser } = await supabase
     .from("application_users")
     .select("id")

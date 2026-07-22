@@ -30,6 +30,13 @@ describe("authentication callback", () => {
     expect(response.headers.get("location")).toBe("https://devtrack.example/access-pending");
   });
 
+  it("lets a valid recovery session choose a password before the approval gate", async () => {
+    const response = await GET(new NextRequest("https://devtrack.example/auth/callback?code=recovery-code&next=%2Fupdate-password"));
+    expect(mocks.exchange).toHaveBeenCalledWith("recovery-code");
+    expect(response.headers.get("location")).toBe("https://devtrack.example/update-password");
+    expect(mocks.maybeSingle).not.toHaveBeenCalled();
+  });
+
   it("returns safely to login when code exchange fails", async () => {
     mocks.exchange.mockResolvedValue({ error: new Error("raw provider detail") });
     const response = await GET(new NextRequest("https://devtrack.example/auth/callback?code=bad-code"));
