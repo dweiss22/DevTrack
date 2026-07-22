@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 const mocks = vi.hoisted(() => ({ getUser: vi.fn(), createServerClient: vi.fn() }));
 vi.mock("@supabase/ssr", () => ({ createServerClient: mocks.createServerClient }));
 
-import { isAuthenticationEntryRequest, middleware } from "@/middleware";
+import { config, isAuthenticationEntryRequest, middleware } from "@/middleware";
 
 describe("authentication middleware", () => {
   beforeEach(() => {
@@ -26,6 +26,14 @@ describe("authentication middleware", () => {
     expect(isAuthenticationEntryRequest("https://devtrack-indol.vercel.app/login?next=%2Fprojects")).toBe(true);
     expect(isAuthenticationEntryRequest("https://devtrack-indol.vercel.app/recover/")).toBe(true);
     expect(isAuthenticationEntryRequest("https://devtrack-indol.vercel.app/projects")).toBe(false);
+  });
+
+  it("only runs middleware on protected application routes", () => {
+    expect(config.matcher).toContain("/");
+    expect(config.matcher).toContain("/projects/:path*");
+    expect(config.matcher).toContain("/admin/:path*");
+    expect(config.matcher).not.toContain("/login/:path*");
+    expect(config.matcher).not.toContain("/auth/:path*");
   });
 
   it("redirects a logged-out protected request and preserves its internal path", async () => {

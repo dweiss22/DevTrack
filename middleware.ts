@@ -55,5 +55,16 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!login(?:/|$)|recover(?:/|$)|update-password(?:/|$)|auth/callback(?:/|$)|api/auth(?:/|$)|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"]
+  matcher: [
+    "/",
+    "/admin/:path*",
+    "/ask/:path*",
+    "/development/:path*",
+    "/other-teams/:path*",
+    "/projects/:path*",
+    "/sme-collaboration/:path*",
+    "/tasks/:path*",
+    "/team/:path*",
+    "/time-entries/:path*"
+  ]
 };
