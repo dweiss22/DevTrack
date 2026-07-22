@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 const mocks = vi.hoisted(() => ({ getUser: vi.fn(), createServerClient: vi.fn() }));
 vi.mock("@supabase/ssr", () => ({ createServerClient: mocks.createServerClient }));
 
-import { middleware } from "@/middleware";
+import { isAuthenticationEntryRequest, middleware } from "@/middleware";
 
 describe("authentication middleware", () => {
   beforeEach(() => {
@@ -22,7 +22,10 @@ describe("authentication middleware", () => {
     expect(login.status).toBe(200);
     expect(trailingLogin.status).toBe(200);
     expect(callback.status).toBe(200);
-    expect(mocks.createServerClient).toHaveBeenCalledTimes(3);
+    expect(mocks.createServerClient).not.toHaveBeenCalled();
+    expect(isAuthenticationEntryRequest("https://devtrack-indol.vercel.app/login?next=%2Fprojects")).toBe(true);
+    expect(isAuthenticationEntryRequest("https://devtrack-indol.vercel.app/recover/")).toBe(true);
+    expect(isAuthenticationEntryRequest("https://devtrack-indol.vercel.app/projects")).toBe(false);
   });
 
   it("redirects a logged-out protected request and preserves its internal path", async () => {

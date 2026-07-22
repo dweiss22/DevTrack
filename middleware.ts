@@ -2,8 +2,17 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isPublicAuthenticationPath, loginHref } from "@/lib/auth/redirects";
 
+export function isAuthenticationEntryRequest(requestUrl: string) {
+  const path = requestUrl.split("?", 1)[0].replace(/\/+$/, "").toLowerCase();
+  return path.endsWith("/login") || path.endsWith("/recover") || path.endsWith("/update-password") || path.endsWith("/auth/callback") || path.includes("/api/auth/");
+}
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
+  // Vercel may normalize `nextUrl.pathname` differently from the matched route.
+  // Bypass authentication entry URLs before session refresh or redirect logic so
+  // a logged-out visitor can never be redirected from /login back to /login.
+  if (isAuthenticationEntryRequest(request.url)) return response;
   const pathname = request.nextUrl.pathname;
   const publicAuthenticationPath = isPublicAuthenticationPath(pathname);
 
