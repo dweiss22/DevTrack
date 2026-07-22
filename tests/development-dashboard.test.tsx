@@ -49,8 +49,29 @@ describe("Development reporting dashboard", () => {
     expect((markup.match(/<select/g) ?? [])).toHaveLength(1);
   });
 
-  it("keeps the column chooser and historical-status disclosure in the UI source", () => {
-    expect(fs.readFileSync(path.join(process.cwd(), "components/development-project-table.tsx"), "utf8")).toContain("devtrack-development-columns");
+  it("uses the same six project-list columns as Projects and keeps historical-status disclosure", () => {
+    const table = fs.readFileSync(path.join(process.cwd(), "components/development-project-table.tsx"), "utf8");
+    const page = fs.readFileSync(path.join(process.cwd(), "app/development/page.tsx"), "utf8");
+    for (const label of ["Project name", "Status", "Vertical", "ID Assigned", "Folders", "Development percentile"]) expect(table).toContain(`label: "${label}"`);
+    expect(table).toContain("SortableTableHeader");
+    expect(table).toContain("projectOverviewContactValues");
+    expect(table).toContain("projectTableVerticalLabel");
+    expect(table).toContain("ProjectPercentileRing");
+    expect(table).not.toContain("Visible columns");
+    expect(table).not.toContain("devtrack-development-columns");
+    expect(page).toContain("loadProjectLengthPercentilesResult");
     expect(fs.readFileSync(path.join(process.cwd(), "components/development-analytics.tsx"), "utf8")).toContain("historical status-at-entry data is not available");
+  });
+
+  it("provides a polished, accessible route-level loading state", () => {
+    const loading = fs.readFileSync(path.join(process.cwd(), "app/development/loading.tsx"), "utf8");
+    expect(loading).toContain("AppShell");
+    expect(loading).toContain('aria-busy="true"');
+    expect(loading).toContain('aria-live="polite"');
+    expect(loading).toContain("Course-development dashboard");
+    expect(loading).toContain("development-route-loading-filter");
+    expect(loading).toContain("development-route-loading-chart");
+    expect(loading).toContain("development-route-loading-projects");
+    for (const label of ["Project name", "Status", "Vertical", "ID Assigned", "Folders", "Development percentile"]) expect(loading).toContain(`"${label}"`);
   });
 });

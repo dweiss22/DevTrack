@@ -23,11 +23,11 @@ export async function loadCustomFieldOptions(supabase: SupabaseClient): Promise<
   }
   console.info("reporting_custom_field_options_completed", { elapsedMs });
   const grouped = new Map<string, CustomFieldFilterOption>();
-  for (const row of (data ?? []) as { normalized_field_id: string; normalized_title: string; value: string }[]) {
+  for (const row of (data ?? []) as { normalized_field_id: string; normalized_title: string; value: string | null }[]) {
     const existing = grouped.get(row.normalized_field_id);
     if (existing) {
-      if (!existing.values.includes(row.value)) existing.values.push(row.value);
-    } else grouped.set(row.normalized_field_id, { id: row.normalized_field_id, name: row.normalized_title, values: [row.value] });
+      if (row.value && !existing.values.includes(row.value)) existing.values.push(row.value);
+    } else grouped.set(row.normalized_field_id, { id: row.normalized_field_id, name: row.normalized_title, values: row.value ? [row.value] : [] });
   }
   return [...grouped.values()].sort((left, right) => left.name.localeCompare(right.name)).map((field) => ({ ...field, values: field.values.sort((left, right) => left.localeCompare(right)) }));
 }

@@ -29,6 +29,8 @@ const projectsPercentilePerformanceMigration = fs.readFileSync(path.join(process
 const organizationWideReportingMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607210006_organization_wide_reporting_access.sql"), "utf8");
 const projectsMultiselectMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220001_projects_multiselect_filters.sql"), "utf8");
 const personIdentityMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220002_wrike_person_identities.sql"), "utf8");
+const sortableProjectTablesMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220003_sortable_project_tables.sql"), "utf8");
+const courseTypeFilteringMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220004_course_type_filtering.sql"), "utf8");
 
 function sqlFunctionDefinition(sql: string, name: string) {
   const start = sql.indexOf(`create or replace function public.${name}`);
@@ -38,6 +40,14 @@ function sqlFunctionDefinition(sql: string, name: string) {
   return sql.slice(start, end + 3);
 }
 describe("reporting migration contract", () => {
+  it("exposes only observed accessible Course Type values with multiselect matching", () => {
+    expect(courseTypeFilteringMigration).toContain("field.normalized_key='course type'");
+    expect(courseTypeFilteringMigration).toContain("join visible_tasks task on task.id=task_value.task_id");
+    expect(courseTypeFilteringMigration).toContain("jsonb_each(requested)");
+    expect(courseTypeFilteringMigration).toContain("selected.value=any(field_value.display_values)");
+    expect(courseTypeFilteringMigration).not.toContain("allowed_values");
+  });
+
   it("includes source/person access modes and scoped task/time policies", () => {
     expect(migration).toContain("reporting_match_mode as enum ('intersection', 'union')");
     expect(migration).toContain("can_access_wrike_task");
@@ -291,6 +301,18 @@ describe("reporting migration contract", () => {
     expect(personIdentityMigration).toContain("first_name text");
     expect(personIdentityMigration).toContain("contact_deleted boolean");
     expect(personIdentityMigration).toContain("last_verified_at timestamptz");
+  });
+  it("sorts both project tables across all six visible columns and both directions", () => {
+    expect(sortableProjectTablesMigration).toContain("reporting_project_sort_percentiles(target_task_ids uuid[])");
+    expect(sortableProjectTablesMigration).toContain("reporting_project_length_percentiles(batches.task_ids)");
+    expect(sortableProjectTablesMigration).toContain("create or replace function public.reporting_task_rows");
+    expect(sortableProjectTablesMigration).toContain("create or replace function public.reporting_development_project_rows");
+    for (const key of ["title", "status", "vertical", "designer", "folders", "percentile"]) {
+      expect(sortableProjectTablesMigration).toContain(`settings.sort_key='${key}'`);
+    }
+    expect(sortableProjectTablesMigration).toContain("settings.direction='asc'");
+    expect(sortableProjectTablesMigration).toContain("settings.direction='desc'");
+    expect(sortableProjectTablesMigration).toContain("limit greatest(1,least(result_limit,200)) offset greatest(0,result_offset)");
   });
   it("makes synchronized reporting organization-wide while preserving cross-organization RLS", () => {
     expect(organizationWideReportingMigration).toContain('create policy "organization reporting task read"');

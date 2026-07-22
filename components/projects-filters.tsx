@@ -34,6 +34,7 @@ export function ProjectsFilters({ filters, statuses, customFields, people, facet
   const selectedStatuses = filters.statuses ?? [];
   const ownerOptions = projectPersonOptions(fields.owner, people);
   const smeOptions = projectPersonOptions(fields.sme, people);
+  const selectedCourseTypes = projectFilterValues(fields.courseType ? filters.customFields?.[fields.courseType.id] : undefined);
   const verticalOptions = [...APPROVED_VERTICALS];
   const legacySelectedVertical = filters.associatedVertical ? `associated:${filters.associatedVertical}`
       : filters.verticalReportingCategory ? `category:${filters.verticalReportingCategory}`
@@ -48,7 +49,7 @@ export function ProjectsFilters({ filters, statuses, customFields, people, facet
     { value: "state:synchronization_incomplete", label: "Vertical data not fully synchronized" }
   ];
   for (const selected of selectedVerticals) if (!verticalMultiOptions.some((option) => option.value === selected)) verticalMultiOptions.push({ value: selected, label: verticalSelectionLabel(selected) });
-  const advancedCount = selectedVerticals.length + projectFilterValues(fields.courseType ? filters.customFields?.[fields.courseType.id] : undefined).length + projectFilterValues(fields.sme ? filters.customFields?.[fields.sme.id] : undefined).length + projectFilterValues(fields.courseLength ? filters.customFields?.[fields.courseLength.id] : undefined).length;
+  const advancedCount = selectedVerticals.length + selectedCourseTypes.length + projectFilterValues(fields.sme ? filters.customFields?.[fields.sme.id] : undefined).length + projectFilterValues(fields.courseLength ? filters.customFields?.[fields.courseLength.id] : undefined).length;
   const visibleNames = new Set(["q", "statuses", "reportingYear", "reportingYears", "associatedVertical", "verticalReportingCategory", "verticalState", "unresolvedVerticalOnly", "verticalSelection", "verticalSelections"]);
   for (const field of [fields.owner, fields.tool, fields.courseType, fields.sme, fields.courseLength]) if (field) visibleNames.add(`cf_${field.id}`);
   const preserved = [...new URLSearchParams(filtersToQuery({ ...filters, page: 1 })).entries()].filter(([name]) => !visibleNames.has(name) && name !== "page");
@@ -72,7 +73,7 @@ export function ProjectsFilters({ filters, statuses, customFields, people, facet
       </div>
       <FilterDisclosure count={advancedCount} initiallyOpen={advancedCount > 0}>
         <div className="projects-advanced-grid">
-          <ProjectsMultiSelect label="Course Type" name={fields.courseType ? `cf_${fields.courseType.id}` : "courseTypeUnavailable"} options={(fields.courseType?.values ?? []).map(valueOption)} selected={projectFilterValues(fields.courseType ? filters.customFields?.[fields.courseType.id] : undefined)} allLabel="All course types" emptyLabel="No synchronized Course Type field is available." disabled={!fields.courseType} />
+          <ProjectsMultiSelect label="Course Type" name={fields.courseType ? `cf_${fields.courseType.id}` : "courseTypeUnavailable"} options={withMissingSelections((fields.courseType?.values ?? []).map(valueOption), selectedCourseTypes, (value) => value)} selected={selectedCourseTypes} allLabel="All course types" emptyLabel="No Course Type values are present on accessible synchronized tasks." disabled={!fields.courseType} />
           <VerticalMultiSelect options={verticalMultiOptions} selected={selectedVerticals} disabled={!fields.vertical && !selectedVerticals.length && !facets.verticalStates.size} />
           <ProjectsMultiSelect label="SME" name={fields.sme ? `cf_${fields.sme.id}` : "smeUnavailable"} options={smeOptions} selected={projectFilterValues(fields.sme ? filters.customFields?.[fields.sme.id] : undefined)} allLabel="All SMEs" emptyLabel="No synchronized SME field is available." disabled={!fields.sme} />
           <ProjectsMultiSelect label="Course Length" name={fields.courseLength ? `cf_${fields.courseLength.id}` : "courseLengthUnavailable"} options={(fields.courseLength?.values ?? []).map(valueOption)} selected={projectFilterValues(fields.courseLength ? filters.customFields?.[fields.courseLength.id] : undefined)} allLabel="All course lengths" emptyLabel="No synchronized Course Length field is available." disabled={!fields.courseLength} />

@@ -5,6 +5,7 @@ import { ProjectPercentileRing } from "@/components/project-percentile-ring";
 import { ProjectsLoadFailure } from "@/components/projects-load-failure";
 import { ProjectsFilters } from "@/components/projects-filters";
 import { ProjectsListToolbar } from "@/components/projects-list-toolbar";
+import { effectiveSortDirection, nextSortDirection, SortableTableHeader, type TableSortDirection } from "@/components/sortable-table-header";
 import { StatusBadge, UnresolvedReferenceLabel } from "@/components/wrike-reference";
 import { requireContext } from "@/lib/auth";
 import { loadProjectLengthPercentilesResult, loadTaskRows } from "@/lib/reporting/data";
@@ -12,7 +13,7 @@ import { safeDashboardReturnTo } from "@/lib/reporting/dashboard-navigation";
 import { reportingFailure, type ReportingFailure } from "@/lib/reporting/failure";
 import { filtersToQuery, parseProjectReportingFilters } from "@/lib/reporting/filters";
 import { loadAccessibleProjectFacets, loadCustomFieldOptionsResult, loadStatusOptions } from "@/lib/reporting/options";
-import { projectFieldRole, projectOverviewContactValues, projectTableVerticalLabel } from "@/lib/reporting/projects";
+import { projectFieldRole, projectFilterHref, projectOverviewContactValues, projectTableVerticalLabel } from "@/lib/reporting/projects";
 
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const query = await searchParams;
@@ -63,7 +64,11 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     <ProjectsFilters filters={filters} statuses={statuses} customFields={customFields} people={people} facets={facets} returnTo={returnTo} />
     <ProjectsListToolbar filters={filters} total={total} returnTo={returnTo} />
     {projects.length ? <>
-      <div className="projects-table-wrap"><table className="projects-table"><thead><tr><th>Project name</th><th>Status</th><th>Vertical</th><th>ID Assigned</th><th>Folders</th><th>Development percentile</th></tr></thead><tbody>{projects.map((project) => {
+      <div className="projects-table-wrap"><table className="projects-table"><thead><tr>{PROJECT_SORT_COLUMNS.map((column) => {
+        const active = filters.sort === column.key;
+        const direction = effectiveSortDirection(filters.sort, filters.sortDirection);
+        return <SortableTableHeader key={column.key} label={column.label} active={active} direction={direction} href={projectFilterHref(filters, { sort: column.key, sortDirection: nextSortDirection(active, direction, column.initial), page: 1 }, returnTo)} />;
+      })}</tr></thead><tbody>{projects.map((project) => {
         const vertical = Object.values(project.custom_values).find((field) => field.title.trim().toLocaleLowerCase() === "vertical");
         const idAssigned = Object.values(project.custom_values).find((field) => projectFieldRole(field.title) === "owner");
         const idAssignedValues = projectOverviewContactValues(idAssigned?.values ?? [], people);
@@ -80,6 +85,15 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     </> : <p className="card empty">No imported projects match these filters. Clear one or more filters, or go to Data if no import has run.</p>}
   </AppShell>;
 }
+
+const PROJECT_SORT_COLUMNS = [
+  { key: "title", label: "Project name", initial: "asc" },
+  { key: "status", label: "Status", initial: "asc" },
+  { key: "vertical", label: "Vertical", initial: "asc" },
+  { key: "designer", label: "ID Assigned", initial: "asc" },
+  { key: "folders", label: "Folders", initial: "asc" },
+  { key: "percentile", label: "Development percentile", initial: "desc" }
+] as const satisfies readonly { key: string; label: string; initial: TableSortDirection }[];
 
 type ProjectsRequestResult<T> = { data: T; failure: null } | { data: null; failure: ReportingFailure };
 

@@ -43,7 +43,8 @@ describe("Projects list redesign", () => {
     const page = fs.readFileSync(path.join(process.cwd(), "app/projects/page.tsx"), "utf8");
     const data = fs.readFileSync(path.join(process.cwd(), "lib/reporting/data.ts"), "utf8");
     const loading = fs.readFileSync(path.join(process.cwd(), "app/projects/loading.tsx"), "utf8");
-    expect(page).toContain("<th>Project name</th><th>Status</th><th>Vertical</th><th>ID Assigned</th><th>Folders</th><th>Development percentile</th>");
+    for (const label of ["Project name", "Status", "Vertical", "ID Assigned", "Folders", "Development percentile"]) expect(page).toContain(`label: "${label}"`);
+    expect(page).toContain("SortableTableHeader");
     for (const removed of ["Vertical Reporting Category", "<th>Assignees</th>", "<th>Due</th>", "<th>Planned</th>", "<th>Last updated</th>"]) expect(page).not.toContain(removed);
     expect(loading).toContain('aria-busy="true"');
     expect(loading).toContain("projects-loading-table");

@@ -62,7 +62,7 @@ export function normalizeWrikeCustomFieldTitle(title: string): NormalizedCustomF
 
 export function customFieldDisplayValues(value: unknown): string[] {
   if (value == null) return [];
-  if (Array.isArray(value)) return value.flatMap(customFieldDisplayValues).filter((item, index, values) => values.indexOf(item) === index);
+  if (Array.isArray(value)) return uniqueDisplayValues(value.flatMap(customFieldDisplayValues));
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed ? [trimmed] : [];
@@ -72,7 +72,17 @@ export function customFieldDisplayValues(value: unknown): string[] {
 }
 
 function valueSetSignature(values: string[]) {
-  return JSON.stringify([...new Set(values)].sort());
+  return JSON.stringify(uniqueDisplayValues(values).map((value) => value.toLocaleLowerCase()).sort());
+}
+
+function uniqueDisplayValues(values: readonly string[]) {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const key = value.toLocaleLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export function mergeNormalizedCustomFields(fields: readonly CustomFieldNormalizationSource[]): NormalizedCustomFieldValue[] {
@@ -102,7 +112,7 @@ export function mergeNormalizedCustomFields(fields: readonly CustomFieldNormaliz
       ? normalizeVerticalValue(group.sources.length === 1 ? group.sources[0].displayValue : group.sources.map((source) => source.displayValue))
       : undefined;
     const displayValues = verticalNormalization?.normalizedVerticals
-      ?? populated.flatMap((source) => source.displayValues).filter((value, index, values) => values.indexOf(value) === index);
+      ?? uniqueDisplayValues(populated.flatMap((source) => source.displayValues));
     return {
       normalizedKey,
       normalizedTitle: group.title,

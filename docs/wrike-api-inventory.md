@@ -148,13 +148,13 @@ For example, both of these source fields become one logical **Authoring Tool** f
 [LCT] Authoring Tool (L) → Authoring Tool
 ```
 
-The same rule applies to every matching title. A small reviewed alias list also shortens `Authoring Tool Used`, `Course Development Type`, and `Primary Product Area` to **Authoring Tool**, **Course Type**, and **Product Area** respectively. The aliases are centralized rather than inferred dynamically.
+The same rule applies to every matching title. A small reviewed alias list also shortens `Authoring Tool Used`, `Course Development Type`, and `Primary Product Area` to **Authoring Tool**, **Course Type**, and **Product Area** respectively. Both `Course Type` and the reviewed `Course Development Type` alias therefore map to the exact normalized key `course type`; similar or longer titles are not matched by substring. The aliases are centralized rather than inferred dynamically.
 
 Normalization does not replace Wrike's identifiers. DevTrack continues storing each original Wrike field ID, title, raw value, resolved display value, source designation, task relationship, and synchronization time. A separate logical-field layer maps those authoritative sources to a normalized title.
 
 When only one source contains a value, that value is used. Matching values and equivalent multi-value sets are shown once. If populated sources disagree, all values, field IDs, and original titles are retained, the logical task value is marked as conflicted, and the import records a warning without failing synchronization.
 
-Reports and filters expose one normalized field name. Filter choices come from distinct values actually present on tasks visible to the signed-in user; definition options that have never appeared on synchronized task data are not offered. Selecting a value matches any mapped source field, including either `(M)` or `(L)` and every preserved value in a conflict. General report search also checks normalized field names and values.
+Reports and filters expose one normalized field name. Filter choices come from distinct values actually present on tasks visible to the signed-in user; definition options that have never appeared on synchronized task data are not offered. Normalized Course Type remains filter-eligible when its synchronized Wrike source is referenced by accessible tasks even if that source was not separately enabled for generic reporting. Selecting multiple values matches any selected value within that field, while additional fields remain cumulative. Selecting a value matches any mapped source field, including either `(M)` or `(L)` and every preserved value in a conflict. General report search also checks normalized field names and values.
 
 Field definitions still begin with `GET /customfields?title=%5BLCT%5D` and `GET /customfields?title=LCT`. The existing unfiltered fallback is also used once when imported tasks reveal an unknown field ID. Normalization occurs only after the returned Wrike ID has been resolved or an administrator mapping supplies a reviewed logical title.
 

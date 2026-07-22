@@ -29,7 +29,8 @@ export const developmentFiltersSchema = z.object({
   verticalState: optionalEnum([...VERTICAL_STATE_FILTER_OPTIONS]),
   unresolvedVerticalOnly: z.preprocess((value) => value === "true" || value === "on", z.boolean().default(false)),
   customFields: z.record(z.string(), z.string().max(200)).optional(),
-  sort: z.enum(["updated", "title", "status", "priority", "start", "due", "completed", "actual"]).default("updated"),
+  sort: z.enum(["updated", "title", "status", "vertical", "designer", "folders", "percentile", "priority", "start", "due", "completed", "actual"]).default("updated"),
+  sortDirection: optionalEnum(["asc", "desc"]),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(10).max(200).default(50)
 });

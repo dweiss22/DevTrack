@@ -48,7 +48,8 @@ export const reportingFiltersSchema = z.object({
   unresolvedVerticalOnly: optionalBoolean,
   verticalSelections: stringArray.pipe(z.array(z.enum(verticalSelectionTokens)).max(25)).optional(),
   groupCustomFieldId: z.preprocess(emptyToUndefined, z.string().uuid().optional()),
-  sort: z.enum(["updated", "title", "due", "actual"]).default("updated"),
+  sort: z.enum(["updated", "title", "status", "vertical", "designer", "folders", "percentile", "due", "actual"]).default("updated"),
+  sortDirection: optionalEnum(["asc", "desc"]),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(10).max(200).default(50)
 });
