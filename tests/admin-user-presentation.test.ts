@@ -20,6 +20,16 @@ describe("administrator user presentation", () => {
     expect(source).not.toContain("user.display_name ?? user.id");
   });
 
+  it("shows unassigned authentication accounts in an administrator approval queue", () => {
+    const page = readFileSync(join(root, "app", "admin", "users", "page.tsx"), "utf8");
+    const queue = readFileSync(join(root, "components", "user-approval-queue.tsx"), "utf8");
+    const route = readFileSync(join(root, "app", "api", "admin", "users", "approve", "route.ts"), "utf8");
+    expect(page).toContain("<UserApprovalQueue users={pendingUsers} />");
+    expect(queue).toContain("Approve access");
+    expect(route).toContain("await requireAdmin()");
+    expect(route).toContain('role: "member"');
+  });
+
   it("keeps task source identifiers inside collapsed diagnostics", () => {
     const source = readFileSync(join(root, "app", "projects", "[id]", "page.tsx"), "utf8");
     const disclosure = source.indexOf("<details>");

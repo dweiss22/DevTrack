@@ -206,6 +206,9 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
 .admin-history-section + .admin-history-section { margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--line); }
 .admin-history-section h3 { margin-bottom: 12px; }
 .admin-table-wrap { overflow-x: auto; }
+.user-approval-card { margin-bottom: 24px; }
+.user-approval-card > .muted { margin-top: -4px; }
+.user-members-section > h2 { margin-bottom: 12px; }
 .empty { padding: 36px; text-align: center; color: var(--muted); }
 pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px; background: #f8fafc; padding: 12px; border-radius: 7px; }
 .muted, small { color: var(--muted); }
