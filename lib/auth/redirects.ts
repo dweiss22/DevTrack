@@ -1,5 +1,5 @@
-const UNSAFE_RETURN_PATHS = new Set(["/login", "/recover", "/auth/callback"]);
-const PUBLIC_AUTHENTICATION_PATHS = new Set(["/login", "/recover", "/update-password", "/auth/callback"]);
+const UNSAFE_RETURN_PATHS = new Set(["/login", "/recover", "/auth/callback", "/auth/confirm"]);
+const PUBLIC_AUTHENTICATION_PATHS = new Set(["/login", "/recover", "/update-password", "/auth/callback", "/auth/confirm"]);
 
 export function safeInternalPath(value: string | null | undefined, fallback = "/") {
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\") || /[\u0000-\u001f]/.test(value)) return fallback;

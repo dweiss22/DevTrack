@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { StatusBadge, UnresolvedReferenceLabel } from "@/components/wrike-reference";
+import { useEffect, useState, type ReactNode } from "react";
+import { UnresolvedReferenceLabel } from "@/components/wrike-reference";
 
 type Connection = { status: string; account_name: string | null; api_host: string | null; oauth_scopes: string[] | null; token_expires_at: string | null; updated_at: string } | null;
 type SearchAttempt = { query: string | null; path: string; returnedCount: number; returnedTitles: string[]; containsExpectedField: boolean };
@@ -26,22 +26,17 @@ type FolderRun = {
 type ConfiguredFolder = { id: string; title: string };
 type FolderFailure = { operation: string; folderId: string; folderTitle: string; requestFolderId: string; status: number | null; message: string };
 type UnresolvedReference = { id: string; reference_type: "custom_field" | "user" | "custom_status" | "workflow" | "folder" | "space" | "timelog_category"; wrike_id: string; sample_values: unknown[]; related_records: unknown[]; occurrence_count: number; resolution_attempts: number; first_encountered_at: string; last_encountered_at: string; last_attempted_at: string | null; last_error: string | null; resolution_status: string };
-type IdentityReview = { id: string; display_name: string; email: string | null; verification_status: "unverified" | "ambiguous" | "not_found" | "failed"; verification_source: string; candidate_contacts: { id?: string; displayName?: string; emails?: string[] }[]; verification_attempt_count: number; last_verification_attempt_at: string | null; next_verification_attempt_at: string | null; last_error: string | null };
-type NormalizedField = { id: string; title: string; normalized_key: string };
-type WorkflowStatus = { wrike_id: string; title: string; status_group: string | null; color: string | null; dashboard_classification: "active" | "completed" | "stalled_or_canceled" | null; classification_source: "automatic" | "manual" | null; workflow_id: string };
-type ManualMapping = { id: string; wrike_id: string; action: "map_existing" | "create_new" | "ignore"; target_normalized_field_id: string | null; manual_label: string | null; reprocess_status: string; reprocess_error: string | null; updated_at: string };
 type RepairRun = { id: string; status: string; examined_count: number; repaired_count: number; unchanged_count: number; retained_count: number; still_incomplete_count: number; started_at: string; completed_at: string | null; error_summary: string | null };
-type Props = { connection: Connection; folderRuns: FolderRun[]; folders: ConfiguredFolder[]; unresolvedReferences: UnresolvedReference[]; identityReview: IdentityReview[]; normalizedFields: NormalizedField[]; workflowStatuses: WorkflowStatus[]; manualMappings: ManualMapping[]; verticalDiagnostics: Record<string, unknown> | null; verticalDiagnosticsError: string | null; repairRuns: RepairRun[] };
+type Props = { connection: Connection; folderRuns: FolderRun[]; folders: ConfiguredFolder[]; unresolvedReferences: UnresolvedReference[]; verticalDiagnostics: Record<string, unknown> | null; verticalDiagnosticsError: string | null; repairRuns: RepairRun[] };
 
-export function AdminPanel({ connection, folderRuns, folders, unresolvedReferences, identityReview, normalizedFields, workflowStatuses, manualMappings, verticalDiagnostics, verticalDiagnosticsError, repairRuns }: Props) {
+export function AdminPanel({ connection, folderRuns, folders, unresolvedReferences, verticalDiagnostics, verticalDiagnosticsError, repairRuns }: Props) {
   const connected = connection?.status === "connected";
   const needsUserScope = connected && !connection?.oauth_scopes?.includes("amReadOnlyUser");
   const [message, setMessage] = useState("");
   const [error, setError] = useState(false);
   const [importing, setImporting] = useState(false);
   const [complete, setComplete] = useState(false);
-  const [diagnosing, setDiagnosing] = useState(false);
-  const [customFieldDiagnostic, setCustomFieldDiagnostic] = useState<Record<string, unknown> | null>(null);
+  const [clearingHistory, setClearingHistory] = useState(false);
 
   useEffect(() => {
     const savedMessage = sessionStorage.getItem("devtrack-data-message");
@@ -96,55 +91,20 @@ export function AdminPanel({ connection, folderRuns, folders, unresolvedReferenc
     finally { setImporting(false); }
   }
 
-  async function compareSuppliedTasks() {
-    setDiagnosing(true); setError(false); setCustomFieldDiagnostic(null);
-    setMessage("Comparing stored data with Wrike…");
+  async function clearHistory() {
+    if (!confirm("Clear all import and Vertical repair history? This cannot be undone.")) return;
+    setClearingHistory(true); setError(false); setMessage("");
     try {
-      const params = new URLSearchParams();
-      params.append("taskId", "MAAAAAECJ2DX");
-      params.append("taskId", "MAAAAAAEMqHAo");
-      const response = await fetch(`/api/admin/wrike/custom-field-diagnostics?${params}`, { cache: "no-store" });
+      const response = await fetch("/api/admin/wrike/history", { method: "DELETE" });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Custom-field comparison failed.");
-      setCustomFieldDiagnostic(payload);
-      setMessage("Comparison complete — no data was changed.");
+      if (!response.ok) throw new Error(payload.error ?? "Unable to clear history.");
+      reloadWithMessage("History cleared.");
     } catch (reason) {
-      setError(true); setMessage(reason instanceof Error ? reason.message : "Custom-field comparison failed.");
-    } finally { setDiagnosing(false); }
+      setError(true); setMessage(reason instanceof Error ? reason.message : "Unable to clear history.");
+      setClearingHistory(false);
+    }
   }
 
-  async function saveCustomFieldMapping(event: FormEvent<HTMLFormElement>, wrikeFieldId: string) {
-    event.preventDefault(); setError(false);
-    const form = new FormData(event.currentTarget);
-    const action = String(form.get("action") ?? "map_existing");
-    const targetNormalizedFieldId = String(form.get("targetNormalizedFieldId") ?? "") || undefined;
-    const newTitle = String(form.get("newTitle") ?? "") || undefined;
-    setMessage(`Saving mapping for ${wrikeFieldId}…`);
-    const response = await fetch("/api/admin/wrike/custom-field-mappings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ wrikeFieldId, action, targetNormalizedFieldId, newTitle }) });
-    const payload = await response.json();
-    if (!response.ok) { setError(true); setMessage(`${payload.error ?? "Unable to save the mapping."}${payload.mappingSaved ? " The mapping was saved, but reprocessing must be retried." : ""}`); return; }
-    reloadWithMessage(`Mapping saved — ${payload.affectedTaskCount} tasks rebuilt.`);
-  }
-
-  async function removeCustomFieldMapping(wrikeFieldId: string) {
-    setError(false); setMessage(`Removing mapping for ${wrikeFieldId}…`);
-    const response = await fetch("/api/admin/wrike/custom-field-mappings", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ wrikeFieldId }) });
-    const payload = await response.json();
-    if (!response.ok) { setError(true); setMessage(payload.error ?? "Unable to remove the mapping."); return; }
-    reloadWithMessage(`Mapping removed — ${payload.affectedTaskCount} tasks rebuilt.`);
-  }
-
-  async function updateStatusClassification(wrikeStatusId: string, selected: string) {
-    setError(false);
-    const automatic = selected === "automatic";
-    const classification = automatic || selected === "unclassified" ? null : selected;
-    const response = await fetch("/api/admin/wrike/status-classifications", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ wrikeStatusId, classification, automatic }) });
-    const payload = await response.json();
-    if (!response.ok) { setError(true); setMessage(payload.error ?? "Unable to update the status classification."); return; }
-    reloadWithMessage(`Status classification updated — ${payload.classification ?? "unclassified"}.`);
-  }
-
-  const unresolvedCustomFields = unresolvedReferences.filter((reference) => reference.reference_type === "custom_field");
   const otherUnresolvedReferences = unresolvedReferences.filter((reference) => reference.reference_type !== "custom_field");
 
   return <div className="admin-stack">
@@ -162,19 +122,14 @@ export function AdminPanel({ connection, folderRuns, folders, unresolvedReferenc
       </div>
       <div className="admin-history-toolbar"><a className="button secondary" href="#data-history">View run history</a></div>
     </AdminDisclosure>
-    <AdminDisclosure title="Custom-field comparison" description="Run the bounded, read-only comparison for the two supplied tasks."><div className="admin-section-content"><div><p className="eyebrow">CUSTOM-FIELD ACQUISITION</p><h2>Compare the two supplied tasks</h2><p>This bounded administrator diagnostic reads the stored rows and current Wrike task-list, task-detail, field-definition, and parent-folder context for <code>MAAAAAECJ2DX</code> and <code>MAAAAAAEMqHAo</code>. It returns field-level evidence without tokens or complete payloads and does not write data.</p></div><div className="filter-bar"><button className="secondary" onClick={compareSuppliedTasks} disabled={!connected || diagnosing}>{diagnosing ? "Comparing…" : "Run read-only comparison"}</button></div>{customFieldDiagnostic ? <details open><summary>Comparison evidence</summary><pre>{JSON.stringify(customFieldDiagnostic, null, 2)}</pre></details> : null}</div></AdminDisclosure>
     <AdminDisclosure title="Connection & source folders" description="Manage the Wrike connection and review the folders included in synchronization.">
     <div className="admin-grid">
       <section className="card"><h2>Wrike connection</h2>{connected ? <><p>Connected to <strong>{connection?.account_name ?? "Wrike"}</strong>.</p><p className="muted">Host: {connection?.api_host}<br />Scopes: {connection?.oauth_scopes?.join(", ") || "wsReadOnly (legacy connection)"}<br />Token expires: {connection?.token_expires_at ? new Date(connection.token_expires_at).toLocaleString() : "unknown"}</p><div className="filter-bar"><button className="secondary" onClick={health}>Run health check</button><a className="button secondary" href="/api/wrike/connect">Reconnect</a><button className="secondary" onClick={async () => { await fetch("/api/wrike/disconnect", { method: "POST" }); location.reload(); }}>Disconnect</button></div></> : <><p>Connect Wrike with read-only access before importing folder data.</p><a className="button" href="/api/wrike/connect">Connect Wrike</a></>}</section>
       <section className="card"><h2>Configured folder allowlist</h2><p className="muted">Only these task and timelog source folders are queried.</p><ol className="detail-list">{folders.map((folder) => <li key={folder.id}><strong>{folder.title}</strong><br /><code>{folder.id}</code></li>)}</ol></section>
     </div>
     </AdminDisclosure>
-    <AdminDisclosure title="Unresolved custom fields" description="Review synchronized custom fields that need an explicit mapping decision."><div className="admin-section-content"><p className="muted">Raw IDs and sample values remain preserved. Map a field to an existing logical field, create a new one, or intentionally ignore it. Saving rebuilds affected tasks locally without calling Wrike.</p>{unresolvedCustomFields.length ? <div className="admin-stack">{unresolvedCustomFields.map((reference) => <form className="card" key={reference.id} onSubmit={(event) => saveCustomFieldMapping(event, reference.wrike_id)}><p><strong><UnresolvedReferenceLabel id={reference.wrike_id} type="custom_field" /></strong><br /><span className="muted">Seen {reference.occurrence_count} time(s); {reference.resolution_attempts} resolution attempt(s). Last seen {new Date(reference.last_encountered_at).toLocaleString()}.</span></p><p><strong>Sample values:</strong> {reference.sample_values.length ? reference.sample_values.map((value) => typeof value === "string" ? value : JSON.stringify(value)).join(", ") : "None retained"}</p>{reference.last_error && <p className="notice error">{reference.last_error}</p>}<div className="form-grid"><label>Action<select name="action" defaultValue="map_existing"><option value="map_existing">Map to existing field</option><option value="create_new">Create normalized field</option><option value="ignore">Intentionally ignore</option></select></label><label>Existing normalized field<select name="targetNormalizedFieldId" defaultValue=""><option value="">Select a field</option>{normalizedFields.map((field) => <option key={field.id} value={field.id}>{field.title}</option>)}</select></label><label>New normalized title<input name="newTitle" maxLength={200} placeholder="Required for Create" /></label></div><button type="submit">Save mapping and rebuild</button></form>)}</div> : <p className="empty">No unresolved custom fields are waiting for correction.</p>}</div></AdminDisclosure>
-    <AdminDisclosure title="Manual custom-field mappings" description="Review or remove the custom-field decisions currently applied."><div className="admin-section-content">{manualMappings.length ? <table><thead><tr><th>Wrike field</th><th>Action</th><th>Logical field</th><th>Reprocessing</th><th /></tr></thead><tbody>{manualMappings.map((mapping) => <tr key={mapping.id}><td><code>{mapping.wrike_id}</code></td><td>{mapping.action.replaceAll("_", " ")}</td><td>{mapping.manual_label ?? "Ignored"}</td><td>{mapping.reprocess_status}{mapping.reprocess_error && <><br /><span className="error">{mapping.reprocess_error}</span></>}</td><td><button className="secondary" onClick={() => removeCustomFieldMapping(mapping.wrike_id)}>Remove</button></td></tr>)}</tbody></table> : <p className="empty">No manual custom-field mappings have been created.</p>}</div></AdminDisclosure>
-    <AdminDisclosure title="Person identity review" description="Review readable person identities that Wrike could not verify uniquely."><div className="admin-section-content"><p className="muted">Readable task names remain displayable. These rows need review because Wrike contact verification was ambiguous, unsuccessful, or unavailable.</p>{identityReview.length ? <table><thead><tr><th>Task name</th><th>Email</th><th>Status</th><th>Candidate contacts</th><th>Attempts</th><th>Last attempt / next retry</th></tr></thead><tbody>{identityReview.map((identity) => <tr key={identity.id}><td>{identity.display_name}</td><td>{identity.email ?? "—"}</td><td>{identity.verification_status.replaceAll("_", " ")}{identity.last_error ? <><br /><span className="error">{identity.last_error}</span></> : null}</td><td>{identity.candidate_contacts.length ? identity.candidate_contacts.map((candidate) => `${candidate.displayName ?? candidate.id}${candidate.emails?.length ? ` (${candidate.emails.join(", ")})` : ""}`).join("; ") : "None"}</td><td>{identity.verification_attempt_count}</td><td>{identity.last_verification_attempt_at ? new Date(identity.last_verification_attempt_at).toLocaleString() : "Not attempted"}<br /><span className="muted">{identity.next_verification_attempt_at ? `Retry after ${new Date(identity.next_verification_attempt_at).toLocaleString()}` : "No retry scheduled"}</span></td></tr>)}</tbody></table> : <p className="empty">No task-provided person identities require review.</p>}</div></AdminDisclosure>
-    <AdminDisclosure title="Online Learning status classifications" description="Control how synchronized Wrike statuses appear in reporting."><div className="admin-section-content"><p className="muted">Names and colors come from Wrike. Dashboard classifications are stored centrally and manual choices survive later workflow imports.</p>{workflowStatuses.length ? <table><thead><tr><th>Status</th><th>Wrike group</th><th>Classification</th><th>Source</th></tr></thead><tbody>{workflowStatuses.map((status) => <tr key={status.wrike_id}><td><StatusBadge name={status.title} id={status.wrike_id} color={status.color} /></td><td>{status.status_group ?? "—"}</td><td><select aria-label={`Classification for ${status.title}`} defaultValue={status.classification_source === "automatic" ? "automatic" : status.dashboard_classification ?? "unclassified"} onChange={(event) => updateStatusClassification(status.wrike_id, event.target.value)}><option value="automatic">Automatic</option><option value="active">Active</option><option value="completed">Completed</option><option value="stalled_or_canceled">Stalled or Canceled</option><option value="unclassified">Unclassified</option></select></td><td>{status.classification_source ?? "unclassified"}</td></tr>)}</tbody></table> : <p className="empty">Run the combined import to synchronize Online Learning workflow statuses.</p>}</div></AdminDisclosure>
     <AdminDisclosure title="Other unresolved Wrike references" description="Review references that will be retried during a future import."><div className="admin-section-content"><p className="muted">These references are read-only here and will be retried during a future combined import. Previously known historical user names remain available even when a user becomes inactive.</p>{otherUnresolvedReferences.length ? <table><thead><tr><th>Type</th><th>Wrike ID</th><th>Occurrences</th><th>Attempts</th><th>Last error</th></tr></thead><tbody>{otherUnresolvedReferences.map((reference) => <tr key={reference.id}><td>{reference.reference_type.replaceAll("_", " ")}</td><td><UnresolvedReferenceLabel id={reference.wrike_id} type={reference.reference_type} /></td><td>{reference.occurrence_count}</td><td>{reference.resolution_attempts}</td><td>{reference.last_error ?? "No error detail"}</td></tr>)}</tbody></table> : <p className="empty">No other unresolved references are waiting for a future import.</p>}</div></AdminDisclosure>
-    <AdminDisclosure title="History" description="Review recent imports and repairs, newest first." count={`${folderRuns.length + repairRuns.length} recent runs`} id="data-history"><div className="admin-history-toolbar"><p className="muted">Most recent runs are shown first.</p><a className="button secondary" href="/admin#data-history">Refresh history</a></div><div className="admin-history-section"><h3>Combined import history</h3>{folderRuns.length ? <table><thead><tr><th>Started</th><th>Status</th><th>Records</th><th>Requests</th><th>Diagnostics</th></tr></thead><tbody>{folderRuns.map((run) => <tr key={run.id}><td>{new Date(run.created_at).toLocaleString()}<br />{run.duration_ms != null ? `${run.duration_ms} ms` : "Running"}</td><td>{run.status}<br />{run.reference_warning_count ?? 0} warning(s)<br />{run.custom_field_conflict_count ?? 0} field conflict(s)<br />{run.unresolved_reference_count ?? 0} unresolved reference(s)</td><td>{run.task_count} tasks<br />{run.unique_timelog_count} timelogs</td><td>{run.task_request_count} task<br />{run.timelog_request_count} timelog</td><td>{run.error_summary ? <>{run.error_summary}<FailureDetails failures={run.folder_failures} /></> : <><span>Descendants: {run.timelog_descendant_strategy}</span><br /><span>Logical custom fields: {run.custom_field_normalization_diagnostics?.logicalFieldCount ?? 0}; values: {run.custom_field_normalization_diagnostics?.normalizedTaskValueCount ?? 0}</span><br /><ReferenceEvidence diagnostics={run.reference_data_diagnostics} /><br /><MetadataEvidence diagnostics={run.metadata_diagnostics} /></>}</td></tr>)}</tbody></table> : <p className="empty">No combined folder import has run yet.</p>}</div><div className="admin-history-section"><h3>Vertical repair history</h3>{repairRuns.length ? <div className="admin-table-wrap"><table><thead><tr><th>Started</th><th>Status</th><th>Examined</th><th>Repaired</th><th>Unchanged</th><th>Retained</th><th>Incomplete</th></tr></thead><tbody>{repairRuns.map((run) => <tr key={run.id}><td>{new Date(run.started_at).toLocaleString()}</td><td>{run.status}{run.error_summary ? <><br /><span className="error">{run.error_summary}</span></> : null}</td><td>{run.examined_count}</td><td>{run.repaired_count}</td><td>{run.unchanged_count}</td><td>{run.retained_count}</td><td>{run.still_incomplete_count}</td></tr>)}</tbody></table></div> : <p className="empty">No Vertical repair has run yet.</p>}</div></AdminDisclosure>
+    <AdminDisclosure title="History" description="Review recent imports and repairs, newest first." count={`${folderRuns.length + repairRuns.length} recent runs`} id="data-history"><div className="admin-history-toolbar"><p className="muted">Most recent runs are shown first.</p><button className="secondary" onClick={clearHistory} disabled={clearingHistory || folderRuns.length + repairRuns.length === 0}>{clearingHistory ? "Clearing history…" : "Clear history"}</button></div><div className="admin-history-section"><h3>Combined import history</h3>{folderRuns.length ? <table><thead><tr><th>Started</th><th>Status</th><th>Records</th><th>Requests</th><th>Diagnostics</th></tr></thead><tbody>{folderRuns.map((run) => <tr key={run.id}><td>{new Date(run.created_at).toLocaleString()}<br />{run.duration_ms != null ? `${run.duration_ms} ms` : "Running"}</td><td>{run.status}<br />{run.reference_warning_count ?? 0} warning(s)<br />{run.custom_field_conflict_count ?? 0} field conflict(s)<br />{run.unresolved_reference_count ?? 0} unresolved reference(s)</td><td>{run.task_count} tasks<br />{run.unique_timelog_count} timelogs</td><td>{run.task_request_count} task<br />{run.timelog_request_count} timelog</td><td>{run.error_summary ? <>{run.error_summary}<FailureDetails failures={run.folder_failures} /></> : <><span>Descendants: {run.timelog_descendant_strategy}</span><br /><span>Logical custom fields: {run.custom_field_normalization_diagnostics?.logicalFieldCount ?? 0}; values: {run.custom_field_normalization_diagnostics?.normalizedTaskValueCount ?? 0}</span><br /><ReferenceEvidence diagnostics={run.reference_data_diagnostics} /><br /><MetadataEvidence diagnostics={run.metadata_diagnostics} /></>}</td></tr>)}</tbody></table> : <p className="empty">No combined folder import has run yet.</p>}</div><div className="admin-history-section"><h3>Vertical repair history</h3>{repairRuns.length ? <div className="admin-table-wrap"><table><thead><tr><th>Started</th><th>Status</th><th>Examined</th><th>Repaired</th><th>Unchanged</th><th>Retained</th><th>Incomplete</th></tr></thead><tbody>{repairRuns.map((run) => <tr key={run.id}><td>{new Date(run.started_at).toLocaleString()}</td><td>{run.status}{run.error_summary ? <><br /><span className="error">{run.error_summary}</span></> : null}</td><td>{run.examined_count}</td><td>{run.repaired_count}</td><td>{run.unchanged_count}</td><td>{run.retained_count}</td><td>{run.still_incomplete_count}</td></tr>)}</tbody></table></div> : <p className="empty">No Vertical repair has run yet.</p>}</div></AdminDisclosure>
   </div>;
 }
 

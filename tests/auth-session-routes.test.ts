@@ -40,7 +40,7 @@ describe("authentication session routes", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ ok: true });
     expect(mocks.resetPasswordForEmail).toHaveBeenCalledWith("learner@example.com", {
-      redirectTo: "https://devtrack.example/auth/callback?next=/update-password"
+      redirectTo: "https://devtrack.example/auth/confirm?next=/update-password"
     });
   });
 

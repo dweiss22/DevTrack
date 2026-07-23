@@ -3,14 +3,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BarChart3, BookOpenCheck, BriefcaseBusiness, Database, FolderKanban, LogOut, Menu, Users, UsersRound, X } from "lucide-react";
+import { BarChart3, BookOpenCheck, BriefcaseBusiness, Database, FolderKanban, LogOut, Menu, UserRound, Users, UsersRound, X } from "lucide-react";
 import { DevTrackBrand } from "@/components/devtrack-brand";
 import lexipolLogo from "@/images/Lexipol_logo_wht-60.png";
 import { navigationForRole, navigationPathIsActive, type NavigationEntry } from "@/lib/navigation";
 
 const icons = { dashboard: BarChart3, development: BookOpenCheck, sme: Users, other: UsersRound, projects: FolderKanban, users: BriefcaseBusiness, data: Database };
 
-export function SidebarNavigation({ isAdmin, lastSynced }: { isAdmin: boolean; lastSynced?: string | null }) {
+export function SidebarNavigation({ isAdmin, lastSynced, profileName }: { isAdmin: boolean; lastSynced?: string | null; profileName: string }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -33,6 +33,7 @@ export function SidebarNavigation({ isAdmin, lastSynced }: { isAdmin: boolean; l
         : <NavigationLink entry={entry} pathname={pathname} close={close} />)}</nav></div>
       <div className="sidebar-footer">
         {lastSynced !== undefined && <p className="sync-note">{lastSynced ? `Last imported ${new Date(lastSynced).toLocaleString()}` : "No project data imported yet"}</p>}
+        <Link className="profile-link" href="/profile" onClick={close}><UserRound size={18} aria-hidden="true" /><span>{profileName}</span></Link>
         <Image className="lexipol-logo" src={lexipolLogo} alt="Lexipol" width={142} />
         <button className="logout-button" type="button" onClick={logout} disabled={loggingOut}><LogOut size={18} aria-hidden="true" />{loggingOut ? "Logging out…" : "Logout"}</button>
       </div>

@@ -90,7 +90,8 @@ describe("authentication entry workflow", () => {
   it("establishes OAuth sessions and sends unapproved users to access pending", () => {
     const callback = source("app/auth/callback/route.ts");
     expect(callback).toContain("exchangeCodeForSession(code)");
-    expect(callback).toContain('applicationUser ? next : "/access-pending"');
+    expect(callback).toContain('if (!applicationUser) return NextResponse.redirect(new URL("/access-pending"');
+    expect(callback).toContain('if (!applicationUser.profile_completed) return NextResponse.redirect(new URL("/account-setup"');
     expect(source("lib/auth.ts")).toContain('redirect("/access-pending")');
   });
 });

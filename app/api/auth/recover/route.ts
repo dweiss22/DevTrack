@@ -13,6 +13,6 @@ export async function POST(request: NextRequest) {
   try { supabase = await createClient(); }
   catch { return NextResponse.json({ error: "Password setup is temporarily unavailable. Please retry." }, { status: 503 }); }
 
-  await supabase.auth.resetPasswordForEmail(parsed.data.email, { redirectTo: new URL("/auth/callback?next=/update-password", appUrl).toString() });
+  await supabase.auth.resetPasswordForEmail(parsed.data.email, { redirectTo: new URL("/auth/confirm?next=/update-password", appUrl).toString() });
   return NextResponse.json({ ok: true, message: "If that account is eligible, a secure password setup link has been sent." });
 }

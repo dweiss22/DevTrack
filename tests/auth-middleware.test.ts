@@ -35,9 +35,11 @@ describe("authentication middleware", () => {
     const login = await middleware(new NextRequest("https://devtrack.example/login"));
     const trailingLogin = await middleware(new NextRequest("https://devtrack.example/login/"));
     const callback = await middleware(new NextRequest("https://devtrack.example/auth/callback?code=safe-code"));
+    const confirm = await middleware(new NextRequest("https://devtrack.example/auth/confirm?token_hash=safe&type=invite"));
     expect(login.status).toBe(200);
     expect(trailingLogin.status).toBe(200);
     expect(callback.status).toBe(200);
+    expect(confirm.status).toBe(200);
     expect(mocks.createServerClient).not.toHaveBeenCalled();
     expect(isAuthenticationEntryRequest("https://devtrack-indol.vercel.app/login?next=%2Fprojects")).toBe(true);
     expect(isAuthenticationEntryRequest("https://devtrack-indol.vercel.app/recover/")).toBe(true);
@@ -48,7 +50,7 @@ describe("authentication middleware", () => {
     for (const path of ["/", "/projects", "/projects/task-id", "/admin", "/development"]) {
       expect(unstable_doesMiddlewareMatch({ config, nextConfig: {}, url: `https://devtrack.example${path}` }), path).toBe(true);
     }
-    for (const path of ["/login", "/login/", "/recover", "/update-password", "/access-pending", "/auth/callback", "/api/auth/login", "/api/auth/logout"]) {
+    for (const path of ["/login", "/login/", "/recover", "/update-password", "/access-pending", "/auth/callback", "/auth/confirm", "/api/auth/login", "/api/auth/logout"]) {
       expect(unstable_doesMiddlewareMatch({ config, nextConfig: {}, url: `https://devtrack.example${path}` }), path).toBe(false);
     }
   });

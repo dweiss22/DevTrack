@@ -4,7 +4,7 @@ import { isPublicAuthenticationPath, loginHref } from "@/lib/auth/redirects";
 
 export function isAuthenticationEntryRequest(requestUrl: string) {
   const path = requestUrl.split("?", 1)[0].replace(/\/+$/, "").toLowerCase();
-  return path.endsWith("/login") || path.endsWith("/recover") || path.endsWith("/update-password") || path.endsWith("/auth/callback") || path.includes("/api/auth/");
+  return path.endsWith("/login") || path.endsWith("/recover") || path.endsWith("/update-password") || path.endsWith("/auth/callback") || path.endsWith("/auth/confirm") || path.includes("/api/auth/");
 }
 
 export async function middleware(request: NextRequest) {
@@ -57,11 +57,13 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/",
+    "/account-setup",
     "/admin/:path*",
     "/ask/:path*",
     "/development/:path*",
     "/other-teams/:path*",
     "/projects/:path*",
+    "/profile",
     "/sme-collaboration/:path*",
     "/tasks/:path*",
     "/team/:path*",

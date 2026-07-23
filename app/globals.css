@@ -31,6 +31,8 @@ a:focus-visible, button:focus-visible { outline: 3px solid #8ec5ff; outline-offs
 .app-shell > aside nav a.active, .app-shell > aside nav a[aria-current="page"] { background: #fff; color: var(--navy); font-weight: 700; box-shadow: 0 7px 18px #001c3d35; }
 .nav-divider { height: 1px; margin: 10px 8px; background: #ffffff2e; }
 .sidebar-footer { display: grid; gap: 12px; margin: 28px 10px 0; }
+.profile-link { display: flex; align-items: center; gap: 9px; color: #fff; font-size: 14px; font-weight: 700; text-decoration: none; }
+.profile-link:hover { color: #b9dcff; }
 .lexipol-logo { display: block; width: 142px; height: auto; margin: 2px 0; opacity: .95; }
 .sync-note { margin: 0; font-size: 12px; color: #a9bdd5; }
 .logout-button { display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; padding: 10px; border: 1px solid #ffffff2e; background: #ffffff0d; box-shadow: none; }
@@ -209,6 +211,12 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
 .user-approval-card { margin-bottom: 24px; }
 .user-approval-card > .muted { margin-top: -4px; }
 .user-members-section > h2 { margin-bottom: 12px; }
+.user-invite-form { display: grid; grid-template-columns: minmax(240px, 2fr) minmax(180px, 1fr) auto; align-items: end; gap: 12px; }
+.user-invite-form button { margin-bottom: 1px; }
+.table-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.danger { color: #9f1d20; border-color: #dca6a8; }
+.profile-card { max-width: 640px; }
+.profile-card form { display: grid; gap: 14px; }
 .empty { padding: 36px; text-align: center; color: var(--muted); }
 pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px; background: #f8fafc; padding: 12px; border-radius: 7px; }
 .muted, small { color: var(--muted); }
@@ -454,6 +462,7 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
   .project-overview-card { padding: 20px; }
   .project-chart-filters { grid-template-columns: 1fr 1fr; }
   .section-heading { flex-direction: column; gap: 0; }
+  .user-invite-form { grid-template-columns: 1fr; }
 }
 @media (max-width: 430px) {
   .completion-totals, .development-filters .filter-fields { grid-template-columns: 1fr; }

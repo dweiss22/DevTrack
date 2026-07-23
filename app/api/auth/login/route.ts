@@ -21,9 +21,10 @@ export async function POST(request: NextRequest) {
 
   const { data: applicationUser } = await supabase
     .from("application_users")
-    .select("id")
+    .select("id,profile_completed")
     .eq("id", data.user.id)
     .maybeSingle();
 
-  return NextResponse.json({ ok: true, redirectTo: applicationUser ? safeInternalPath(parsed.data.next) : "/access-pending" });
+  const redirectTo = !applicationUser ? "/access-pending" : applicationUser.profile_completed ? safeInternalPath(parsed.data.next) : "/account-setup";
+  return NextResponse.json({ ok: true, redirectTo });
 }
