@@ -9,6 +9,37 @@ export type DashboardIdentity = {
   selectable: boolean;
 };
 
+export function canonicalDashboardIdentities(identities: readonly DashboardIdentity[]) {
+  const canonical = new Map<string, DashboardIdentity>();
+  for (const identity of identities) {
+    const key = identity.wrike_user_id
+      ? `wrike:${identity.wrike_user_id}`
+      : identity.application_user_id
+        ? `application:${identity.application_user_id}`
+        : identity.identity_key;
+    const existing = canonical.get(key);
+    if (!existing || identityPreference(identity) > identityPreference(existing)) canonical.set(key, identity);
+  }
+  return [...canonical.values()].sort((left, right) =>
+    left.display_name.localeCompare(right.display_name)
+    || (left.email ?? "").localeCompare(right.email ?? "")
+    || left.identity_key.localeCompare(right.identity_key));
+}
+
+export function dashboardIdentityLabel(identity: DashboardIdentity) {
+  const email = identity.email ? ` (${identity.email})` : "";
+  if (!identity.selectable) return `${identity.display_name}${email} — ${identity.identity_status} assignment value`;
+  if (identity.mapping_status === "unmapped") return `${identity.display_name}${email} — no DevTrack account`;
+  return `${identity.display_name}${email}`;
+}
+
+function identityPreference(identity: DashboardIdentity) {
+  return (identity.selectable ? 8 : 0)
+    + (identity.identity_status === "verified" ? 4 : 0)
+    + (identity.mapping_status === "mapped" ? 2 : 0)
+    + (identity.application_user_id ? 1 : 0);
+}
+
 export type SurveySummary = {
   id: string;
   status: "draft" | "submitted";

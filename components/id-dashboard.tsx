@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { StatusBadge } from "@/components/wrike-reference";
 import {
-  colleagueReviewLabel, submissionHref, surveyActionLabel, surveyHref,
+  canonicalDashboardIdentities, colleagueReviewLabel, dashboardIdentityLabel,
+  submissionHref, surveyActionLabel, surveyHref,
   type DashboardIdentity, type SurveySummary,
 } from "@/lib/dashboards/domain";
 
@@ -41,16 +42,21 @@ export function IdDashboard({ identities, selected, rows, canSelect, canActAsAss
   mappingRequired: boolean;
 }) {
   const returnTo = selected?.wrike_user_id ? `/id-dashboard?id=${encodeURIComponent(selected.wrike_user_id)}` : "/id-dashboard";
+  const canonicalIdentities = canonicalDashboardIdentities(identities);
+  const selectableIdentities = canonicalIdentities.filter((identity) => identity.selectable && identity.wrike_user_id);
+  const unresolvedIdentities = canonicalIdentities.filter((identity) => !identity.selectable);
   return <>
     {canSelect && <section className="card sme-selector-card"><form method="get">
       <label>Instructional Designer<select name="id" defaultValue={selected?.wrike_user_id ?? ""}>
         <option value="">Select an ID</option>
-        {identities.map((identity) => <option key={identity.identity_key} value={identity.wrike_user_id ?? ""} disabled={!identity.selectable}>
-          {identity.display_name}{identity.mapping_status === "unmapped" ? " — no DevTrack account" : ""}</option>)}
+        {selectableIdentities.map((identity) => <option key={identity.wrike_user_id} value={identity.wrike_user_id ?? ""}>
+          {dashboardIdentityLabel(identity)}</option>)}
       </select></label><button>View dashboard</button>
-    </form></section>}
+    </form>
+      <IdentityResolutionWarnings identities={unresolvedIdentities} />
+    </section>}
     {mappingRequired ? <p className="card notice warning" role="status">Your DevTrack account is not mapped to a verified Wrike identity. Ask an administrator to configure the mapping in User Management.</p>
-      : !selected ? <p className="card empty">{identities.length ? "Select a verified ID to view assigned work." : "No trusted ID assignments are available."}</p>
+      : !selected ? <p className="card empty">{selectableIdentities.length ? "Select a verified ID to view assigned work." : "No trusted ID assignments are available."}</p>
         : <>
           <p className="card dashboard-identity-note">Showing assignments for <strong>{selected.display_name}</strong>.
             {canSelect ? " Survey actions remain attributed to your administrator account; this view does not impersonate the selected ID." : ""}</p>
@@ -81,4 +87,13 @@ export function IdDashboard({ identities, selected, rows, canSelect, canActAsAss
           })}</tbody></table></div> : <p className="card empty">No eligible course-development projects are assigned to this ID.</p>}
         </>}
   </>;
+}
+
+function IdentityResolutionWarnings({ identities }: { identities: DashboardIdentity[] }) {
+  if (!identities.length) return null;
+  return <details className="dashboard-identity-warnings">
+    <summary>{identities.length} assignment value{identities.length === 1 ? "" : "s"} need identity resolution</summary>
+    <p className="muted">These values are not selectable users. Correct the ID assignment identity in Wrike and re-import; verified people remain listed once by their stable Wrike identity.</p>
+    <ul>{identities.map((identity) => <li key={identity.identity_key}>{dashboardIdentityLabel(identity)}</li>)}</ul>
+  </details>;
 }

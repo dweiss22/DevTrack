@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  colleagueReviewLabel, dashboardReturnHref, submissionHref, surveyActionLabel, surveyHref,
+  canonicalDashboardIdentities, colleagueReviewLabel, dashboardIdentityLabel,
+  dashboardReturnHref, submissionHref, surveyActionLabel, surveyHref, type DashboardIdentity,
 } from "@/lib/dashboards/domain";
 
 const root = process.cwd();
@@ -58,6 +59,40 @@ describe("role-aware dashboard behavior", () => {
     expect(source("components/user-management-panel.tsx")).toContain('member.role === "sme" || member.role === "id"');
     expect(source("app/api/admin/users/[id]/wrike-identity/route.ts")).toContain('requireCapability("manage_users")');
     expect(migration).toContain("role in ('id','sme')");
+  });
+
+  it("deduplicates selectors by stable identity instead of display name", () => {
+    const identities: DashboardIdentity[] = [
+      {
+        identity_key: "wrike:one", wrike_user_id: "one", application_user_id: null,
+        display_name: "Koco Budo", email: "koco@example.com", mapping_status: "unmapped",
+        identity_status: "verified", selectable: true,
+      },
+      {
+        identity_key: "duplicate-source-row", wrike_user_id: "one", application_user_id: "app-one",
+        display_name: "Koco Budo", email: "koco@example.com", mapping_status: "mapped",
+        identity_status: "verified", selectable: true,
+      },
+      {
+        identity_key: "wrike:two", wrike_user_id: "two", application_user_id: null,
+        display_name: "Koco Budo", email: "another@example.com", mapping_status: "unmapped",
+        identity_status: "verified", selectable: true,
+      },
+    ];
+    const canonical = canonicalDashboardIdentities(identities);
+    expect(canonical).toHaveLength(2);
+    expect(canonical.find((identity) => identity.wrike_user_id === "one")?.application_user_id).toBe("app-one");
+    expect(dashboardIdentityLabel(canonical[0])).toContain("@example.com");
+  });
+
+  it("keeps unresolved assignment values out of both user selectors", () => {
+    for (const file of ["components/id-dashboard.tsx", "components/sme-dashboard.tsx"]) {
+      const component = source(file);
+      expect(component).toContain("selectableIdentities.map");
+      expect(component).not.toContain("identities.map((identity) => <option");
+      expect(component).toContain("<IdentityResolutionWarnings");
+      expect(component).toContain("These values are not selectable users.");
+    }
   });
 
   it("renders separate project/SME review rows and mobile cards", () => {

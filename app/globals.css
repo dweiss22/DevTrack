@@ -232,6 +232,9 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
 .sme-selector-card form { display: flex; align-items: flex-end; gap: 12px; }
 .sme-selector-card label { min-width: min(360px, 100%); }
 .sme-selector-card .muted { margin: 14px 0 0; }
+.dashboard-identity-warnings { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.dashboard-identity-warnings summary { cursor: pointer; color: var(--navy); font-weight: 700; }
+.dashboard-identity-warnings ul { margin-bottom: 0; }
 .sme-metrics { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .dashboard-identity-note { margin-bottom: 16px; }
 .dashboard-table-wrap { overflow-x: auto; }

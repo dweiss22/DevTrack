@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { StatusBadge } from "@/components/wrike-reference";
 import {
-  submissionHref, surveyActionLabel, surveyHref, type DashboardIdentity, type SurveySummary,
+  canonicalDashboardIdentities, dashboardIdentityLabel, submissionHref, surveyActionLabel,
+  surveyHref, type DashboardIdentity, type SurveySummary,
 } from "@/lib/dashboards/domain";
 
 export type SmeDashboardRow = {
@@ -41,18 +42,23 @@ export function SmeDashboard({ identities, selected, rows, canSelect, canViewPro
   mappingRequired: boolean;
 }) {
   const returnTo = selected?.wrike_user_id ? `/sme-dashboard?sme=${encodeURIComponent(selected.wrike_user_id)}` : "/sme-dashboard";
+  const canonicalIdentities = canonicalDashboardIdentities(identities);
+  const selectableIdentities = canonicalIdentities.filter((identity) => identity.selectable && identity.wrike_user_id);
+  const unresolvedIdentities = canonicalIdentities.filter((identity) => !identity.selectable);
   return <>
     {canSelect && <section className="card sme-selector-card"><form method="get">
       <label>SME<select name="sme" defaultValue={selected?.wrike_user_id ?? ""}>
         <option value="">Select an SME</option>
-        {identities.map((identity) => <option key={identity.identity_key} value={identity.wrike_user_id ?? ""}
-          disabled={!identity.selectable}>{identity.display_name}{identity.mapping_status === "unmapped" ? " — no DevTrack account" : ""}{!identity.selectable ? ` — ${identity.identity_status}` : ""}</option>)}
+        {selectableIdentities.map((identity) => <option key={identity.wrike_user_id} value={identity.wrike_user_id ?? ""}>
+          {dashboardIdentityLabel(identity)}</option>)}
       </select></label><button>View dashboard</button>
-    </form></section>}
+    </form>
+      <IdentityResolutionWarnings identities={unresolvedIdentities} />
+    </section>}
     {mappingRequired
       ? <p className="card notice warning" role="status">Your DevTrack account is not mapped to a verified Wrike identity. Ask an administrator to configure the mapping in User Management.</p>
       : !selected
-        ? <p className="card empty">{identities.length ? "Select a verified SME to view assigned work." : "No trusted SME assignments are available."}</p>
+        ? <p className="card empty">{selectableIdentities.length ? "Select a verified SME to view assigned work." : "No trusted SME assignments are available."}</p>
         : <>
           <p className="card dashboard-identity-note">Showing assignments for <strong>{selected.display_name}</strong>
             {selected.email ? <> ({selected.email})</> : null}. {selected.mapping_status === "unmapped" ? "This person does not yet have a DevTrack account." : "Identity verified and mapped."}
@@ -94,4 +100,13 @@ export function SmeDashboard({ identities, selected, rows, canSelect, canViewPro
           })}</tbody></table></div> : <p className="card empty">No eligible course-development projects are assigned to this SME.</p>}
         </>}
   </>;
+}
+
+function IdentityResolutionWarnings({ identities }: { identities: DashboardIdentity[] }) {
+  if (!identities.length) return null;
+  return <details className="dashboard-identity-warnings">
+    <summary>{identities.length} assignment value{identities.length === 1 ? "" : "s"} need identity resolution</summary>
+    <p className="muted">These values are not selectable users. Correct the SME assignment identity in Wrike and re-import; verified people remain listed once by their stable Wrike identity.</p>
+    <ul>{identities.map((identity) => <li key={identity.identity_key}>{dashboardIdentityLabel(identity)}</li>)}</ul>
+  </details>;
 }
