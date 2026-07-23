@@ -38,7 +38,7 @@ begin
     select 1 from public.administrator_user_deletions deletion
     where deletion.organization_id=new.organization_id
       and deletion.normalized_email_hash=encode(
-        digest(lower(btrim(coalesce(new.normalized_email,new.email))),'sha256'),'hex'
+        extensions.digest(lower(btrim(coalesce(new.normalized_email,new.email))),'sha256'),'hex'
       )
       and deletion.stage<>'finalized'
   ) then
@@ -219,7 +219,7 @@ begin
     organization_id,actor_user_id,target_user_id,target_role,normalized_email_hash,reason
   ) values (
     actor.organization_id,actor.id,target.id,target.role,
-    encode(digest(normalized_email,'sha256'),'hex'),btrim(deletion_reason)
+    encode(extensions.digest(normalized_email,'sha256'),'hex'),btrim(deletion_reason)
   ) returning * into created;
   update public.application_users set account_state='deletion_pending',updated_at=now() where id=target.id;
   update public.administrator_impersonation_sessions

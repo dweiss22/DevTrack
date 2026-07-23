@@ -24,7 +24,7 @@ insert into public.application_user_principals(
 )
 select application_user.id,application_user.organization_id,application_user.id,'active',
   application_user.display_name,application_user.role,
-  encode(digest(lower(btrim(coalesce(auth_user.email,''))),'sha256'),'hex'),
+  encode(extensions.digest(lower(btrim(coalesce(auth_user.email,''))),'sha256'),'hex'),
   application_user.created_at,coalesce(application_user.updated_at,application_user.created_at)
 from public.application_users application_user
 join auth.users auth_user on auth_user.id=application_user.id
@@ -45,7 +45,7 @@ begin
     where id=old.id;
     return old;
   end if;
-  select encode(digest(lower(btrim(coalesce(email,''))),'sha256'),'hex')
+  select encode(extensions.digest(lower(btrim(coalesce(email,''))),'sha256'),'hex')
     into normalized_hash from auth.users where id=new.id;
   insert into public.application_user_principals(
     id,organization_id,auth_user_id,state,display_name,primary_role_snapshot,
@@ -213,7 +213,7 @@ returns uuid language sql stable security definer set search_path=public as $$
   join public.application_users effective on effective.id=session.effective_user_id
     and effective.organization_id=session.organization_id and effective.account_state='active'
   where public.request_impersonation_token() is not null
-    and session.token_hash=encode(digest(public.request_impersonation_token(),'sha256'),'hex')
+    and session.token_hash=encode(extensions.digest(public.request_impersonation_token(),'sha256'),'hex')
     and session.actor_user_id=auth.uid()
     and session.actor_auth_session_id=nullif(auth.jwt()->>'session_id','')::uuid
     and session.status='active'
@@ -330,7 +330,7 @@ declare session_row public.administrator_impersonation_sessions%rowtype;
 begin
   select * into session_row
   from public.administrator_impersonation_sessions
-  where token_hash=encode(digest(coalesce(public.request_impersonation_token(),''),'sha256'),'hex')
+  where token_hash=encode(extensions.digest(coalesce(public.request_impersonation_token(),''),'sha256'),'hex')
     and actor_user_id=auth.uid() and status='active'
   for update;
   if not found then
@@ -342,7 +342,7 @@ begin
       ) values (
         actor.organization_id,'denied',actor.id,actor.role,'Invalid or replayed impersonation token.',
         jsonb_build_object('tokenHashPrefix',left(
-          encode(digest(public.request_impersonation_token(),'sha256'),'hex'),12
+          encode(extensions.digest(public.request_impersonation_token(),'sha256'),'hex'),12
         ))
       );
     end if;
