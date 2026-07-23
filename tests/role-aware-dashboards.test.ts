@@ -8,6 +8,7 @@ import {
 const root = process.cwd();
 const source = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
 const migration = source("supabase/migrations/202607230005_role_aware_sme_id_dashboards.sql");
+const surveyBrowseFix = source("supabase/migrations/202607230007_fix_survey_browse_ambiguity.sql");
 
 describe("role-aware dashboard behavior", () => {
   it("provides every survey action state and keeps colleague reviews read-only", () => {
@@ -49,6 +50,8 @@ describe("role-aware dashboard behavior", () => {
     expect(migration).toContain("auth.uid()");
     expect(migration).toContain("target_reviewed_wrike_user_id");
     expect(migration).toContain("survey.created_by<>viewer.id");
+    expect(surveyBrowseFix).toContain("where application_user.id=auth.uid()");
+    expect(surveyBrowseFix).not.toContain("where id=auth.uid()");
   });
 
   it("maps both ID and SME accounts without adding a role system", () => {

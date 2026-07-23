@@ -25,7 +25,9 @@ export default async function SurveysPage({ searchParams }: { searchParams: Prom
   if (!/^\d{4}$/.test(filters.reportingYear ?? "")) delete filters.reportingYear;
   if (!/^\d{4}$/.test(filters.publicationYear ?? "")) delete filters.publicationYear;
   const { data, error } = await supabase.rpc("survey_browse", { filters, page_number: page, page_size: 50 });
-  if (error) throw new Error("Survey responses could not be loaded.");
+  if (error) console.error("survey_browse_failed", {
+    code: error.code, message: error.message, details: error.details, hint: error.hint,
+  });
   const rows = (data ?? []) as SurveyBrowseRow[];
   const total = Number(rows[0]?.total_count ?? 0);
   const pages = Math.max(1, Math.ceil(total / 50));
@@ -49,7 +51,8 @@ export default async function SurveysPage({ searchParams }: { searchParams: Prom
       <label>Publication year<input name="publicationYear" type="number" min="1000" max="9999" defaultValue={filters.publicationYear ?? ""} /></label>
       <div className="filter-actions"><button>Apply filters</button><Link className="button secondary" href="/surveys">Clear</Link></div>
     </form>
-    {rows.length ? <div className="dashboard-table-wrap"><table className="survey-list dashboard-project-table"><thead><tr>
+    {error ? <p className="card notice error" role="alert">Survey responses could not be loaded. Confirm the latest database migration is applied, then retry this page.</p>
+      : rows.length ? <div className="dashboard-table-wrap"><table className="survey-list dashboard-project-table"><thead><tr>
       <th>Survey</th><th>Course / SME</th><th>Creator</th><th>Context</th><th>Status</th><th>Updated</th>
     </tr></thead><tbody>{rows.map((row) => <tr key={row.id}>
       <td data-label="Survey"><Link href={`/surveys/${row.id}?returnTo=${encodeURIComponent(`/surveys?${new URLSearchParams(filters)}`)}`}>{surveyTitle(row.survey_type)}</Link></td>
