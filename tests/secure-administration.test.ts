@@ -80,6 +80,8 @@ describe("secure administrator identity workflows", () => {
     expect(deletionMigration).toContain("block_invitation_during_user_deletion");
     expect(deletionMigration).toContain("deletion.stage<>'finalized'");
     expect(source("components/user-management-panel.tsx")).toContain("Retry deletion");
+    expect(source("app/admin/users/page.tsx")).toContain('from("administrator_user_deletions")');
+    expect(source("app/admin/users/page.tsx")).toContain("target_user_id");
     expect(source("app/api/admin/user-deletions/[jobId]/advance/route.ts")).toContain('stage === "failed" ? status.resumeStage');
   });
 

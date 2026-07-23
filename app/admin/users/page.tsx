@@ -16,7 +16,7 @@ export default async function UserManagementPage() {
     admin.from("application_users").select("id"),
     admin.from("wrike_users").select("id,display_name,email,is_unresolved,is_active,identity_verified").eq("organization_id", profile.organization_id).eq("is_active", true).eq("is_unresolved", false).eq("identity_verified", true).order("display_name"),
     admin.from("application_user_operational_personas").select("application_user_id,wrike_user_id").eq("organization_id", profile.organization_id).eq("operational_role", "id").eq("is_active", true),
-    admin.from("application_user_deletion_jobs").select("id,target_application_user_id,updated_at").eq("organization_id", profile.organization_id).neq("stage", "finalized").order("updated_at", { ascending: false }),
+    admin.from("administrator_user_deletions").select("id,target_user_id,updated_at").eq("organization_id", profile.organization_id).neq("stage", "finalized").order("updated_at", { ascending: false }),
   ]);
   if (error) throw new Error(`User management could not be loaded: ${error.message}`);
   if (invitationError) throw new Error(`Invitations could not be loaded: ${invitationError.message}`);
@@ -35,7 +35,7 @@ export default async function UserManagementPage() {
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 
   const personaByUser = new Map((personas ?? []).map((persona) => [persona.application_user_id, persona.wrike_user_id]));
-  const deletionJobByUser = new Map((deletionJobs ?? []).map((job) => [job.target_application_user_id, job.id]));
+  const deletionJobByUser = new Map((deletionJobs ?? []).map((job) => [job.target_user_id, job.id]));
   const members = (users ?? []).map((user) => {
     const authenticationUser = authenticationById.get(user.id);
     return {
