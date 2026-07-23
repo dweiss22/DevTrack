@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireCapability } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { surveySaveSchema } from "@/lib/surveys/domain";
 import { loadSurveyDetail, surveyDetailForSme } from "@/lib/surveys/server";
 
@@ -23,12 +24,27 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     supabase.from("application_users").select("id,display_name").eq("organization_id", profile.organization_id).eq("role", "id").order("display_name"),
     supabase.from("application_users").select("id,display_name").eq("organization_id", profile.organization_id),
   ]);
-  const actorNames = Object.fromEntries((actors.data ?? []).map((actor) => [actor.id, actor.display_name ?? "Unnamed user"]));
+  const historicalIds = [...new Set([
+    ...(audit.data ?? []).map((event) => event.actor_id),
+    ...(revisions.data ?? []).map((revision) => revision.submitted_by),
+  ])];
+  const admin = createAdminClient();
+  const { data: principals } = historicalIds.length
+    ? await admin.from("application_user_principals").select("id,display_name,state")
+      .eq("organization_id", profile.organization_id).in("id", historicalIds)
+    : { data: [] };
+  const actorNames = Object.fromEntries([
+    ...(actors.data ?? []).map((actor) => [actor.id, actor.display_name ?? "Unnamed user"]),
+    ...(principals ?? []).map((principal) => [
+      principal.id,
+      principal.state === "deleted" ? "Deleted user" : principal.display_name ?? "Unnamed user",
+    ]),
+  ]);
   return NextResponse.json({
     ...detail,
     viewer: { role: profile.role, canEdit: Boolean(canEdit), canManage: true },
-    audit: (audit.data ?? []).map((event) => ({ ...event, actor_name: actorNames[event.actor_id] ?? "Unavailable" })),
-    revisions: (revisions.data ?? []).map((revision) => ({ ...revision, submitted_by_name: actorNames[revision.submitted_by] ?? "Unavailable" })),
+    audit: (audit.data ?? []).map((event) => ({ ...event, actor_name: actorNames[event.actor_id] ?? "Deleted user" })),
+    revisions: (revisions.data ?? []).map((revision) => ({ ...revision, submitted_by_name: actorNames[revision.submitted_by] ?? "Deleted user" })),
     revisers: revisers.data ?? [],
     actors: actorNames,
   });

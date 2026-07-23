@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const mocks = vi.hoisted(() => ({ requireContext: vi.fn(), createAdminClient: vi.fn(), update: vi.fn() }));
+const mocks = vi.hoisted(() => ({ requireContext: vi.fn(), rpc: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requireContext: mocks.requireContext }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: mocks.createAdminClient }));
 
 import { PATCH } from "@/app/api/profile/route";
 
@@ -13,12 +12,9 @@ describe("personal profile updates", () => {
     mocks.requireContext.mockResolvedValue({
       user: { id: "user-1" },
       profile: { organization_id: "organization-1", role: "member" },
+      supabase: { rpc: mocks.rpc },
     });
-    const final = Promise.resolve({ error: null });
-    const organizationEq = vi.fn().mockReturnValue(final);
-    const userEq = vi.fn().mockReturnValue({ eq: organizationEq });
-    mocks.update.mockReturnValue({ eq: userEq });
-    mocks.createAdminClient.mockReturnValue({ from: () => ({ update: mocks.update }) });
+    mocks.rpc.mockResolvedValue({ error: null });
   });
 
   it("updates only the signed-in user's organization-scoped display name", async () => {
@@ -26,10 +22,7 @@ describe("personal profile updates", () => {
       method: "PATCH", body: JSON.stringify({ displayName: "  Updated Person  " }),
     }));
     expect(response.status).toBe(200);
-    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ display_name: "Updated Person" }));
-    const userEq = mocks.update.mock.results[0].value.eq;
-    expect(userEq).toHaveBeenCalledWith("id", "user-1");
-    expect(userEq.mock.results[0].value.eq).toHaveBeenCalledWith("organization_id", "organization-1");
+    expect(mocks.rpc).toHaveBeenCalledWith("update_current_profile", { target_display_name: "Updated Person" });
   });
 
   it("does not accept browser-controlled role or membership changes", async () => {
@@ -37,7 +30,6 @@ describe("personal profile updates", () => {
       method: "PATCH", body: JSON.stringify({ displayName: "Updated Person", role: "admin", organization_id: "organization-2" }),
     }));
     expect(response.status).toBe(200);
-    expect(mocks.update).toHaveBeenCalledWith(expect.not.objectContaining({ role: "admin" }));
-    expect(mocks.update).toHaveBeenCalledWith(expect.not.objectContaining({ organization_id: "organization-2" }));
+    expect(mocks.rpc).toHaveBeenCalledWith("update_current_profile", { target_display_name: "Updated Person" });
   });
 });

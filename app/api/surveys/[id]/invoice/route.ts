@@ -9,7 +9,7 @@ const idSchema = z.string().uuid();
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { user, profile, supabase } = await requireCapability("view_surveys");
+  const { user, actor, identity, profile, supabase } = await requireCapability("view_surveys");
   if (!idSchema.safeParse(id).success) return NextResponse.json({ error: "Survey is unavailable." }, { status: 404 });
   const [{ data: canEdit }, { data: submission }] = await Promise.all([
     supabase.rpc("can_edit_survey", { target_submission_id: id }),
@@ -66,16 +66,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     organization_id: profile.organization_id,
     event_type: previous?.length ? "invoice_replaced" : "invoice_uploaded",
     actor_id: user.id,
+    authenticated_actor_id: actor.id,
     actor_role: profile.role,
+    operational_persona_role: identity.operationalPersonaRole ?? null,
     previous_values: previous?.length ? { filenames: previous.map((item) => item.original_filename) } : {},
     new_values: { filename: file.name, mimeType: file.type, size: bytes.length },
+  });
+  await supabase.rpc("record_impersonated_external_mutation", {
+    target_relation_name: "public.survey_attachments",
+    target_operation: "INSERT",
+    target_record_identifier: created.id,
   });
   return NextResponse.json({ attachment: created });
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { user, profile, supabase } = await requireCapability("view_surveys");
+  const { user, actor, identity, profile, supabase } = await requireCapability("view_surveys");
   const parsed = z.object({ attachmentId: z.string().uuid() }).safeParse(await request.json().catch(() => null));
   if (!idSchema.safeParse(id).success || !parsed.success) return NextResponse.json({ error: "Invoice is unavailable." }, { status: 404 });
   const { data: canEdit } = await supabase.rpc("can_edit_survey", { target_submission_id: id });
@@ -91,7 +98,14 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (error) return NextResponse.json({ error: "The invoice could not be removed." }, { status: 500 });
   await admin.from("survey_audit_log").insert({
     submission_id: id, organization_id: profile.organization_id, event_type: "invoice_removed",
-    actor_id: user.id, actor_role: profile.role, previous_values: { filename: attachment.original_filename },
+    actor_id: user.id, authenticated_actor_id: actor.id, actor_role: profile.role,
+    operational_persona_role: identity.operationalPersonaRole ?? null,
+    previous_values: { filename: attachment.original_filename },
+  });
+  await supabase.rpc("record_impersonated_external_mutation", {
+    target_relation_name: "public.survey_attachments",
+    target_operation: "DELETE",
+    target_record_identifier: attachment.id,
   });
   return NextResponse.json({ ok: true });
 }

@@ -106,6 +106,10 @@ Never commit `.env.local`, tokens, service-role keys, or OAuth secrets.
 
 Administrator-managed Supabase invitations, first-time account setup, personal profiles, redirect allowlists, email-template requirements, and the Vercel Deployment Protection limitation are documented in [`docs/user-invitations-and-profiles.md`](docs/user-invitations-and-profiles.md).
 
+Administrator impersonation, retryable user offboarding, retained historical
+principals, and the fixed SuperAdmin ID persona are documented in
+[`docs/secure-administration.md`](docs/secure-administration.md).
+
 ## Wrike OAuth configuration
 
 For a call-by-call review of the enabled integration, see the **[Active Wrike API inventory](docs/wrike-api-inventory.md)**. It maps every current OAuth, health-check, workflow, user, category, metadata, folder-task, and folder-timelog request to its trigger and implementation source.

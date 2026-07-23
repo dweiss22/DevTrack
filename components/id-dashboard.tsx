@@ -33,13 +33,14 @@ export type IdDashboardRow = {
 const date = (value: string | null) => value
   ? new Date(value.length === 10 ? `${value}T00:00:00Z` : value).toLocaleDateString("en-US", { timeZone: "UTC" }) : "—";
 
-export function IdDashboard({ identities, selected, rows, canSelect, canActAsAssignedId, mappingRequired }: {
+export function IdDashboard({ identities, selected, rows, canSelect, canActAsAssignedId, mappingRequired, ownOperationalView = false }: {
   identities: DashboardIdentity[];
   selected: DashboardIdentity | null;
   rows: IdDashboardRow[];
   canSelect: boolean;
   canActAsAssignedId: boolean;
   mappingRequired: boolean;
+  ownOperationalView?: boolean;
 }) {
   const returnTo = selected?.wrike_user_id ? `/id-dashboard?id=${encodeURIComponent(selected.wrike_user_id)}` : "/id-dashboard";
   const canonicalIdentities = canonicalDashboardIdentities(identities);
@@ -58,8 +59,9 @@ export function IdDashboard({ identities, selected, rows, canSelect, canActAsAss
     {mappingRequired ? <p className="card notice warning" role="status">Your DevTrack account is not mapped to a verified Wrike identity. Ask an administrator to configure the mapping in User Management.</p>
       : !selected ? <p className="card empty">{selectableIdentities.length ? "Select a verified ID to view assigned work." : "No trusted ID assignments are available."}</p>
         : <>
-          <p className="card dashboard-identity-note">Showing assignments for <strong>{selected.display_name}</strong>.
-            {canSelect ? " Survey actions remain attributed to your administrator account; this view does not impersonate the selected ID." : ""}</p>
+          <p className="card dashboard-identity-note"><strong>{ownOperationalView ? "My assigned ID projects" : "Administrative ID view"}</strong><br />
+            Showing assignments for <strong>{selected.display_name}</strong>.
+            {canSelect && !ownOperationalView ? " This selection is read-only and does not grant project actions or survey credit." : ""}</p>
           {rows.length ? <div className="dashboard-table-wrap"><table className="dashboard-project-table id-dashboard-table"><thead><tr>
             <th>Course / SME</th><th>Status</th><th>Vertical</th><th>Publication / reporting</th>
             <th>Due / completed</th><th>Project / folder</th><th>Finalized draft</th><th>Review actions</th>

@@ -2,6 +2,10 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isPublicAuthenticationPath, loginHref } from "@/lib/auth/redirects";
 import { hasCapability, normalizeApplicationRole, type Capability } from "@/lib/auth/roles";
+import {
+  dataApiFetch, IMPERSONATION_COOKIE, impersonationCookieOptions,
+  isBlockedDuringImpersonation, type RequestIdentityContext,
+} from "@/lib/auth/impersonation";
 
 export function isAuthenticationEntryRequest(requestUrl: string) {
   const path = requestUrl.split("?", 1)[0].replace(/\/+$/, "").toLowerCase();
@@ -20,6 +24,10 @@ export function protectedApiCapability(pathname: string): Capability | null {
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
+  const impersonationToken = request.cookies.get(IMPERSONATION_COOKIE)?.value ?? null;
+  if (impersonationToken && isBlockedDuringImpersonation(request.nextUrl.pathname, request.method)) {
+    return NextResponse.json({ error: "Exit impersonation before performing this action." }, { status: 409 });
+  }
   // Vercel may normalize `nextUrl.pathname` differently from the matched route.
   // Bypass authentication entry URLs before session refresh or redirect logic so
   // a logged-out visitor can never be redirected from /login back to /login.
@@ -40,6 +48,7 @@ export async function middleware(request: NextRequest) {
   }
 
   const supabase = createServerClient(url, key, {
+    global: { fetch: dataApiFetch(impersonationToken) },
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll: (cookies: CookieUpdate[]) => {
@@ -55,11 +64,23 @@ export async function middleware(request: NextRequest) {
     const apiCapability = protectedApiCapability(pathname);
     if (!user && apiCapability) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
     if (!user && !pathname.startsWith("/api/")) return NextResponse.redirect(new URL(loginHref(`${pathname}${request.nextUrl.search}`), request.url));
+    let identity: RequestIdentityContext | null = null;
+    if (user) {
+      const identityResult = await supabase.rpc("current_request_identity");
+      identity = identityResult.data as RequestIdentityContext | null;
+      if (!identity && impersonationToken) {
+        await supabase.rpc("end_administrator_impersonation");
+        const expiredResponse = pathname.startsWith("/api/")
+          ? NextResponse.json({ error: "The impersonation session expired." }, { status: 401 })
+          : NextResponse.redirect(new URL(`${pathname}${request.nextUrl.search}`, request.url));
+        expiredResponse.cookies.set(IMPERSONATION_COOKIE, "", impersonationCookieOptions(0));
+        return expiredResponse;
+      }
+    }
     if (user && apiCapability) {
-      const { data: membership } = await supabase.from("application_users").select("role").eq("id", user.id).maybeSingle();
       let permitted = false;
       try {
-        permitted = Boolean(membership && hasCapability(normalizeApplicationRole(membership.role), apiCapability));
+        permitted = Boolean(identity && hasCapability(normalizeApplicationRole(identity.effectiveRole), apiCapability));
       } catch {
         permitted = false;
       }
@@ -88,6 +109,7 @@ export const config = {
     "/api/projects/:path*",
     "/api/wrike/:path*",
     "/api/surveys/:path*",
+    "/api/impersonations/:path*",
     "/ask/:path*",
     "/development/:path*",
     "/id-dashboard/:path*",

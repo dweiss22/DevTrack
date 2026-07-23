@@ -46,8 +46,9 @@ describe("app-managed invitation security contract", () => {
   });
 
   it("scopes profile updates to the signed-in identity and keeps authorization fields read-only", () => {
-    expect(profileRoute).toContain("const { user, profile } = await requireContext()");
-    expect(profileRoute).toContain('.eq("id", user.id).eq("organization_id", profile.organization_id)');
+    expect(profileRoute).toContain("const { supabase } = await requireContext()");
+    expect(profileRoute).toContain('rpc("update_current_profile"');
+    expect(profileRoute).not.toContain(".from(");
     expect(profileRoute).not.toContain("role:");
     expect(setupRoute).toContain('.eq("id", user.id)');
     expect(setupRoute).toContain("profile_completed: true");

@@ -11,7 +11,7 @@ import type { ApplicationRole } from "@/lib/auth/roles";
 
 const icons = { dashboard: BarChart3, development: BookOpenCheck, sme: Users, "sme-dashboard": Gauge, "id-dashboard": UserRound, surveys: ClipboardList, other: UsersRound, projects: FolderKanban, users: BriefcaseBusiness, data: Database };
 
-export function SidebarNavigation({ role, lastSynced, profileName }: { role: ApplicationRole; lastSynced?: string | null; profileName: string }) {
+export function SidebarNavigation({ role, lastSynced, profileName, impersonating = false }: { role: ApplicationRole; lastSynced?: string | null; profileName: string; impersonating?: boolean }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -36,7 +36,8 @@ export function SidebarNavigation({ role, lastSynced, profileName }: { role: App
         {lastSynced !== undefined && <p className="sync-note">{lastSynced ? `Last imported ${new Date(lastSynced).toLocaleString()}` : "No project data imported yet"}</p>}
         <Link className="profile-link" href="/profile" onClick={close}><UserRound size={18} aria-hidden="true" /><span>{profileName}</span></Link>
         <Image className="lexipol-logo" src={lexipolLogo} alt="Lexipol" width={142} />
-        <button className="logout-button" type="button" onClick={logout} disabled={loggingOut}><LogOut size={18} aria-hidden="true" />{loggingOut ? "Logging out…" : "Logout"}</button>
+        <button className="logout-button" type="button" onClick={logout} disabled={loggingOut || impersonating}
+          title={impersonating ? "Exit impersonation before logging out." : undefined}><LogOut size={18} aria-hidden="true" />{impersonating ? "Exit impersonation first" : loggingOut ? "Logging out…" : "Logout"}</button>
       </div>
     </aside>
   </>;
