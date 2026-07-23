@@ -3,18 +3,19 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BarChart3, BookOpenCheck, BriefcaseBusiness, Database, FolderKanban, LogOut, Menu, UserRound, Users, UsersRound, X } from "lucide-react";
+import { BarChart3, BookOpenCheck, BriefcaseBusiness, Database, FolderKanban, Gauge, LogOut, Menu, UserRound, Users, UsersRound, X } from "lucide-react";
 import { DevTrackBrand } from "@/components/devtrack-brand";
 import lexipolLogo from "@/images/Lexipol_logo_wht-60.png";
 import { navigationForRole, navigationPathIsActive, type NavigationEntry } from "@/lib/navigation";
+import type { ApplicationRole } from "@/lib/auth/roles";
 
-const icons = { dashboard: BarChart3, development: BookOpenCheck, sme: Users, other: UsersRound, projects: FolderKanban, users: BriefcaseBusiness, data: Database };
+const icons = { dashboard: BarChart3, development: BookOpenCheck, sme: Users, "sme-dashboard": Gauge, other: UsersRound, projects: FolderKanban, users: BriefcaseBusiness, data: Database };
 
-export function SidebarNavigation({ isAdmin, lastSynced, profileName }: { isAdmin: boolean; lastSynced?: string | null; profileName: string }) {
+export function SidebarNavigation({ role, lastSynced, profileName }: { role: ApplicationRole; lastSynced?: string | null; profileName: string }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const entries = navigationForRole(isAdmin || pathname.startsWith("/admin"));
+  const entries = navigationForRole(role);
   const close = () => setMobileOpen(false);
 
   async function logout() {

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
+import { requireCapability } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { applicationRoleSchema } from "@/lib/users/invitations";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { profile } = await requireAdmin();
+  const { user, profile } = await requireCapability("manage_users");
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "Invalid organization member." }, { status: 400 });
   const parsed = z.object({ role: applicationRoleSchema }).safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Select a valid application role." }, { status: 400 });
@@ -15,12 +15,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     target_organization_id: profile.organization_id,
     target_user_id: id,
     target_role: parsed.data.role,
+    acting_user_id: user.id,
   });
   if (error) {
-    const lastAdmin = error.code === "23514" || error.message?.includes("last organization administrator");
+    const protectedSuperAdmin = error.code === "23514" || error.code === "42501";
     return NextResponse.json(
-      { error: lastAdmin ? "The last administrator for an organization cannot be demoted." : "The member role could not be updated." },
-      { status: lastAdmin ? 409 : 404 },
+      { error: protectedSuperAdmin ? "The required SuperAdmin account and role cannot be modified." : "The member role could not be updated." },
+      { status: protectedSuperAdmin ? 409 : 404 },
     );
   }
   return NextResponse.json({ ok: true });

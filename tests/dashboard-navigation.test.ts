@@ -8,16 +8,16 @@ import { assignedDashboardRows, dashboardDrilldownHref, safeDashboardReturnTo, s
 describe("application navigation", () => {
   it("uses the requested order, two dividers, and Projects presentation", () => {
     expect(APPLICATION_NAVIGATION.map((entry) => entry.kind === "divider" ? "divider" : entry.label)).toEqual([
-      "Dashboard", "Development", "SME Collaboration", "Other Teams", "divider", "Projects", "divider", "User Management", "Data"
+      "Dashboard", "Development", "SME Collaboration", "SME Dashboard", "Other Teams", "divider", "Projects", "divider", "User Management", "Data"
     ]);
     expect(APPLICATION_NAVIGATION.some((entry) => entry.kind === "link" && entry.label === "Tasks")).toBe(false);
   });
 
   it("removes administrative links and their empty divider for members", () => {
-    const memberItems = navigationForRole(false);
+    const memberItems = navigationForRole("id");
     expect(memberItems.some((entry) => entry.kind === "link" && (entry.id === "users" || entry.id === "data"))).toBe(false);
     expect(memberItems.filter((entry) => entry.kind === "divider")).toHaveLength(1);
-    expect(navigationForRole(true).filter((entry) => entry.kind === "divider")).toHaveLength(2);
+    expect(navigationForRole("admin").filter((entry) => entry.kind === "divider")).toHaveLength(2);
   });
 
   it("keeps a Lexipol-branded operational logout control", () => {

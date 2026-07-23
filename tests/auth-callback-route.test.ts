@@ -21,7 +21,7 @@ describe("authentication callback", () => {
   });
 
   it("establishes the session and honors a safe return path for approved users", async () => {
-    mocks.maybeSingle.mockResolvedValue({ data: { id: "user-1", profile_completed: true }, error: null });
+    mocks.maybeSingle.mockResolvedValue({ data: { id: "user-1", profile_completed: true, role: "id" }, error: null });
     const response = await GET(new NextRequest("https://devtrack.example/auth/callback?code=auth-code&next=%2Fprojects"));
     expect(mocks.exchange).toHaveBeenCalledWith("auth-code");
     expect(response.headers.get("location")).toBe("https://devtrack.example/projects");
@@ -29,7 +29,7 @@ describe("authentication callback", () => {
 
   it("preapproves an invited email and routes it directly to account setup", async () => {
     mocks.acceptInvitation.mockResolvedValue({ data: { accepted: true, profileCompleted: false }, error: null });
-    mocks.maybeSingle.mockResolvedValue({ data: { id: "user-1", profile_completed: false }, error: null });
+    mocks.maybeSingle.mockResolvedValue({ data: { id: "user-1", profile_completed: false, role: "id" }, error: null });
     const response = await GET(new NextRequest("https://devtrack.example/auth/callback?code=invite-code&next=%2Faccount-setup"));
     expect(mocks.acceptInvitation).toHaveBeenCalledWith("accept_application_user_invitation", {
       target_user_id: "user-1",
@@ -55,5 +55,11 @@ describe("authentication callback", () => {
     mocks.exchange.mockResolvedValue({ error: new Error("raw provider detail") });
     const response = await GET(new NextRequest("https://devtrack.example/auth/callback?code=bad-code"));
     expect(response.headers.get("location")).toBe("https://devtrack.example/login?reason=callback_failed");
+  });
+
+  it("ignores a requested standard page and lands an SME on their dashboard", async () => {
+    mocks.maybeSingle.mockResolvedValue({ data: { id: "user-1", profile_completed: true, role: "sme" }, error: null });
+    const response = await GET(new NextRequest("https://devtrack.example/auth/callback?code=auth-code&next=%2Fprojects"));
+    expect(response.headers.get("location")).toBe("https://devtrack.example/sme-dashboard");
   });
 });

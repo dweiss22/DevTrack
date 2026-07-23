@@ -3,26 +3,27 @@ import { AppShell } from "@/components/app-shell";
 import { DevelopmentAnalyticsView } from "@/components/development-analytics";
 import { DevelopmentFiltersForm } from "@/components/development-filters";
 import { DevelopmentProjectTable } from "@/components/development-project-table";
-import { requireContext } from "@/lib/auth";
+import { requirePageCapability } from "@/lib/auth";
+import { isAdministratorRole } from "@/lib/auth/roles";
 import { loadProjectLengthPercentilesResult } from "@/lib/reporting/data";
 import { loadDevelopmentAnalytics, loadDevelopmentOptions, loadDevelopmentProjects, loadDevelopmentYearOptions, parseDevelopmentFilters, type DevelopmentOptions } from "@/lib/reporting/development";
 
 type SearchValues = Record<string, string | string[] | undefined>;
 export default async function DevelopmentPage({ searchParams }: { searchParams: Promise<SearchValues> }) {
   const query = await searchParams;
-  const { supabase, profile } = await requireContext();
+  const { supabase, profile } = await requirePageCapability("view_standard_pages");
   const [yearsResult, optionsResult, lastRunResult] = await Promise.all([
     loadDevelopmentYearOptions(supabase), loadDevelopmentOptions(supabase, profile.organization_id),
     supabase.from("wrike_folder_task_import_runs").select("created_at").eq("organization_id", profile.organization_id).eq("status", "succeeded").order("created_at", { ascending: false }).limit(1).maybeSingle()
   ]);
-  if (yearsResult.error) return <AppShell isAdmin={profile.role === "admin"} lastSynced={lastRunResult.data?.created_at}><DevelopmentHeader /><QueryError title={yearsResult.error.title} message={yearsResult.error.message} code={yearsResult.error.code} /></AppShell>;
+  if (yearsResult.error) return <AppShell isAdmin={isAdministratorRole(profile.role)} lastSynced={lastRunResult.data?.created_at}><DevelopmentHeader /><QueryError title={yearsResult.error.title} message={yearsResult.error.message} code={yearsResult.error.code} /></AppShell>;
   const years = yearsResult.data;
   const normalizedQuery = !query.reportingSelection && years.defaultYear == null && years.missingProjects > 0 ? { ...query, reportingSelection: "missing" } : query;
   const filters = parseDevelopmentFilters(normalizedQuery, years.defaultYear);
   const options = optionsResult.data ?? EMPTY_OPTIONS;
   const analyticsPromise = loadDevelopmentAnalytics(supabase, filters);
   const projectsPromise = loadDevelopmentProjectSection(supabase, filters);
-  return <AppShell isAdmin={profile.role === "admin"} lastSynced={lastRunResult.data?.created_at}>
+  return <AppShell isAdmin={isAdministratorRole(profile.role)} lastSynced={lastRunResult.data?.created_at}>
     <DevelopmentHeader />
     {optionsResult.error && <p className="notice error" role="status">Analytics remain available, but some filter and reference options could not be loaded. Unresolved values will remain identified.</p>}
     <DevelopmentFiltersForm filters={filters} years={years} options={options} />

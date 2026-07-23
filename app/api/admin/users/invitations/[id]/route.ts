@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
+import { requireCapability } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { accountSetupRedirectUrl, applicationRoleSchema, findAuthenticationUserByEmail } from "@/lib/users/invitations";
 
@@ -12,7 +12,7 @@ const actionSchema = z.discriminatedUnion("action", [
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { profile } = await requireAdmin();
+  const { profile } = await requireCapability("manage_users");
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "Invalid invitation." }, { status: 400 });
   const parsed = actionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid invitation action." }, { status: 400 });

@@ -7,7 +7,8 @@ import { ProjectPercentileGauge } from "@/components/project-percentile-gauge";
 import { ProjectTimeAnalytics } from "@/components/project-time-analytics";
 import { TaskCustomFieldList, TaskFolderList } from "@/components/task-metadata";
 import { StatusBadge, UnresolvedReferenceLabel } from "@/components/wrike-reference";
-import { requireContext } from "@/lib/auth";
+import { requirePageCapability } from "@/lib/auth";
+import { isAdministratorRole } from "@/lib/auth/roles";
 import { hours } from "@/lib/metrics";
 import { loadProjectLengthPercentilesResult } from "@/lib/reporting/data";
 import { safeProjectsReturnTo } from "@/lib/reporting/dashboard-navigation";
@@ -34,7 +35,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const query = await searchParams;
   const returnTo = safeProjectsReturnTo(query.returnTo) ?? "/projects";
   const returnLabel = returnTo.startsWith("/development") ? "Development" : "Projects";
-  const { supabase, profile } = await requireContext();
+  const { supabase, profile } = await requirePageCapability("view_standard_pages");
   const [projectResult, usersResult, categoriesResult, statusesResult, verticalResult, benchmarkResult, identitiesResult] = await Promise.all([
     supabase.from("wrike_tasks").select("*,wrike_time_entries(id,wrike_id,entry_date,minutes,category,comment,user_wrike_id,wrike_users(display_name,email))").eq("id", id).eq("organization_id", profile.organization_id).eq("wrike_time_entries.is_deleted", false).maybeSingle(),
     supabase.from("wrike_users").select("wrike_id,display_name,email,avatar_url,synced_at,is_active,is_unresolved,identity_verified,identity_verification_source,raw_data").eq("organization_id", profile.organization_id),
@@ -87,7 +88,8 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const reportingYear = extractFieldYear(fieldByRole.get("reporting")?.displayValues ?? []);
   const benchmark = benchmarkResult.data.get(id) ?? null;
 
-  return <AppShell isAdmin={profile.role === "admin"}>
+  const isAdministrator = isAdministratorRole(profile.role);
+  return <AppShell isAdmin={isAdministrator}>
     <nav className="breadcrumb" aria-label="Breadcrumb"><Link href={returnTo}>{returnLabel}</Link><span aria-hidden="true">/</span><span aria-current="page">Project detail</span></nav>
     <header className="page-header project-detail-header"><div><p className="eyebrow">PROJECT DETAIL</p><h1>{row.title}</h1><p><StatusBadge name={statusReference.name} id={row.custom_status_id} color={statusReference.color} resolved={statusReference.resolved} />{row.due_date && <> <span aria-hidden="true">·</span> Due {formatDate(row.due_date)}</>}</p></div>{row.permalink && <a className="button" href={row.permalink} target="_blank" rel="noreferrer">Open in Wrike</a>}</header>
 
@@ -115,7 +117,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
         <article className="project-summary-tile"><p>Contributors</p><strong>{metrics.contributors.toLocaleString()}</strong></article>
         {row.planned_minutes != null && <article className="project-summary-tile"><p>Planned vs. actual</p><strong>{hours(row.planned_minutes)} h <span>/ {hours(metrics.minutes)} h</span></strong><small>{row.planned_minutes >= metrics.minutes ? `${hours(row.planned_minutes - metrics.minutes)} h remaining` : `${hours(metrics.minutes - row.planned_minutes)} h over plan`}</small></article>}
       </section>
-      {profile.role === "admin" && vertical?.verticalNormalization?.rejectedTokens.length ? <details className="project-vertical-diagnostics"><summary>Original unrecognized Vertical values</summary><p>{vertical.verticalNormalization.rejectedTokens.join(", ")}</p></details> : null}
+      {isAdministrator && vertical?.verticalNormalization?.rejectedTokens.length ? <details className="project-vertical-diagnostics"><summary>Original unrecognized Vertical values</summary><p>{vertical.verticalNormalization.rejectedTokens.join(", ")}</p></details> : null}
     </section>
 
     <details className="card project-additional-data">
@@ -123,7 +125,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
       <div className="project-additional-grid">
         <section aria-labelledby="project-dates-heading"><h3 id="project-dates-heading">Project dates</h3><dl className="project-detail-list"><MetadataItem label="Created">{formatDate(row.created_at_wrike, true)}</MetadataItem><MetadataItem label="Start">{formatDate(row.start_date)}</MetadataItem><MetadataItem label="Due">{formatDate(row.due_date)}</MetadataItem><MetadataItem label="Completed">{formatDate(row.completed_at, true)}</MetadataItem><MetadataItem label="Last updated">{formatDate(row.updated_at_wrike, true)}</MetadataItem></dl></section>
         <section aria-labelledby="project-folders-heading"><h3 id="project-folders-heading">Wrike folders</h3><TaskFolderList folders={folders} /></section>
-        <section className="project-other-fields" aria-labelledby="project-other-fields-heading"><h3 id="project-other-fields-heading">Other synchronized fields</h3><TaskCustomFieldList fields={otherFields} unresolvedFields={unresolvedCustomFields} verticalState={row.vertical_state} showAdminDiagnostics={profile.role === "admin"} /></section>
+        <section className="project-other-fields" aria-labelledby="project-other-fields-heading"><h3 id="project-other-fields-heading">Other synchronized fields</h3><TaskCustomFieldList fields={otherFields} unresolvedFields={unresolvedCustomFields} verticalState={row.vertical_state} showAdminDiagnostics={isAdministrator} /></section>
       </div>
     </details>
 
@@ -131,7 +133,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
 
     <section className="card project-time-table-card"><div className="section-heading"><div><p className="eyebrow">TIME ENTRIES</p><h2>Visible time-entry detail</h2></div><p>{metrics.entries.toLocaleString()} entr{metrics.entries === 1 ? "y" : "ies"}</p></div>{timeEntries.length ? <div className="project-time-table-wrap"><table><thead><tr><th>Date</th><th>Person</th><th>Category</th><th>Hours</th><th>Comment</th><th>Source</th></tr></thead><tbody>{timeEntries.map((entry) => <tr key={entry.id}><td>{formatDate(entry.date)}</td><td>{entry.contributorResolved ? entry.contributorName : <UnresolvedReferenceLabel id={entry.contributorId} type="user" label="Unresolved contributor" />}</td><td>{entry.categoryResolved ? entry.categoryName : <UnresolvedReferenceLabel id={entry.categoryId} type="timelog_category" label="Unresolved category" />}</td><td>{hours(entry.minutes)}</td><td>{entry.comment ?? "—"}</td><td><code title={entry.sourceId}>Wrike {entry.sourceId}</code></td></tr>)}</tbody></table></div> : <p className="empty">No visible recorded time exists for this project.</p>}</section>
 
-    {profile.role === "admin" && <section className="card project-admin-source"><h2>Administrator: synchronization evidence</h2><p><strong>Wrike task ID:</strong> <code>{row.wrike_id}</code><br /><strong>Custom-field state:</strong> {row.custom_fields_sync_state ?? "unknown"}<br /><strong>Verified:</strong> {formatDate(row.custom_fields_verified_at, true)}</p><p><strong>Responsible users:</strong> {assignees.length ? assignees.map((person) => person.fullName).join(", ") : "None"}</p><details><summary>View original identifiers and source payload</summary><p><strong>Responsible IDs:</strong> {(row.responsible_wrike_ids ?? []).join(", ") || "None"}<br /><strong>Custom status ID:</strong> {row.custom_status_id ?? "None"}</p><h3>Resolved and unresolved raw custom fields</h3><pre>{JSON.stringify(customFieldsRaw, null, 2)}</pre><h3>Original task response</h3><pre>{JSON.stringify(row.raw_data, null, 2)}</pre></details></section>}
+    {isAdministrator && <section className="card project-admin-source"><h2>Administrator: synchronization evidence</h2><p><strong>Wrike task ID:</strong> <code>{row.wrike_id}</code><br /><strong>Custom-field state:</strong> {row.custom_fields_sync_state ?? "unknown"}<br /><strong>Verified:</strong> {formatDate(row.custom_fields_verified_at, true)}</p><p><strong>Responsible users:</strong> {assignees.length ? assignees.map((person) => person.fullName).join(", ") : "None"}</p><details><summary>View original identifiers and source payload</summary><p><strong>Responsible IDs:</strong> {(row.responsible_wrike_ids ?? []).join(", ") || "None"}<br /><strong>Custom status ID:</strong> {row.custom_status_id ?? "None"}</p><h3>Resolved and unresolved raw custom fields</h3><pre>{JSON.stringify(customFieldsRaw, null, 2)}</pre><h3>Original task response</h3><pre>{JSON.stringify(row.raw_data, null, 2)}</pre></details></section>}
   </AppShell>;
 }
 

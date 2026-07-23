@@ -32,12 +32,12 @@ The ingestion layer is deliberately separate from reporting tables, so a transit
    ```
 
 4. In Supabase, run all files in `supabase/migrations` in filename order, preferably with `supabase db push`.
-5. Create an organization, then add each permitted Supabase Auth user to `application_users`. Set at least one user’s `role` to `admin`.
+5. Create an organization and ensure the existing `dweiss@lexipol.com` Supabase Auth user has an `application_users` membership. Migration `202607230003_role_based_access_control.sql` promotes that fixed account to `super_admin`.
 
    ```sql
    insert into public.organizations (name) values ('Example team') returning id;
    insert into public.application_users (id, organization_id, role)
-   values ('<auth-user-uuid>', '<organization-uuid>', 'admin');
+   values ('<dweiss-auth-user-uuid>', '<organization-uuid>', 'super_admin');
    ```
 
 ## Email and password sign-in
@@ -61,7 +61,7 @@ values (
   '<id-from-auth-users>',
   '<organization-id>',
   '<display-name>',
-  'member'
+  'id'
 )
 on conflict (id) do update
 set organization_id = excluded.organization_id,
@@ -69,9 +69,9 @@ set organization_id = excluded.organization_id,
     role = excluded.role;
 ```
 
-Give the first administrator the `admin` role and ordinary reporting users the `member` role. Every authenticated application user can read all synchronized reporting data in their assigned organization; organization boundaries remain enforced by RLS. The application shows an **Access awaiting approval** screen until an Auth user is assigned here.
+Use User Management for normal invitations and assign only Admin, ID, or SME. The fixed SuperAdmin role belongs only to `dweiss@lexipol.com`; the migration and database guard enforce that rule. SuperAdmin, Admin, and ID can read synchronized reporting data in their organization. SME users can retrieve only tasks assigned to their administrator-mapped Wrike identity through the SME Dashboard. The application shows an **Access awaiting approval** screen until an Auth user is assigned here.
 
-See [Organization-wide reporting access](docs/organization-wide-reporting-access.md) for the database policy inventory, retained security boundaries, validation queries, and deployment sequence.
+See [Role-based access control](docs/role-based-access-control.md) for the capability matrix and [Organization-wide reporting access](docs/organization-wide-reporting-access.md) for the database policy inventory.
 
 Keep public signup disabled under **Authentication → Sign In / Providers → Email**. User creation should be performed by an administrator through the Supabase Dashboard. Provide passwords through an approved secure channel; never include them in source code or SQL saved in the repository.
 
@@ -156,7 +156,7 @@ On the first connected deployment run, DevTrack records `folder_recursive` only 
 
 ## Dashboard and navigation
 
-The left navigation is organized as Dashboard, Development, SME Collaboration, Other Teams, Projects, and the administrator-only User Management and Data sections. `/projects` is the user-facing project route; existing `/tasks` URLs redirect for compatibility without renaming Wrike or database entities. The persistent footer provides the Lexipol brand and a Supabase-backed Logout action.
+The left navigation is capability-driven. SuperAdmin and Admin see the full product plus User Management and Data; ID sees standard read-only pages and the SME Dashboard; SME sees only the SME Dashboard and their profile. `/projects` is the user-facing project route; existing `/tasks` URLs redirect for compatibility without renaming Wrike or database entities. The persistent footer provides the Lexipol brand and a Supabase-backed Logout action.
 
 The Dashboard uses RLS-aware overview and time RPCs across all valid Reporting Years rather than loading raw facts into the browser. The Development dashboard has one manual Reporting Year filter, displayed in the synchronized `YYYY Courses` format. Overview metrics and categorical charts stream independently from recorded-time analytics so a slow time query does not blank the page. Reporting, Course Type, Authoring Tool, and Vertical use the normalized custom-field layer, so `(M)` and `(L)` sources are merged and conflicts remain available for administrative review.
 

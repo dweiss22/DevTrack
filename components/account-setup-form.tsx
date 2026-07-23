@@ -19,9 +19,9 @@ export function AccountSetupForm({ email, initialDisplayName }: { email: string;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ displayName, password }),
       });
-      const body = await response.json() as { error?: string };
+      const body = await response.json() as { error?: string; redirectTo?: string };
       if (!response.ok) return setMessage(body.error ?? "Your account setup could not be completed.");
-      window.location.assign("/");
+      window.location.assign(body.redirectTo ?? "/");
     } catch {
       setMessage("Your account setup could not be completed. Please retry.");
     } finally {

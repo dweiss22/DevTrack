@@ -1,5 +1,6 @@
 "use client";
 import { useState, type FormEvent } from "react";
+import { normalizeApplicationRole, roleLabel } from "@/lib/auth/roles";
 
 export function ProfileForm({ email, initialDisplayName, role }: { email: string; initialDisplayName: string; role: string }) {
   const [displayName, setDisplayName] = useState(initialDisplayName);
@@ -25,5 +26,5 @@ export function ProfileForm({ email, initialDisplayName, role }: { email: string
     }
   }
 
-  return <section className="card profile-card"><form onSubmit={submit}><label>Display name<input autoComplete="name" minLength={2} maxLength={100} required value={displayName} onChange={(event) => setDisplayName(event.target.value)} disabled={submitting} /></label><label>Email<input value={email} readOnly aria-readonly="true" /></label><label>Application role<input value={role === "admin" ? "Administrator" : "Member"} readOnly aria-readonly="true" /></label><button disabled={submitting}>{submitting ? "Saving…" : "Save profile"}</button></form>{message && <p className={error ? "notice error" : "notice"} role={error ? "alert" : "status"}>{message}</p>}</section>;
+  return <section className="card profile-card"><form onSubmit={submit}><label>Display name<input autoComplete="name" minLength={2} maxLength={100} required value={displayName} onChange={(event) => setDisplayName(event.target.value)} disabled={submitting} /></label><label>Email<input value={email} readOnly aria-readonly="true" /></label><label>Application role<input value={roleLabel(normalizeApplicationRole(role))} readOnly aria-readonly="true" /></label><button disabled={submitting}>{submitting ? "Saving…" : "Save profile"}</button></form>{message && <p className={error ? "notice error" : "notice"} role={error ? "alert" : "status"}>{message}</p>}</section>;
 }

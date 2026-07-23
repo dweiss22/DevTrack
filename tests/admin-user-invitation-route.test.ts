@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({
-  requireAdmin: vi.fn(),
+  requireCapability: vi.fn(),
   createAdminClient: vi.fn(),
   listUsers: vi.fn(),
   inviteUserByEmail: vi.fn(),
@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   insertSingle: vi.fn(),
   update: vi.fn(),
 }));
-vi.mock("@/lib/auth", () => ({ requireAdmin: mocks.requireAdmin }));
+vi.mock("@/lib/auth", () => ({ requireCapability: mocks.requireCapability }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: mocks.createAdminClient }));
 
 import { POST } from "@/app/api/admin/users/invitations/route";
@@ -28,7 +28,7 @@ describe("administrator invitations", () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://devtrack.example";
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://project.supabase.co";
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
-    mocks.requireAdmin.mockResolvedValue({ user: { id: "admin-1" }, profile: { organization_id: "organization-1", role: "admin" } });
+    mocks.requireCapability.mockResolvedValue({ user: { id: "admin-1" }, profile: { organization_id: "organization-1", role: "admin" } });
     mocks.listUsers.mockResolvedValue({ data: { users: [] }, error: null });
     mocks.insertSingle.mockResolvedValue({ data: { id: "22222222-2222-4222-8222-222222222222" }, error: null });
     mocks.insertSelect.mockReturnValue({ single: mocks.insertSingle });
@@ -49,14 +49,14 @@ describe("administrator invitations", () => {
 
   it("creates an organization-scoped preauthorization and sends an app-owned setup link", async () => {
     const response = await POST(new NextRequest("https://devtrack.example/api/admin/users/invitations", {
-      method: "POST", body: JSON.stringify({ email: " Learner@Example.com ", role: "member" }),
+      method: "POST", body: JSON.stringify({ email: " Learner@Example.com ", role: "id" }),
     }));
     expect(response.status).toBe(200);
     expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({
       organization_id: "organization-1",
       email: "learner@example.com",
       normalized_email: "learner@example.com",
-      role: "member",
+      role: "id",
       invited_by: "admin-1",
     }));
     expect(mocks.inviteUserByEmail).toHaveBeenCalledWith("learner@example.com", expect.objectContaining({

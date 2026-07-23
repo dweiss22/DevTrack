@@ -2,21 +2,22 @@
 
 ## Effective model
 
-After migration `202607210006_organization_wide_reporting_access.sql`, an authenticated DevTrack user with an `application_users` row can read all synchronized reporting records whose `organization_id` matches that application row. A user with no application row reads none. Records from every other organization remain hidden.
+After migration `202607210006_organization_wide_reporting_access.sql`, an authenticated DevTrack user with a standard-page role can read all synchronized reporting records whose `organization_id` matches that application row. Migration `202607230003_role_based_access_control.sql` limits that standard access to SuperAdmin, Admin, and ID. SME users read only their mapped assignment data through the validated SME Dashboard RPC. A user with no application row reads none. Records from every other organization remain hidden.
 
-The `admin` role continues to control mutations and operational configuration. The service role continues to bypass RLS for server-side import, repair, and maintenance. Reporting-group rows and `organizations.reporting_access_enforced` are retained for compatibility and audit history, but no reporting read or RPC consults them.
+The `super_admin` and `admin` roles control mutations and operational configuration. The service role continues to bypass RLS for server-side import, repair, and maintenance. Reporting-group rows and `organizations.reporting_access_enforced` are retained for compatibility and audit history, but no reporting read or RPC consults them.
 
 ## Authorization inventory
 
 | Data or operation | Previous dependency | Effective access after migration |
 | --- | --- | --- |
-| Tasks, time entries, Wrike people, folders, projects, spaces, and custom-field definitions | `can_access_wrike_*`, reporting groups, and `reporting_access_enforced` | Read all rows in the authenticated user's organization |
+| Tasks, time entries, Wrike people, folders, projects, spaces, and custom-field definitions | `can_access_wrike_*`, reporting groups, and `reporting_access_enforced` | SuperAdmin, Admin, and ID read all rows in their organization; SME direct reads are denied |
 | Task assignees, locations, scope mappings, raw/normalized field values, and folder import source mappings | Parent task/entry permission helper | Read when the parent task or source row belongs to the user's organization |
 | Projects, Dashboard, Development, time reports, filter options, and percentile RPCs | Mixed group traversal and per-task/per-entry permission calls | Set-based organization predicate resolved once per RPC |
 | Reporting-group configuration | Member or administrator read; administrator write | Deprecated, retained, administrator-only read/write |
 | Organization, application-user, workflow, category, and enabled-field reference data | Organization RLS | Existing organization-scoped reads retained |
 | Wrike OAuth connection and secrets | Administrator RLS plus server-only encryption | Unchanged; administrator/server only |
-| Imports, repair, custom-field mappings, status classifications, and user administration | Application `requireAdmin` and/or admin/service-role database policy | Unchanged; administrator only |
+| Imports, repair, custom-field mappings, status classifications, and user administration | Centralized capability guard and admin/service-role database policy | SuperAdmin and Admin only |
+| SME Dashboard | Not previously available | Caller-aware RPC constrained to an eligible SME and canonical Wrike assignee in the same organization |
 | Ask conversations and messages | Owner or organization administrator | Unchanged; ordinary users see only their own history |
 | Sync leases and background maintenance | Service role | Unchanged |
 
@@ -40,7 +41,7 @@ Compatibility `can_access_wrike_*` functions now perform only a direct organizat
 
 The browser and server-component Supabase clients use the authenticated user's JWT and depend on RLS or caller-aware RPCs for read isolation. Administrative routes call `requireAdmin()` before using the service-role client. This application check is essential because the service role bypasses RLS.
 
-Database policies independently prevent authenticated members from writing synchronized reporting tables: those roles receive `SELECT`, while sync writes use the service role. Administrator-only configuration tables retain their existing administrator policies. OAuth credentials remain in `wrike_connections`, protected by administrator RLS and encrypted token storage.
+Database policies independently prevent authenticated end users from writing synchronized reporting tables: those roles receive `SELECT`, while sync writes use the service role. SME reads are additionally restricted by role-aware RLS and by returning no standard reporting organization from `current_organization_id()`. Administrator-only configuration tables retain their existing policies. OAuth credentials remain in `wrike_connections`, protected by administrator RLS and encrypted token storage.
 
 ## Deployment sequence
 
@@ -48,17 +49,18 @@ Database policies independently prevent authenticated members from writing synch
 2. Apply all pending migrations through `202607210006_organization_wide_reporting_access.sql` in a staging environment.
 3. Reload the PostgREST schema cache (the migration sends the reload notification).
 4. Run `supabase/tests/reporting_rls.sql` against staging.
-5. Sign in as an ordinary member and verify Projects, Dashboard, Development, time reporting, filter options, and project detail show the complete organization dataset.
+5. Sign in as an ID user and verify Projects, Dashboard, Development, time reporting, filter options, and project detail show the complete organization dataset.
 6. Verify a user assigned to another organization cannot read the first organization's rows or obtain them through RPCs.
-7. Verify admin imports, Vertical repair, user administration, OAuth connection management, and service-role jobs still work.
-8. Compare representative query plans and latency using the checks below.
-9. Deploy the application. No import, repair, backfill, or production mutation is required by this access migration.
+7. Verify Admin and SuperAdmin imports, Vertical repair, user administration, OAuth connection management, and service-role jobs still work.
+8. Sign in as an SME and verify standard pages and RPCs are unavailable while the SME Dashboard returns only mapped assignments.
+9. Compare representative query plans and latency using the checks below.
+10. Deploy the application. No import, repair, backfill, or production mutation is required by this access migration.
 
 Do not apply this migration to production until separately authorized.
 
 ## Performance validation
 
-Use an authenticated member JWT in staging so the plan represents the real reporting path. Representative checks:
+Use an authenticated ID JWT in staging so the plan represents the standard reporting path. Representative checks:
 
 ```sql
 explain (analyze, buffers, settings)

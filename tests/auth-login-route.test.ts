@@ -27,7 +27,7 @@ describe("password login route", () => {
 
   it("honors a safe return URL for approved users", async () => {
     mocks.signInWithPassword.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
-    mocks.maybeSingle.mockResolvedValue({ data: { id: "user-1", profile_completed: true }, error: null });
+    mocks.maybeSingle.mockResolvedValue({ data: { id: "user-1", profile_completed: true, role: "id" }, error: null });
     const response = await POST(new NextRequest("https://devtrack.example/api/auth/login", { method: "POST", body: JSON.stringify({ email: "user@example.com", password: "correct-password", next: "/projects?year=2026" }) }));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ redirectTo: "/projects?year=2026" });
@@ -35,7 +35,7 @@ describe("password login route", () => {
 
   it("rejects an external return URL and keeps unapproved users in access pending", async () => {
     mocks.signInWithPassword.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
-    mocks.maybeSingle.mockResolvedValueOnce({ data: { id: "user-1", profile_completed: true }, error: null });
+    mocks.maybeSingle.mockResolvedValueOnce({ data: { id: "user-1", profile_completed: true, role: "id" }, error: null });
     const external = await POST(new NextRequest("https://devtrack.example/api/auth/login", { method: "POST", body: JSON.stringify({ email: "user@example.com", password: "correct-password", next: "https://malicious.example" }) }));
     expect((await external.json()).redirectTo).toBe("/");
     mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
@@ -45,8 +45,15 @@ describe("password login route", () => {
 
   it("routes an invited member with incomplete setup back to account setup", async () => {
     mocks.signInWithPassword.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
-    mocks.maybeSingle.mockResolvedValue({ data: { id: "user-1", profile_completed: false }, error: null });
+    mocks.maybeSingle.mockResolvedValue({ data: { id: "user-1", profile_completed: false, role: "id" }, error: null });
     const response = await POST(new NextRequest("https://devtrack.example/api/auth/login", { method: "POST", body: JSON.stringify({ email: "user@example.com", password: "correct-password" }) }));
     expect((await response.json()).redirectTo).toBe("/account-setup");
+  });
+
+  it("routes an active SME directly to the SME Dashboard", async () => {
+    mocks.signInWithPassword.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+    mocks.maybeSingle.mockResolvedValue({ data: { id: "user-1", profile_completed: true, role: "sme" }, error: null });
+    const response = await POST(new NextRequest("https://devtrack.example/api/auth/login", { method: "POST", body: JSON.stringify({ email: "sme@example.com", password: "correct-password", next: "/projects" }) }));
+    expect((await response.json()).redirectTo).toBe("/sme-dashboard");
   });
 });

@@ -7,7 +7,8 @@ import { ProjectsFilters } from "@/components/projects-filters";
 import { ProjectsListToolbar } from "@/components/projects-list-toolbar";
 import { effectiveSortDirection, nextSortDirection, SortableTableHeader, type TableSortDirection } from "@/components/sortable-table-header";
 import { StatusBadge, UnresolvedReferenceLabel } from "@/components/wrike-reference";
-import { requireContext } from "@/lib/auth";
+import { requirePageCapability } from "@/lib/auth";
+import { isAdministratorRole } from "@/lib/auth/roles";
 import { loadProjectLengthPercentilesResult, loadTaskRows } from "@/lib/reporting/data";
 import { safeDashboardReturnTo } from "@/lib/reporting/dashboard-navigation";
 import { reportingFailure, type ReportingFailure } from "@/lib/reporting/failure";
@@ -22,7 +23,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const projectListQuery = new URLSearchParams(filtersToQuery(filters));
   if (returnTo) projectListQuery.set("returnTo", returnTo);
   const projectListHref = `/projects?${projectListQuery.toString()}`;
-  const { supabase, profile } = await requireContext();
+  const { supabase, profile } = await requirePageCapability("view_standard_pages");
   const [projectsLoad, statusesLoad, customFieldsResult, facetsLoad, peopleLoad, identitiesResult] = await Promise.all([
     captureProjectsRequest("Project list query", loadTaskRows(supabase, filters)),
     captureProjectsRequest("Project status options", loadStatusOptions(supabase, profile.organization_id)),
@@ -31,15 +32,16 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     captureProjectsRequest("Wrike user names", supabase.from("wrike_users").select("wrike_id,display_name,is_unresolved,identity_verified,identity_verification_source").eq("organization_id", profile.organization_id).order("display_name")),
     supabase.from("wrike_person_identities").select("identity_key,display_name,wrike_contact_id,is_displayable,is_verified,verification_source").eq("organization_id", profile.organization_id).order("display_name")
   ]);
-  if (projectsLoad.failure || statusesLoad.failure || facetsLoad.failure || peopleLoad.failure) return <AppShell isAdmin={profile.role === "admin"}>
-    <ProjectsLoadFailure failure={(projectsLoad.failure ?? statusesLoad.failure ?? facetsLoad.failure ?? peopleLoad.failure)!} isAdmin={profile.role === "admin"} />
+  const isAdministrator = isAdministratorRole(profile.role);
+  if (projectsLoad.failure || statusesLoad.failure || facetsLoad.failure || peopleLoad.failure) return <AppShell isAdmin={isAdministrator}>
+    <ProjectsLoadFailure failure={(projectsLoad.failure ?? statusesLoad.failure ?? facetsLoad.failure ?? peopleLoad.failure)!} isAdmin={isAdministrator} />
   </AppShell>;
   const projects = projectsLoad.data;
   const statusDefinitions = statusesLoad.data;
   const facets = facetsLoad.data;
   const peopleResult = peopleLoad.data;
-  if (peopleResult.error) return <AppShell isAdmin={profile.role === "admin"}>
-    <ProjectsLoadFailure failure={reportingFailure(peopleResult.error, "Wrike user names")} isAdmin={profile.role === "admin"} />
+  if (peopleResult.error) return <AppShell isAdmin={isAdministrator}>
+    <ProjectsLoadFailure failure={reportingFailure(peopleResult.error, "Wrike user names")} isAdmin={isAdministrator} />
   </AppShell>;
   const customFields = customFieldsResult.data;
   const statuses = [
@@ -57,10 +59,10 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const percentileFailure = percentileResult.error ? reportingFailure(percentileResult.error, "Development percentile query", "202607210005_projects_percentile_performance.sql") : null;
   const customFieldsFailure = customFieldsResult.error ? reportingFailure(customFieldsResult.error, "Custom-field filter options") : null;
 
-  return <AppShell isAdmin={profile.role === "admin"}>
+  return <AppShell isAdmin={isAdministrator}>
     <header className="page-header"><div><p className="eyebrow">PROJECTS</p><h1>Projects</h1><p>Find synchronized work by project, designer, SME, status, or reporting detail.</p></div>{returnTo && <Link className="button secondary" href={returnTo}>Back to Dashboard</Link>}</header>
-    {percentileFailure && <ProjectsLoadFailure failure={percentileFailure} isAdmin={profile.role === "admin"} nonfatal />}
-    {customFieldsFailure && <ProjectsLoadFailure failure={customFieldsFailure} isAdmin={profile.role === "admin"} nonfatal nonfatalImpact="Project rows remain available; custom-field filter choices are temporarily unavailable." />}
+    {percentileFailure && <ProjectsLoadFailure failure={percentileFailure} isAdmin={isAdministrator} nonfatal />}
+    {customFieldsFailure && <ProjectsLoadFailure failure={customFieldsFailure} isAdmin={isAdministrator} nonfatal nonfatalImpact="Project rows remain available; custom-field filter choices are temporarily unavailable." />}
     <ProjectsFilters filters={filters} statuses={statuses} customFields={customFields} people={people} facets={facets} returnTo={returnTo} />
     <ProjectsListToolbar filters={filters} total={total} returnTo={returnTo} />
     {projects.length ? <>
@@ -75,7 +77,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
         return <tr key={project.task_id}>
           <td data-label="Project name"><Link href={`/projects/${project.task_id}?returnTo=${encodeURIComponent(projectListHref)}`}>{project.title}</Link></td>
           <td data-label="Status"><StatusBadge name={project.status_name} id={project.custom_status_id} color={project.status_reference.color} resolved={project.status_reference.resolved} /></td>
-          <td data-label="Vertical">{projectTableVerticalLabel(vertical, project.vertical_state)}{vertical?.hasUnresolvedVertical ? <span title={profile.role === "admin" ? `Unrecognized: ${vertical.unresolvedVerticalTokens?.join(", ") || "missing value"}` : "Vertical value needs review"}> ⚠</span> : null}</td>
+          <td data-label="Vertical">{projectTableVerticalLabel(vertical, project.vertical_state)}{vertical?.hasUnresolvedVertical ? <span title={isAdministrator ? `Unrecognized: ${vertical.unresolvedVerticalTokens?.join(", ") || "missing value"}` : "Vertical value needs review"}> ⚠</span> : null}</td>
           <td data-label="ID Assigned">{idAssignedValues.length ? idAssignedValues.map((person, index) => <span key={`${person.id}-${index}`}>{index > 0 && ", "}{person.resolved ? person.label : <UnresolvedReferenceLabel id={person.referenceId ?? person.id} type="user" label={person.label} showId={person.referenceId != null} />}</span>) : "—"}</td>
           <td data-label="Folders">{project.locations.length ? project.locations.map((location, index) => <span key={location.wrikeId}>{index > 0 && ", "}{location.resolved ? location.title : <UnresolvedReferenceLabel id={location.wrikeId} type="folder" />}</span>) : "—"}</td>
           <td data-label="Development percentile"><ProjectPercentileRing benchmark={percentileByTask.get(project.task_id) ?? null} /></td>

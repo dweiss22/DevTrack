@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
+import { requireCapability } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { applicationUserDisplayName } from "@/lib/users/application-user-display";
 
 const approvalSchema = z.object({ userId: z.string().uuid() });
 
 export async function POST(request: NextRequest) {
-  const { profile } = await requireAdmin();
+  const { profile } = await requireCapability("manage_users");
   const parsed = approvalSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Select a valid account to approve." }, { status: 400 });
 
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     id: authentication.user.id,
     organization_id: profile.organization_id,
     display_name: applicationUserDisplayName(null, authentication.user),
-    role: "member",
+    role: "id",
   });
   if (insertError) {
     const alreadyApproved = insertError.code === "23505";

@@ -27,6 +27,6 @@ describe("organization-wide reporting access presentation", () => {
       ["app", "api", "admin", "wrike", "repair-verticals", "route.ts"],
       ["app", "api", "admin", "wrike", "custom-field-mappings", "route.ts"]
     ]) expect(source(...route)).toContain("requireAdmin()");
-    expect(source("app", "admin", "users", "page.tsx")).toContain("requireAdmin()");
+    expect(source("app", "admin", "users", "page.tsx")).toContain('requirePageCapability("manage_users")');
   });
 });

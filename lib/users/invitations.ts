@@ -1,8 +1,8 @@
-import { z } from "zod";
 import { env } from "@/lib/env";
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { z } from "zod";
 
-export const applicationRoleSchema = z.enum(["admin", "member"]);
+export const applicationRoleSchema = z.enum(["admin", "id", "sme"]);
 export const invitationInputSchema = z.object({
   email: z.string().trim().email().max(320),
   role: applicationRoleSchema,

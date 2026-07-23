@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { safeInternalPath } from "@/lib/auth/redirects";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { landingPageForRole, normalizeApplicationRole } from "@/lib/auth/roles";
 
 function loginError(origin: string) {
   const login = new URL("/login", origin);
@@ -38,11 +39,12 @@ export async function GET(request: NextRequest) {
 
   const { data: applicationUser } = await supabase
     .from("application_users")
-    .select("id,profile_completed")
+    .select("id,profile_completed,role")
     .eq("id", user.id)
     .maybeSingle();
 
   if (!applicationUser) return NextResponse.redirect(new URL("/access-pending", url.origin));
   if (!applicationUser.profile_completed) return NextResponse.redirect(new URL("/account-setup", url.origin));
+  if (normalizeApplicationRole(applicationUser.role) === "sme") return NextResponse.redirect(new URL(landingPageForRole("sme"), url.origin));
   return NextResponse.redirect(new URL(next, url.origin));
 }

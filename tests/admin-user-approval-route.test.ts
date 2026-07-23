@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({
-  requireAdmin: vi.fn(),
+  requireCapability: vi.fn(),
   createAdminClient: vi.fn(),
   getUserById: vi.fn(),
   maybeSingle: vi.fn(),
   insert: vi.fn(),
 }));
 
-vi.mock("@/lib/auth", () => ({ requireAdmin: mocks.requireAdmin }));
+vi.mock("@/lib/auth", () => ({ requireCapability: mocks.requireCapability }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: mocks.createAdminClient }));
 
 import { POST } from "@/app/api/admin/users/approve/route";
@@ -19,7 +19,7 @@ const userId = "11111111-1111-4111-8111-111111111111";
 describe("administrator user approval", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.requireAdmin.mockResolvedValue({ profile: { organization_id: "organization-1", role: "admin" } });
+    mocks.requireCapability.mockResolvedValue({ profile: { organization_id: "organization-1", role: "admin" } });
     mocks.createAdminClient.mockReturnValue({
       auth: { admin: { getUserById: mocks.getUserById } },
       from: () => ({
@@ -45,7 +45,7 @@ describe("administrator user approval", () => {
       id: userId,
       organization_id: "organization-1",
       display_name: "Dev Track Learner",
-      role: "member",
+      role: "id",
     });
   });
 

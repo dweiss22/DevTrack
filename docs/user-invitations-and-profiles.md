@@ -2,7 +2,7 @@
 
 DevTrack administrators invite users from **User Management**. The server creates an organization-scoped preauthorization in `application_user_invitations`, then asks Supabase Auth to email the secure invitation. The browser never receives the Supabase service-role key.
 
-`application_users` remains the authoritative source for organization membership and the `admin`/`member` role. Roles are not mirrored into Supabase Auth app metadata. On the callback, DevTrack matches the authenticated user's normalized Auth email to one open invitation and atomically creates the membership. The invitation cannot be claimed by a different Auth identity, and repeated callbacks do not create duplicate memberships.
+`application_users` remains the authoritative source for organization membership and the four-role authorization model. Roles are not mirrored into Supabase Auth app metadata. Administrators may invite only `Admin`, `ID`, or `SME`; the fixed `SuperAdmin` role is never an invitation option. On the callback, DevTrack matches the authenticated user's normalized Auth email to one open invitation and atomically creates the membership. The invitation cannot be claimed by a different Auth identity, and repeated callbacks do not create duplicate memberships.
 
 ## Supabase Auth configuration
 
@@ -36,7 +36,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<public anon key>
 SUPABASE_SERVICE_ROLE_KEY=<server-only service role key>
 ```
 
-Apply migration `202607230002_application_user_invitations.sql` before deploying the application code.
+Apply migrations `202607230002_application_user_invitations.sql` and `202607230003_role_based_access_control.sql` before deploying the application code.
 
 ## Vercel Deployment Protection
 
@@ -51,4 +51,7 @@ The production deployment must be publicly reachable at the network layer, with 
 - Resending resets an unused, unconfirmed invitation. A confirmed identity receives a secure recovery/setup email instead.
 - A valid invited user goes directly to first-time account setup and never enters the access-request approval queue.
 - Users who authenticate without an administrator invitation remain on the existing access-pending path.
-- The database rejects demotion of the last administrator in an organization.
+- Role changes are limited to Admin, ID, and SME. The fixed SuperAdmin cannot be assigned, transferred, demoted, or removed.
+- SME invitation completion lands on `/sme-dashboard`; other roles use the normal landing page.
+
+See [Role-based access control](role-based-access-control.md) for the complete capability matrix and database enforcement decisions.

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireContext } from "@/lib/auth";
+import { requireCapability } from "@/lib/auth";
 import { parseAsk, type AskReferences } from "@/lib/reporting/ask";
 import { reportingFiltersSchema } from "@/lib/reporting/filters";
 import { loadTaskRows, loadTimeRows, loadTimeSummary } from "@/lib/reporting/data";
@@ -10,7 +10,7 @@ import { loadCustomFieldOptions } from "@/lib/reporting/options";
 const requestSchema = z.object({ conversationId: z.string().uuid().optional(), message: z.string().trim().min(1).max(2000), filters: reportingFiltersSchema.partial().optional() });
 
 export async function POST(request: NextRequest) {
-  const { user, profile, supabase } = await requireContext();
+  const { user, profile, supabase } = await requireCapability("view_standard_pages");
   const parsedBody = requestSchema.safeParse(await request.json());
   if (!parsedBody.success) return NextResponse.json({ error: "Enter a question no longer than 2,000 characters." }, { status: 400 });
   const { data: organization } = await supabase.from("organizations").select("timezone,ask_enabled").eq("id", profile.organization_id).single();

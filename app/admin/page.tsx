@@ -1,10 +1,10 @@
 import { AppShell } from "@/components/app-shell";
 import { AdminPanel } from "@/components/admin-panel";
-import { requireAdmin } from "@/lib/auth";
+import { requirePageCapability } from "@/lib/auth";
 import { SELECTED_WRIKE_FOLDERS } from "@/lib/wrike/selected-folders";
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ connected?: string; error?: string }> }) {
-  const { supabase, profile } = await requireAdmin();
+  const { supabase, profile } = await requirePageCapability("manage_data");
   const params = await searchParams;
   const [{ data: connection }, { data: folderRuns }, { data: unresolvedReferences }, verticalDiagnostics, { data: repairRuns }] = await Promise.all([
     supabase.from("wrike_connections").select("status,account_name,api_host,oauth_scopes,token_expires_at,updated_at").eq("organization_id", profile.organization_id).maybeSingle(),

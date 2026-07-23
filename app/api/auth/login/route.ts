@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { safeInternalPath } from "@/lib/auth/redirects";
 import { createClient } from "@/lib/supabase/server";
+import { landingPageForRole, normalizeApplicationRole } from "@/lib/auth/roles";
 
 export async function POST(request: NextRequest) {
   const parsed = z.object({
@@ -21,10 +22,11 @@ export async function POST(request: NextRequest) {
 
   const { data: applicationUser } = await supabase
     .from("application_users")
-    .select("id,profile_completed")
+    .select("id,profile_completed,role")
     .eq("id", data.user.id)
     .maybeSingle();
 
-  const redirectTo = !applicationUser ? "/access-pending" : applicationUser.profile_completed ? safeInternalPath(parsed.data.next) : "/account-setup";
+  const redirectTo = !applicationUser ? "/access-pending" : !applicationUser.profile_completed ? "/account-setup"
+    : normalizeApplicationRole(applicationUser.role) === "sme" ? landingPageForRole("sme") : safeInternalPath(parsed.data.next);
   return NextResponse.json({ ok: true, redirectTo });
 }

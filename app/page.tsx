@@ -2,7 +2,8 @@ import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardOverviewCharts, DashboardTimeChart } from "@/components/dashboard-charts";
 import { DashboardNoticePin, DashboardNoticeProvider, DashboardNoticeRegistration } from "@/components/dashboard-notices";
-import { requireContext } from "@/lib/auth";
+import { requirePageCapability } from "@/lib/auth";
+import { isAdministratorRole } from "@/lib/auth/roles";
 import { dashboardDrilldownHref } from "@/lib/reporting/dashboard-navigation";
 import { loadDashboardOverview, loadDashboardTimeAnalytics, type DashboardAnalyticsFailure, type DashboardOverview } from "@/lib/reporting/dashboard";
 import { parseReportingFilters } from "@/lib/reporting/filters";
@@ -13,13 +14,13 @@ function Metric({ label, value, detail }: { label: string; value: number; detail
 }
 
 export default async function Dashboard() {
-  const { supabase, profile } = await requireContext();
+  const { supabase, profile } = await requirePageCapability("view_standard_pages");
   const lastRunResult = await supabase.from("wrike_folder_task_import_runs").select("created_at").eq("organization_id", profile.organization_id).eq("status", "succeeded").order("created_at", { ascending: false }).limit(1).maybeSingle();
   const filters = parseReportingFilters({});
   const overviewPromise = loadDashboardOverview(supabase);
   const timePromise = loadDashboardTimeAnalytics(supabase);
 
-  return <AppShell isAdmin={profile.role === "admin"} lastSynced={lastRunResult.data?.created_at}>
+  return <AppShell isAdmin={isAdministratorRole(profile.role)} lastSynced={lastRunResult.data?.created_at}>
     <DashboardNoticeProvider>
       <header className="page-header dashboard-header"><div><p className="eyebrow">ONLINE LEARNING</p><h1>Dashboard</h1><p>A high-level view of synchronized Online Learning courses across all valid Reporting Years.</p></div><DashboardNoticePin /></header>
       <Suspense fallback={<DashboardSkeleton label="Loading Dashboard overview" />}><OverviewSection promise={overviewPromise} filters={filters} /></Suspense>

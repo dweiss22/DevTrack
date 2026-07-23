@@ -10,7 +10,7 @@ describe("administrator user presentation", () => {
     const adminSource = readFileSync(join(root, "app", "admin", "page.tsx"), "utf8");
     expect(loadingSource).not.toContain("requireContext");
     expect(loadingSource).not.toContain("requireAdmin");
-    expect(adminSource).toContain("await requireAdmin()");
+    expect(adminSource).toContain('await requirePageCapability("manage_data")');
     expect(adminSource).toContain("<AppShell isAdmin>");
   });
 
@@ -26,8 +26,8 @@ describe("administrator user presentation", () => {
     const route = readFileSync(join(root, "app", "api", "admin", "users", "approve", "route.ts"), "utf8");
     expect(page).toContain("<UserApprovalQueue users={pendingUsers} />");
     expect(queue).toContain("Approve access");
-    expect(route).toContain("await requireAdmin()");
-    expect(route).toContain('role: "member"');
+    expect(route).toContain('await requireCapability("manage_users")');
+    expect(route).toContain('role: "id"');
   });
 
   it("keeps task source identifiers inside collapsed diagnostics", () => {

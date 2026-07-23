@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const root = process.cwd();
 const migration = fs.readFileSync(path.join(root, "supabase/migrations/202607230002_application_user_invitations.sql"), "utf8");
+const rbacMigration = fs.readFileSync(path.join(root, "supabase/migrations/202607230003_role_based_access_control.sql"), "utf8");
 const callback = fs.readFileSync(path.join(root, "app/auth/callback/route.ts"), "utf8");
 const inviteRoute = fs.readFileSync(path.join(root, "app/api/admin/users/invitations/route.ts"), "utf8");
 const roleRoute = fs.readFileSync(path.join(root, "app/api/admin/users/[id]/route.ts"), "utf8");
@@ -37,12 +38,11 @@ describe("app-managed invitation security contract", () => {
   });
 
   it("keeps organization membership authoritative and protects the last administrator", () => {
-    expect(roleRoute).toContain("requireAdmin()");
+    expect(roleRoute).toContain('requireCapability("manage_users")');
     expect(roleRoute).toContain("target_organization_id: profile.organization_id");
-    expect(migration).toContain("change_application_user_role");
-    expect(migration).toContain("count(*) from public.application_users");
-    expect(migration).toContain("last organization administrator cannot be demoted");
-    expect(migration).not.toContain("raw_app_meta_data");
+    expect(rbacMigration).toContain("change_application_user_role");
+    expect(rbacMigration).toContain("The required SuperAdmin account cannot be modified");
+    expect(rbacMigration).not.toContain("raw_app_meta_data");
   });
 
   it("scopes profile updates to the signed-in identity and keeps authorization fields read-only", () => {

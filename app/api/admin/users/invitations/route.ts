@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requireCapability } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { accountSetupRedirectUrl, findAuthenticationUserByEmail, invitationInputSchema, normalizeInvitationEmail } from "@/lib/users/invitations";
 
 export async function POST(request: NextRequest) {
-  const { user, profile } = await requireAdmin();
+  const { user, profile } = await requireCapability("manage_users");
   const parsed = invitationInputSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Enter a valid email address and application role." }, { status: 400 });
 

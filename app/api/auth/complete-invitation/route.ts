@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { landingPageForRole, normalizeApplicationRole } from "@/lib/auth/roles";
 
 const schema = z.object({
   displayName: z.string().trim().min(2).max(100),
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "This setup session is invalid or expired. Request a new invitation." }, { status: 401 });
 
   const admin = createAdminClient();
-  const { data: membership } = await admin.from("application_users").select("id,profile_completed").eq("id", user.id).maybeSingle();
+  const { data: membership } = await admin.from("application_users").select("id,profile_completed,role").eq("id", user.id).maybeSingle();
   if (!membership) return NextResponse.json({ error: "This account does not have a valid DevTrack invitation." }, { status: 403 });
 
   const { error: passwordError } = await supabase.auth.updateUser({
@@ -31,5 +32,5 @@ export async function POST(request: NextRequest) {
     updated_at: new Date().toISOString(),
   }).eq("id", user.id);
   if (profileError) return NextResponse.json({ error: "Your password was saved, but your profile could not be completed. Please retry." }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, redirectTo: landingPageForRole(normalizeApplicationRole(membership.role)) });
 }

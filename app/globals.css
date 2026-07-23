@@ -217,6 +217,12 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
 .danger { color: #9f1d20; border-color: #dca6a8; }
 .profile-card { max-width: 640px; }
 .profile-card form { display: grid; gap: 14px; }
+.sme-selector-card form { display: flex; align-items: flex-end; gap: 12px; }
+.sme-selector-card label { min-width: min(360px, 100%); }
+.sme-selector-card .muted { margin: 14px 0 0; }
+.sme-metrics { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.status-count-list { display: flex; flex-wrap: wrap; gap: 14px 24px; }
+.status-count-list > span { display: flex; align-items: center; gap: 7px; }
 .empty { padding: 36px; text-align: center; color: var(--muted); }
 pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px; background: #f8fafc; padding: 12px; border-radius: 7px; }
 .muted, small { color: var(--muted); }
@@ -463,6 +469,8 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
   .project-chart-filters { grid-template-columns: 1fr 1fr; }
   .section-heading { flex-direction: column; gap: 0; }
   .user-invite-form { grid-template-columns: 1fr; }
+  .sme-selector-card form { align-items: stretch; flex-direction: column; }
+  .sme-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 430px) {
   .completion-totals, .development-filters .filter-fields { grid-template-columns: 1fr; }
