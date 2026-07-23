@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const root = process.cwd();
 const panel = fs.readFileSync(path.join(root, "components/admin-panel.tsx"), "utf8");
+const conflictReview = fs.readFileSync(path.join(root, "components/import-conflict-review.tsx"), "utf8");
 const page = fs.readFileSync(path.join(root, "app/admin/page.tsx"), "utf8");
 const css = fs.readFileSync(path.join(root, "app/globals.css"), "utf8");
 const historyRoute = fs.readFileSync(path.join(root, "app/api/admin/wrike/history/route.ts"), "utf8");
@@ -49,6 +50,30 @@ describe("Data page organization", () => {
     expect(page).toContain("const admin = createAdminClient()");
     expect(page).toContain('admin.from("wrike_connections")');
     expect(page).toContain('admin.from("wrike_vertical_repair_runs")');
+  });
+
+  it("provides an organization-scoped workspace for reviewing current import conflicts", () => {
+    expect(panel).toContain('title="Import conflicts"');
+    expect(panel).toContain("<ImportConflictReview");
+    expect(page).toContain('admin.from("wrike_task_normalized_custom_field_values")');
+    expect(page).toContain('.eq("has_conflict", true)');
+    expect(page.match(/\.eq\(".*organization_id", profile\.organization_id\)/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(conflictReview).toContain("How to clear a conflict:");
+    expect(conflictReview).toContain("make the listed source fields agree");
+    expect(conflictReview).toContain("Review DevTrack project");
+    expect(conflictReview).toContain("Open task in Wrike");
+    expect(conflictReview).toContain("This workspace is review-only.");
+    expect(conflictReview).not.toContain("dangerouslySetInnerHTML");
+  });
+
+  it("renders source evidence and protects external task links", () => {
+    expect(conflictReview).toContain("source_wrike_field_ids");
+    expect(conflictReview).toContain("source_titles");
+    expect(conflictReview).toContain("source_values");
+    expect(conflictReview).toContain("conflict_metadata");
+    expect(conflictReview).toContain('url.protocol === "https:"');
+    expect(conflictReview).toContain('url.hostname.endsWith(".wrike.com")');
+    expect(conflictReview).toContain('target="_blank" rel="noreferrer"');
   });
 
   it("clears only organization-scoped run logs through an administrator endpoint", () => {

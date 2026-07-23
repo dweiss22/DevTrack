@@ -208,6 +208,18 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
 .admin-history-section + .admin-history-section { margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--line); }
 .admin-history-section h3 { margin-bottom: 12px; }
 .admin-table-wrap { overflow-x: auto; }
+.import-conflict-workspace { display: grid; gap: 16px; }
+.import-conflict-guidance { padding: 14px 16px; border: 1px solid #c9d8e8; border-radius: 12px; background: #f5f9fd; }
+.import-conflict-guidance p { margin: 0; }
+.import-conflict-guidance p + p { margin-top: 6px; }
+.import-conflict-search { display: grid; gap: 6px; max-width: 620px; font-weight: 700; color: var(--navy); }
+.import-conflict-search input { width: 100%; }
+.import-conflict-list { display: grid; gap: 14px; }
+.import-conflict-card { display: grid; gap: 14px; padding: 18px; box-shadow: none; }
+.import-conflict-card p { margin: 0; }
+.import-conflict-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.import-conflict-heading h3 { margin: 2px 0 4px; }
+.import-conflict-heading .notice { margin: 0; white-space: nowrap; }
 .user-approval-card { margin-bottom: 24px; }
 .user-approval-card > .muted { margin-top: -4px; }
 .user-members-section > h2 { margin-bottom: 12px; }
@@ -435,6 +447,8 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
   main { padding: 72px 24px 24px; }
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .chart-grid, .admin-grid, .admin-action-grid, .ask-layout { grid-template-columns: 1fr; }
+  .import-conflict-heading { display: grid; }
+  .import-conflict-heading .notice { justify-self: start; white-space: normal; }
   .development-analysis-grid, .development-loading { grid-template-columns: 1fr; }
   .development-loading > :first-child { grid-column: auto; }
   .conversation-list { order: 2; }
