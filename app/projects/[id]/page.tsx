@@ -8,7 +8,8 @@ import { ProjectTimeAnalytics } from "@/components/project-time-analytics";
 import { TaskCustomFieldList, TaskFolderList } from "@/components/task-metadata";
 import { StatusBadge, UnresolvedReferenceLabel } from "@/components/wrike-reference";
 import { requirePageCapability } from "@/lib/auth";
-import { isAdministratorRole } from "@/lib/auth/roles";
+import { hasCapability, isAdministratorRole } from "@/lib/auth/roles";
+import { ONLINE_LEARNING_WORKFLOW_ID } from "@/lib/reporting/constants";
 import { hours } from "@/lib/metrics";
 import { loadProjectLengthPercentilesResult } from "@/lib/reporting/data";
 import { safeProjectsReturnTo } from "@/lib/reporting/dashboard-navigation";
@@ -21,7 +22,7 @@ import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory } fr
 import { normalizeVerticalValue, type VerticalState } from "@/lib/wrike/vertical-normalization";
 
 type ProjectDetailRow = {
-  wrike_id: string; title: string; status: string; custom_status_id: string | null; responsible_wrike_ids: string[];
+  wrike_id: string; title: string; status: string; workflow_id: string | null; custom_status_id: string | null; responsible_wrike_ids: string[];
   description: string | null; permalink: string | null; created_at_wrike: string | null; updated_at_wrike: string | null;
   start_date: string | null; due_date: string | null; completed_at: string | null;
   planned_minutes: number | null; allocated_minutes: number | null; raw_data: unknown;
@@ -59,6 +60,8 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const unresolvedCustomFields = customFieldsRaw.filter((field) => !field.resolved && !field.ignored);
   const assignees = resolveResponsibleUsers(row.responsible_wrike_ids ?? [], users);
   const statusReference = resolveTaskStatus(row.custom_status_id, row.status, statusesResult.data ?? []);
+  const isCourseDevelopment = row.workflow_id === ONLINE_LEARNING_WORKFLOW_ID
+    || (statusesResult.data ?? []).some((status) => status.wrike_id === row.custom_status_id && status.workflow_id === ONLINE_LEARNING_WORKFLOW_ID);
   const people: ProjectPersonOption[] = [
     ...users.map((person) => ({ wrikeId: person.wrike_id, name: person.display_name, resolved: !person.is_unresolved && person.display_name !== person.wrike_id, displayable: person.display_name !== person.wrike_id, verified: person.identity_verified, verificationSource: person.identity_verification_source ?? (person.is_unresolved ? "unresolved" as const : "configured_fallback" as const) })),
     ...(!identitiesResult.error ? identitiesResult.data ?? [] : []).map((identity) => ({ wrikeId: identity.wrike_contact_id ?? identity.identity_key, name: identity.display_name, resolved: Boolean(identity.wrike_contact_id), displayable: identity.is_displayable, verified: identity.is_verified, verificationSource: identity.verification_source }))
@@ -91,7 +94,11 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const isAdministrator = isAdministratorRole(profile.role);
   return <AppShell isAdmin={isAdministrator}>
     <nav className="breadcrumb" aria-label="Breadcrumb"><Link href={returnTo}>{returnLabel}</Link><span aria-hidden="true">/</span><span aria-current="page">Project detail</span></nav>
-    <header className="page-header project-detail-header"><div><p className="eyebrow">PROJECT DETAIL</p><h1>{row.title}</h1><p><StatusBadge name={statusReference.name} id={row.custom_status_id} color={statusReference.color} resolved={statusReference.resolved} />{row.due_date && <> <span aria-hidden="true">·</span> Due {formatDate(row.due_date)}</>}</p></div>{row.permalink && <a className="button" href={row.permalink} target="_blank" rel="noreferrer">Open in Wrike</a>}</header>
+    <header className="page-header project-detail-header"><div><p className="eyebrow">PROJECT DETAIL</p><h1>{row.title}</h1><p><StatusBadge name={statusReference.name} id={row.custom_status_id} color={statusReference.color} resolved={statusReference.resolved} />{row.due_date && <> <span aria-hidden="true">·</span> Due {formatDate(row.due_date)}</>}</p></div><div className="project-header-actions">
+      {isCourseDevelopment && hasCapability(profile.role, "create_id_review") && <Link className="button" href={`/projects/${id}/surveys/id-sme-review`}>Review of Subject Matter Expert</Link>}
+      {isCourseDevelopment && hasCapability(profile.role, "manage_surveys") && <Link className="button secondary" href={`/projects/${id}/surveys/course-development-debrief`}>Create SME Debrief</Link>}
+      {row.permalink && <a className="button secondary" href={row.permalink} target="_blank" rel="noreferrer">Open in Wrike</a>}
+    </div></header>
 
     {row.custom_fields_sync_state !== "complete" && <p className="notice project-sync-notice" role="status">Some custom-field data is not currently verified. Previously synchronized values are labeled below and have not been replaced with empty data.</p>}
 

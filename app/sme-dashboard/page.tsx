@@ -17,5 +17,5 @@ export default async function SmeDashboardPage({ searchParams }: { searchParams:
     : { data: [], error: null };
   if (tasksError) throw new Error("The selected SME Dashboard could not be loaded.");
 
-  return <AppShell isAdmin={isAdministratorRole(profile.role)}><header className="page-header"><div><p className="eyebrow">ASSIGNED COURSE DEVELOPMENT</p><h1>SME Dashboard{selected ? ` — ${selected.display_name}` : ""}</h1><p>Assignment, status, timing, and synchronized effort for one authorized SME identity.</p></div></header><SmeDashboard users={users} selected={selected} rows={(taskRows ?? []) as SmeDashboardRow[]} canSelect={canSelect} /></AppShell>;
+  return <AppShell isAdmin={isAdministratorRole(profile.role)}><header className="page-header"><div><p className="eyebrow">ASSIGNED COURSE DEVELOPMENT</p><h1>SME Dashboard{selected ? ` — ${selected.display_name}` : ""}</h1><p>Assignment, status, timing, and synchronized effort for one authorized SME identity.</p></div></header><SmeDashboard users={users} selected={selected} rows={(taskRows ?? []) as SmeDashboardRow[]} canSelect={canSelect} canCreateDebrief={hasCapability(profile.role, "create_sme_debrief")} /></AppShell>;
 }

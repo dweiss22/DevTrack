@@ -8,4 +8,6 @@ export const metadata: Metadata = {
   icons: { icon: favicon.src, shortcut: favicon.src, apple: favicon.src }
 };
 export const dynamic = "force-dynamic";
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="en"><body>{children}</body></html>; }
+export default function RootLayout({ children, modal }: Readonly<{ children: React.ReactNode; modal: React.ReactNode }>) {
+  return <html lang="en"><body>{children}{modal}</body></html>;
+}

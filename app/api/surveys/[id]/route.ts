@@ -1,0 +1,47 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { requireCapability } from "@/lib/auth";
+import { surveySaveSchema } from "@/lib/surveys/domain";
+import { loadSurveyDetail } from "@/lib/surveys/server";
+
+const idSchema = z.string().uuid();
+
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const { profile, supabase } = await requireCapability("view_surveys");
+  if (!idSchema.safeParse(id).success) return NextResponse.json({ error: "Survey is unavailable." }, { status: 404 });
+  const detail = await loadSurveyDetail(supabase, id);
+  if (!detail) return NextResponse.json({ error: "Survey is unavailable." }, { status: 404 });
+  const { data: canEdit } = await supabase.rpc("can_edit_survey", { target_submission_id: id });
+  if (profile.role !== "super_admin" && profile.role !== "admin") {
+    return NextResponse.json({ ...detail, viewer: { role: profile.role, canEdit: Boolean(canEdit), canManage: false } });
+  }
+  const [audit, revisions, revisers] = await Promise.all([
+    supabase.from("survey_audit_log").select("id,event_type,actor_id,actor_role,reason,previous_values,new_values,created_at").eq("submission_id", id).order("created_at", { ascending: false }),
+    supabase.from("survey_revisions").select("id,revision_number,changed_fields,submitted_by,submitted_at").eq("submission_id", id).order("revision_number", { ascending: false }),
+    supabase.from("application_users").select("id,display_name").eq("organization_id", profile.organization_id).eq("role", "id").order("display_name"),
+  ]);
+  return NextResponse.json({
+    ...detail,
+    viewer: { role: profile.role, canEdit: Boolean(canEdit), canManage: true },
+    audit: audit.data ?? [], revisions: revisions.data ?? [], revisers: revisers.data ?? [],
+  });
+}
+
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const { supabase } = await requireCapability("view_surveys");
+  const parsed = surveySaveSchema.safeParse(await request.json().catch(() => null));
+  if (!idSchema.safeParse(id).success || !parsed.success) {
+    const fieldErrors = parsed.success ? undefined : parsed.error.flatten().fieldErrors;
+    return NextResponse.json({ error: "Review the highlighted survey fields.", fieldErrors }, { status: 400 });
+  }
+  const { data, error } = await supabase.rpc("survey_save", {
+    target_submission_id: id,
+    answers: parsed.data.answers,
+    submit_now: parsed.data.submit,
+  });
+  return error
+    ? NextResponse.json({ error: error.message || "The survey could not be saved." }, { status: error.code === "42501" ? 403 : 400 })
+    : NextResponse.json(data);
+}

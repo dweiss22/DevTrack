@@ -9,6 +9,10 @@ export const CAPABILITIES = [
   "view_standard_pages",
   "view_sme_dashboard",
   "select_sme_dashboard_user",
+  "view_surveys",
+  "create_sme_debrief",
+  "create_id_review",
+  "manage_surveys",
   "edit_own_profile",
 ] as const;
 export type Capability = typeof CAPABILITIES[number];
@@ -16,8 +20,8 @@ export type Capability = typeof CAPABILITIES[number];
 const roleCapabilities: Record<ApplicationRole, ReadonlySet<Capability>> = {
   super_admin: new Set(CAPABILITIES),
   admin: new Set(CAPABILITIES),
-  id: new Set(["view_standard_pages", "view_sme_dashboard", "select_sme_dashboard_user", "edit_own_profile"]),
-  sme: new Set(["view_sme_dashboard", "edit_own_profile"]),
+  id: new Set(["view_standard_pages", "view_sme_dashboard", "select_sme_dashboard_user", "view_surveys", "create_id_review", "edit_own_profile"]),
+  sme: new Set(["view_sme_dashboard", "view_surveys", "create_sme_debrief", "edit_own_profile"]),
 };
 
 export function normalizeApplicationRole(value: unknown): ApplicationRole {

@@ -25,7 +25,7 @@ function hours(minutes: number) {
   return `${(minutes / 60).toFixed(1)}h`;
 }
 
-export function SmeDashboard({ users, selected, rows, canSelect }: { users: SmeDashboardUser[]; selected: SmeDashboardUser | null; rows: SmeDashboardRow[]; canSelect: boolean }) {
+export function SmeDashboard({ users, selected, rows, canSelect, canCreateDebrief = false }: { users: SmeDashboardUser[]; selected: SmeDashboardUser | null; rows: SmeDashboardRow[]; canSelect: boolean; canCreateDebrief?: boolean }) {
   const completed = rows.filter((row) => row.completed_at || row.status_classification === "completed").length;
   const active = rows.filter((row) => !row.completed_at && row.status_classification === "active").length;
   const attention = rows.filter((row) => row.is_overdue || row.status_classification === "stalled_or_canceled").length;
@@ -54,7 +54,7 @@ export function SmeDashboard({ users, selected, rows, canSelect }: { users: SmeD
           <article className="card metric-card"><span>Logged time</span><strong>{hours(minutes)}</strong></article>
         </div>
         {statusCounts.length ? <section className="card"><h2>Current status distribution</h2><div className="status-count-list">{statusCounts.map(([status, count]) => <span key={status}><StatusBadge name={status} /> <strong>{count}</strong></span>)}</div></section> : null}
-        {rows.length ? <div className="admin-table-wrap"><table><thead><tr><th>Course / task</th><th>Status</th><th>Project / folder</th><th>Due</th><th>Completed</th><th>Logged time</th><th>Last synchronized</th></tr></thead><tbody>{rows.map((row) => <tr key={row.task_id}><td>{canSelect ? <Link href={`/projects/${row.task_id}`}>{row.title}</Link> : row.title}</td><td><StatusBadge name={row.status_name} />{row.is_overdue ? <><br /><span className="error">Overdue</span></> : null}</td><td>{row.folder_context}</td><td>{row.due_date ? new Date(`${row.due_date}T00:00:00`).toLocaleDateString() : "—"}</td><td>{row.completed_at ? new Date(row.completed_at).toLocaleDateString() : "—"}</td><td>{hours(Number(row.actual_minutes))}</td><td>{row.updated_at_wrike ? new Date(row.updated_at_wrike).toLocaleString() : "—"}</td></tr>)}</tbody></table></div> : <p className="card empty">No synchronized tasks are assigned to this SME.</p>}
+        {rows.length ? <div className="admin-table-wrap"><table><thead><tr><th>Course / task</th><th>Status</th><th>Project / folder</th><th>Due</th><th>Completed</th><th>Logged time</th><th>Last synchronized</th><th>Survey</th></tr></thead><tbody>{rows.map((row) => <tr key={row.task_id}><td>{canSelect ? <Link href={`/projects/${row.task_id}`}>{row.title}</Link> : row.title}</td><td><StatusBadge name={row.status_name} />{row.is_overdue ? <><br /><span className="error">Overdue</span></> : null}</td><td>{row.folder_context}</td><td>{row.due_date ? new Date(`${row.due_date}T00:00:00`).toLocaleDateString() : "—"}</td><td>{row.completed_at ? new Date(row.completed_at).toLocaleDateString() : "—"}</td><td>{hours(Number(row.actual_minutes))}</td><td>{row.updated_at_wrike ? new Date(row.updated_at_wrike).toLocaleString() : "—"}</td><td>{canCreateDebrief ? <Link className="button secondary" href={`/projects/${row.task_id}/surveys/course-development-debrief`}>Course Development Debrief</Link> : "—"}</td></tr>)}</tbody></table></div> : <p className="card empty">No synchronized tasks are assigned to this SME.</p>}
       </>}
   </>;
 }

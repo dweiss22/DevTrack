@@ -175,6 +175,10 @@ The migration and deployment do not run a Wrike import or Vertical repair automa
 
 `General`, `Cross Vertical`, `Cross-Vertical`, and `All Verticals` are the only semantic all-Vertical aliases. They expand to the approved membership set for Associated Vertical filtering while their original source values remain unchanged. Missing, unrecognized, and synchronization-incomplete data remain distinct states; legacy unresolved links continue to match all three.
 
+## Course-development surveys
+
+DevTrack includes route-backed SME debrief and internal ID-review workflows with trusted Wrike context, drafts, locked submissions, revisions, audit history, and private invoice storage. See [`docs/course-development-surveys.md`](docs/course-development-surveys.md) for authorization, migration, Storage, retention, and deployment details.
+
 ## Scheduling and deployment
 
 The older Wrike synchronization schedule has been removed from `vercel.json`, and `GET /api/cron/wrike-sync` returns a protected `skipped` response if called manually. Only the saved-history cleanup remains scheduled at 07:00 UTC. Configure the scheduler to send `Authorization: Bearer <CRON_SECRET>`.
