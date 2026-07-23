@@ -9,6 +9,8 @@ export const CAPABILITIES = [
   "view_standard_pages",
   "view_sme_dashboard",
   "select_sme_dashboard_user",
+  "view_id_dashboard",
+  "select_id_dashboard_user",
   "view_surveys",
   "create_sme_debrief",
   "create_id_review",
@@ -20,7 +22,7 @@ export type Capability = typeof CAPABILITIES[number];
 const roleCapabilities: Record<ApplicationRole, ReadonlySet<Capability>> = {
   super_admin: new Set(CAPABILITIES),
   admin: new Set(CAPABILITIES),
-  id: new Set(["view_standard_pages", "view_sme_dashboard", "select_sme_dashboard_user", "view_surveys", "create_id_review", "edit_own_profile"]),
+  id: new Set(["view_standard_pages", "view_sme_dashboard", "select_sme_dashboard_user", "view_id_dashboard", "view_surveys", "create_id_review", "edit_own_profile"]),
   sme: new Set(["view_sme_dashboard", "view_surveys", "create_sme_debrief", "edit_own_profile"]),
 };
 

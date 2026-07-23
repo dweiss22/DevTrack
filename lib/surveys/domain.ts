@@ -83,11 +83,13 @@ export const surveySaveSchema = z.discriminatedUnion("surveyType", [
 ]);
 
 export type AssignedSme = {
-  applicationUserId: string;
+  applicationUserId: string | null;
   wrikeUserId: string;
   wrikeId: string;
   name: string;
   email: string | null;
+  mappingStatus: "mapped" | "unmapped";
+  identityStatus: "verified";
 };
 
 export type SurveyContext = {

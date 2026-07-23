@@ -9,7 +9,7 @@ import lexipolLogo from "@/images/Lexipol_logo_wht-60.png";
 import { navigationForRole, navigationPathIsActive, type NavigationEntry } from "@/lib/navigation";
 import type { ApplicationRole } from "@/lib/auth/roles";
 
-const icons = { dashboard: BarChart3, development: BookOpenCheck, sme: Users, "sme-dashboard": Gauge, surveys: ClipboardList, other: UsersRound, projects: FolderKanban, users: BriefcaseBusiness, data: Database };
+const icons = { dashboard: BarChart3, development: BookOpenCheck, sme: Users, "sme-dashboard": Gauge, "id-dashboard": UserRound, surveys: ClipboardList, other: UsersRound, projects: FolderKanban, users: BriefcaseBusiness, data: Database };
 
 export function SidebarNavigation({ role, lastSynced, profileName }: { role: ApplicationRole; lastSynced?: string | null; profileName: string }) {
   const pathname = usePathname();

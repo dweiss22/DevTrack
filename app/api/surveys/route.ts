@@ -10,6 +10,7 @@ export async function POST(request: NextRequest) {
     taskId: z.string().uuid(),
     surveyType: z.enum(SURVEY_TYPES),
     smeApplicationUserId: z.string().uuid().nullable().optional(),
+    reviewedWrikeUserId: z.string().uuid().nullable().optional(),
   }).safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Survey context is unavailable." }, { status: 400 });
   const capability = parsed.data.surveyType === "course_development_debrief" ? "create_sme_debrief" : "create_id_review";
@@ -18,6 +19,7 @@ export async function POST(request: NextRequest) {
     target_task_id: parsed.data.taskId,
     requested_type: parsed.data.surveyType,
     target_sme_application_user_id: parsed.data.smeApplicationUserId ?? null,
+    target_reviewed_wrike_user_id: parsed.data.reviewedWrikeUserId ?? null,
   });
   return error
     ? NextResponse.json({ error: "Survey context is unavailable." }, { status: error.code === "42501" ? 404 : 400 })

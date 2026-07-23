@@ -99,7 +99,7 @@ describe("route-backed accessible survey experience", () => {
     expect(source("app/@modal/(.)projects/[id]/surveys/[surveyType]/page.tsx")).toContain("<SurveyDialog");
     expect(source("app/projects/[id]/surveys/[surveyType]/page.tsx")).toContain("survey_context_for_task");
     expect(source("app/surveys/page.tsx")).toContain('requirePageCapability("view_surveys")');
-    expect(source("components/sme-dashboard.tsx")).toContain("/surveys/course-development-debrief");
+    expect(source("components/sme-dashboard.tsx")).toContain('"course-development-debrief"');
     expect(source("app/projects/[id]/page.tsx")).toContain("/surveys/id-sme-review");
   });
 

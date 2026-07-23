@@ -43,7 +43,9 @@ export function safeDashboardReturnTo(value: string | string[] | undefined) {
 
 export function safeProjectsReturnTo(value: string | string[] | undefined) {
   const candidate = Array.isArray(value) ? value[0] : value;
-  return candidate === "/projects" || candidate?.startsWith("/projects?") || candidate === "/development" || candidate?.startsWith("/development?") ? candidate : undefined;
+  return candidate === "/projects" || candidate?.startsWith("/projects?") || candidate === "/development"
+    || candidate?.startsWith("/development?") || candidate === "/sme-dashboard" || candidate?.startsWith("/sme-dashboard?")
+    || candidate === "/id-dashboard" || candidate?.startsWith("/id-dashboard?") ? candidate : undefined;
 }
 
 export function assignedDashboardRows<T, K extends keyof T>(rows: readonly T[], key: K) {

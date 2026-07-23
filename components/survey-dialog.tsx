@@ -26,18 +26,20 @@ type Detail = {
   response: Record<string, string | number | boolean | null>;
   attachments: { id: string; original_filename: string; mime_type: string; size_bytes: number; uploaded_at: string }[];
   viewer: { role: string; canEdit: boolean; canManage: boolean };
-  audit?: { id: number; event_type: string; actor_role: string; reason: string | null; created_at: string }[];
-  revisions?: { id: string; revision_number: number; submitted_at: string }[];
+  audit?: { id: number; event_type: string; actor_role: string; actor_name: string; reason: string | null; created_at: string }[];
+  revisions?: { id: string; revision_number: number; submitted_at: string; submitted_by_name: string }[];
   revisers?: { id: string; display_name: string | null }[];
 };
 
 type Answers = Record<string, string | number | boolean>;
 
-export function SurveyDialog({ taskId, surveyType, submissionId, fallbackHref }: {
+export function SurveyDialog({ taskId, surveyType, submissionId, fallbackHref, initialSmeWrikeId, forceReadOnly = false }: {
   taskId?: string;
   surveyType?: SurveyType;
   submissionId?: string;
   fallbackHref: string;
+  initialSmeWrikeId?: string;
+  forceReadOnly?: boolean;
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -55,7 +57,7 @@ export function SurveyDialog({ taskId, surveyType, submissionId, fallbackHref }:
   const dirty = state === "ready" && baseline !== JSON.stringify(answers);
   const type = detail?.submission.survey_type ?? surveyType;
   const locked = detail?.submission.is_locked ?? false;
-  const editable = Boolean(detail?.viewer.canEdit && !locked);
+  const editable = Boolean(!forceReadOnly && detail?.viewer.canEdit && !locked);
 
   const loadDetail = useCallback(async (id: string) => {
     const response = await fetch(`/api/surveys/${id}`, { cache: "no-store" });
@@ -69,13 +71,18 @@ export function SurveyDialog({ taskId, surveyType, submissionId, fallbackHref }:
     setState("ready");
   }, []);
 
-  const createSurvey = useCallback(async (selectedId?: string) => {
+  const createSurvey = useCallback(async (selectedWrikeId?: string) => {
     if (!taskId || !surveyType) return;
+    const selected = context?.assignedSmes.find((sme) => sme.wrikeUserId === selectedWrikeId);
     setCritical(true);
     try {
       const response = await fetch("/api/surveys", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ taskId, surveyType, smeApplicationUserId: selectedId || null }),
+        body: JSON.stringify({
+          taskId, surveyType,
+          smeApplicationUserId: surveyType === "course_development_debrief" ? selected?.applicationUserId ?? null : null,
+          reviewedWrikeUserId: selectedWrikeId || selected?.wrikeUserId || null,
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Survey context is unavailable.");
@@ -86,7 +93,7 @@ export function SurveyDialog({ taskId, surveyType, submissionId, fallbackHref }:
     } finally {
       setCritical(false);
     }
-  }, [loadDetail, surveyType, taskId]);
+  }, [context, loadDetail, surveyType, taskId]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -106,15 +113,30 @@ export function SurveyDialog({ taskId, surveyType, submissionId, fallbackHref }:
       if (!response.ok) throw new Error(data.error);
       const loaded = data.context as SurveyContext;
       setContext(loaded);
-      if (loaded.viewer.role === "sme" && surveyType === "course_development_debrief") return createSurvey();
-      if (loaded.assignedSmes.length === 1) return createSurvey(loaded.assignedSmes[0].applicationUserId);
+      const requestedSme = initialSmeWrikeId
+        ? loaded.assignedSmes.find((sme) => sme.wrikeUserId === initialSmeWrikeId) : null;
+      if (initialSmeWrikeId && !requestedSme) throw new Error("The selected SME is not assigned to this project.");
+      if (loaded.viewer.role === "sme" && surveyType === "course_development_debrief") {
+        const self = loaded.assignedSmes.find((sme) => sme.applicationUserId === loaded.viewer.id);
+        if (!self) throw new Error("Your verified SME assignment could not be resolved.");
+        setContext(loaded);
+        return;
+      }
+      if (requestedSme) { setSelectedSme(requestedSme.wrikeUserId); setState("select-sme"); return; }
+      if (loaded.assignedSmes.length === 1) { setSelectedSme(loaded.assignedSmes[0].wrikeUserId); setState("select-sme"); return; }
       if (loaded.assignedSmes.length > 1) return setState("select-sme");
-      throw new Error("No verified, mapped SME is assigned to this project.");
+      throw new Error("No verified SME is assigned to this project.");
     }).catch((error) => {
       setMessage(error instanceof Error ? error.message : "Survey context is unavailable.");
       setState("error");
     });
-  }, [createSurvey, loadDetail, submissionId, surveyType, taskId]);
+  }, [initialSmeWrikeId, loadDetail, submissionId, surveyType, taskId]);
+
+  useEffect(() => {
+    if (!context || context.viewer.role !== "sme" || surveyType !== "course_development_debrief" || detail) return;
+    const self = context.assignedSmes.find((sme) => sme.applicationUserId === context.viewer.id);
+    if (self) void createSurvey(self.wrikeUserId);
+  }, [context, createSurvey, detail, surveyType]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -246,7 +268,8 @@ export function SurveyDialog({ taskId, surveyType, submissionId, fallbackHref }:
       {state === "select-sme" && context && <div className="survey-state">
         <h2>Select the assigned project SME</h2><p>Only verified SMEs assigned to this project are available.</p>
         <label>Project SME<select value={selectedSme} onChange={(event) => setSelectedSme(event.target.value)}>
-          <option value="">Select an SME</option>{context.assignedSmes.map((sme) => <option key={sme.applicationUserId} value={sme.applicationUserId}>{sme.name}</option>)}
+          <option value="">Select an SME</option>{context.assignedSmes.map((sme) => <option key={sme.wrikeUserId} value={sme.wrikeUserId}
+            disabled={surveyType === "course_development_debrief" && !sme.applicationUserId}>{sme.name}{!sme.applicationUserId ? " — no DevTrack account" : ""}</option>)}
         </select></label>
         <button disabled={!selectedSme || critical} onClick={() => createSurvey(selectedSme)}>Continue</button>
       </div>}
@@ -318,10 +341,10 @@ function AdminSurveyControls({ detail, context, critical, setCritical, setMessag
       </div>
     </div>}
     <details><summary>Revision history ({detail.revisions?.length ?? 0})</summary>{detail.revisions?.length
-      ? <ol>{detail.revisions.map((revision) => <li key={revision.id}>Revision {revision.revision_number} — {new Date(revision.submitted_at).toLocaleString()}</li>)}</ol>
+      ? <ol>{detail.revisions.map((revision) => <li key={revision.id}>Revision {revision.revision_number} by {revision.submitted_by_name} — {new Date(revision.submitted_at).toLocaleString()}</li>)}</ol>
       : <p>No submitted revisions yet.</p>}</details>
     <details><summary>Audit history ({detail.audit?.length ?? 0})</summary>{detail.audit?.length
-      ? <ol>{detail.audit.map((event) => <li key={event.id}><strong>{event.event_type.replaceAll("_", " ")}</strong> by {event.actor_role} — {new Date(event.created_at).toLocaleString()}{event.reason ? ` — ${event.reason}` : ""}</li>)}</ol>
+      ? <ol>{detail.audit.map((event) => <li key={event.id}><strong>{event.event_type.replaceAll("_", " ")}</strong> by {event.actor_name} ({event.actor_role}) — {new Date(event.created_at).toLocaleString()}{event.reason ? ` — ${event.reason}` : ""}</li>)}</ol>
       : <p>No audit events are available.</p>}</details>
   </section>;
 }

@@ -16,15 +16,20 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   if (profile.role !== "super_admin" && profile.role !== "admin") {
     return NextResponse.json({ ...detail, viewer: { role: profile.role, canEdit: Boolean(canEdit), canManage: false } });
   }
-  const [audit, revisions, revisers] = await Promise.all([
+  const [audit, revisions, revisers, actors] = await Promise.all([
     supabase.from("survey_audit_log").select("id,event_type,actor_id,actor_role,reason,previous_values,new_values,created_at").eq("submission_id", id).order("created_at", { ascending: false }),
     supabase.from("survey_revisions").select("id,revision_number,changed_fields,submitted_by,submitted_at").eq("submission_id", id).order("revision_number", { ascending: false }),
     supabase.from("application_users").select("id,display_name").eq("organization_id", profile.organization_id).eq("role", "id").order("display_name"),
+    supabase.from("application_users").select("id,display_name").eq("organization_id", profile.organization_id),
   ]);
+  const actorNames = Object.fromEntries((actors.data ?? []).map((actor) => [actor.id, actor.display_name ?? "Unnamed user"]));
   return NextResponse.json({
     ...detail,
     viewer: { role: profile.role, canEdit: Boolean(canEdit), canManage: true },
-    audit: audit.data ?? [], revisions: revisions.data ?? [], revisers: revisers.data ?? [],
+    audit: (audit.data ?? []).map((event) => ({ ...event, actor_name: actorNames[event.actor_id] ?? "Unavailable" })),
+    revisions: (revisions.data ?? []).map((revision) => ({ ...revision, submitted_by_name: actorNames[revision.submitted_by] ?? "Unavailable" })),
+    revisers: revisers.data ?? [],
+    actors: actorNames,
   });
 }
 

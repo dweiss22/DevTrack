@@ -35,7 +35,9 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const { id } = await params;
   const query = await searchParams;
   const returnTo = safeProjectsReturnTo(query.returnTo) ?? "/projects";
-  const returnLabel = returnTo.startsWith("/development") ? "Development" : "Projects";
+  const returnLabel = returnTo.startsWith("/development") ? "Development"
+    : returnTo.startsWith("/sme-dashboard") ? "SME Dashboard"
+      : returnTo.startsWith("/id-dashboard") ? "ID Dashboard" : "Projects";
   const { supabase, profile } = await requirePageCapability("view_standard_pages");
   const [projectResult, usersResult, categoriesResult, statusesResult, verticalResult, benchmarkResult, identitiesResult] = await Promise.all([
     supabase.from("wrike_tasks").select("*,wrike_time_entries(id,wrike_id,entry_date,minutes,category,comment,user_wrike_id,wrike_users(display_name,email))").eq("id", id).eq("organization_id", profile.organization_id).eq("wrike_time_entries.is_deleted", false).maybeSingle(),

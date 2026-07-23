@@ -88,6 +88,7 @@ export const config = {
     "/api/surveys/:path*",
     "/ask/:path*",
     "/development/:path*",
+    "/id-dashboard/:path*",
     "/other-teams/:path*",
     "/projects/:path*",
     "/profile",

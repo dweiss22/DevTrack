@@ -1,5 +1,5 @@
 begin;
-select plan(16);
+select plan(24);
 select has_table('public','survey_submissions','survey submissions exist');
 select has_table('public','course_development_debrief_responses','debrief responses exist');
 select has_table('public','id_sme_review_responses','ID review responses exist');
@@ -11,10 +11,18 @@ select has_index('public','survey_submissions','survey_debrief_identity_idx','de
 select has_index('public','survey_submissions','survey_id_review_identity_idx','ID review duplicate safeguard exists');
 select has_function('public','survey_context_for_task',array['uuid','text'],'trusted context resolver exists');
 select has_function('public','survey_create_or_resume',array['uuid','text','uuid'],'create/resume RPC exists');
+select has_function('public','survey_create_or_resume',array['uuid','text','uuid','uuid'],'Wrike-subject create/resume RPC exists');
 select has_function('public','survey_save',array['uuid','jsonb','boolean'],'save/submit RPC exists');
 select has_function('public','survey_unlock',array['uuid','text','uuid'],'unlock RPC exists');
 select has_function('public','survey_relock',array['uuid'],'relock RPC exists');
 select ok((select not public from storage.buckets where id='survey-invoices'),'invoice bucket is private');
 select is((select file_size_limit from storage.buckets where id='survey-invoices'),10485760::bigint,'invoice limit is 10 MB');
+select has_function('public','reporting_sme_dashboard_identities',array[]::text[],'SME identity list RPC exists');
+select has_function('public','reporting_sme_dashboard_rows',array['uuid'],'SME row RPC exists');
+select has_function('public','reporting_current_id_identity',array[]::text[],'current ID mapping RPC exists');
+select has_function('public','reporting_id_dashboard_identities',array[]::text[],'admin ID identity RPC exists');
+select has_function('public','reporting_id_dashboard_rows',array['uuid'],'ID row RPC exists');
+select has_function('public','survey_browse',array['jsonb','integer','integer'],'caller-aware survey browse RPC exists');
+select has_function('public','set_application_user_wrike_identity',array['uuid','uuid','uuid','uuid'],'general identity mapping RPC exists');
 select * from finish();
 rollback;

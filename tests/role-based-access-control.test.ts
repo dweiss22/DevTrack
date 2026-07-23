@@ -100,8 +100,8 @@ describe("server route authorization", () => {
 
   it("validates selected SME membership in the database instead of trusting the URL", () => {
     const page = source("app/sme-dashboard/page.tsx");
-    expect(page).toContain('supabase.rpc("reporting_sme_dashboard_users")');
-    expect(page).toContain("users.find((candidate) => candidate.application_user_id === selectedId)");
-    expect(page).toContain('supabase.rpc("reporting_sme_dashboard"');
+    expect(page).toContain('supabase.rpc("reporting_sme_dashboard_identities")');
+    expect(page).toContain("identities.find((identity) => identity.wrike_user_id === requested && identity.selectable)");
+    expect(page).toContain('supabase.rpc("reporting_sme_dashboard_rows"');
   });
 });

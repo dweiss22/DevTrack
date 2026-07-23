@@ -20,7 +20,7 @@ export default async function UserManagementPage() {
   if (invitationError) throw new Error(`Invitations could not be loaded: ${invitationError.message}`);
   if (authenticationError) throw new Error(`User names could not be loaded from authentication: ${authenticationError.message}`);
   if (assignmentsError) throw new Error(`Pending approvals could not be loaded: ${assignmentsError.message}`);
-  if (wrikeUsersError) throw new Error(`Synchronized SME identities could not be loaded: ${wrikeUsersError.message}`);
+  if (wrikeUsersError) throw new Error(`Synchronized Wrike identities could not be loaded: ${wrikeUsersError.message}`);
 
   const authenticationById = new Map(authentication.users.map((user) => [user.id, user]));
   const assignedUserIds = new Set((assignedUsers ?? []).map((user) => user.id));
@@ -41,5 +41,5 @@ export default async function UserManagementPage() {
   }));
 
   const identityOptions = (wrikeUsers ?? []).map((identity) => ({ id: identity.id, name: identity.display_name, email: identity.email }));
-  return <AppShell isAdmin><header className="page-header"><div><p className="eyebrow">ADMINISTRATIVE FUNCTIONS</p><h1>User Management</h1><p>Invite users, manage organization roles, and map SME accounts to synchronized assignment identities.</p></div></header><UserManagementPanel members={members} invitations={managedInvitations} identities={identityOptions} /><UserApprovalQueue users={pendingUsers} /></AppShell>;
+  return <AppShell isAdmin><header className="page-header"><div><p className="eyebrow">ADMINISTRATIVE FUNCTIONS</p><h1>User Management</h1><p>Invite users, manage organization roles, and map ID and SME accounts to verified Wrike identities.</p></div></header><UserManagementPanel members={members} invitations={managedInvitations} identities={identityOptions} /><UserApprovalQueue users={pendingUsers} /></AppShell>;
 }
