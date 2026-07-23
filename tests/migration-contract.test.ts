@@ -32,6 +32,7 @@ const personIdentityMigration = fs.readFileSync(path.join(process.cwd(), "supaba
 const sortableProjectTablesMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220003_sortable_project_tables.sql"), "utf8");
 const courseTypeFilteringMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220004_course_type_filtering.sql"), "utf8");
 const verticalLegacyAliasesMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220005_vertical_legacy_aliases.sql"), "utf8");
+const superAdminDataAccessMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607230006_restore_superadmin_data_access.sql"), "utf8");
 
 function sqlFunctionDefinition(sql: string, name: string) {
   const start = sql.indexOf(`create or replace function public.${name}`);
@@ -41,6 +42,16 @@ function sqlFunctionDefinition(sql: string, name: string) {
   return sql.slice(start, end + 3);
 }
 describe("reporting migration contract", () => {
+  it("preserves Data-page access for both administrator roles", () => {
+    expect(sqlFunctionDefinition(superAdminDataAccessMigration, "is_org_admin"))
+      .toContain("role in ('super_admin','admin')");
+    expect(sqlFunctionDefinition(superAdminDataAccessMigration, "is_org_admin_for"))
+      .toContain("role in ('super_admin','admin')");
+    expect(sqlFunctionDefinition(superAdminDataAccessMigration, "reporting_vertical_data_quality"))
+      .toContain("viewer.role in ('super_admin','admin')");
+    expect(superAdminDataAccessMigration).toContain('drop policy if exists "vertical repair runs admin read"');
+  });
+
   it("exposes only observed accessible Course Type values with multiselect matching", () => {
     expect(courseTypeFilteringMigration).toContain("field.normalized_key='course type'");
     expect(courseTypeFilteringMigration).toContain("join visible_tasks task on task.id=task_value.task_id");

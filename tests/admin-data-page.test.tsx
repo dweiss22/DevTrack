@@ -44,6 +44,13 @@ describe("Data page organization", () => {
     expect(page).not.toContain('supabase.from("wrike_person_identities")');
   });
 
+  it("reads administrator-only connection and run state after capability authorization", () => {
+    expect(page).toContain('requirePageCapability("manage_data")');
+    expect(page).toContain("const admin = createAdminClient()");
+    expect(page).toContain('admin.from("wrike_connections")');
+    expect(page).toContain('admin.from("wrike_vertical_repair_runs")');
+  });
+
   it("clears only organization-scoped run logs through an administrator endpoint", () => {
     expect(historyRoute).toContain("requireAdmin()");
     expect(historyRoute).toContain('rpc("clear_wrike_run_history"');
