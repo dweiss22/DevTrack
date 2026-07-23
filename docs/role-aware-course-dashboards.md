@@ -5,6 +5,13 @@ DevTrack exposes assignment-driven course-development views at `/sme-dashboard` 
 caller-aware database functions; browser-supplied identity IDs are never treated as
 authorization.
 
+Assigned SMEs open `/sme-dashboard/projects/[projectId]`, not the internal project
+detail route. The restricted route is populated by `sme_project_detail` and returns
+only the approved course fields, the authenticated SME's own debrief, safe invoice
+metadata, and the finalized-course-draft availability/link. It does not query or
+serialize raw Wrike payloads, internal reviews, other users' time entries, or audit
+history.
+
 ## Authorization
 
 - SMEs see only the eligible courses assigned to their verified, mapped Wrike identity.
@@ -13,6 +20,9 @@ authorization.
 - Admins and SuperAdmins may select a verified SME or ID identity. This is an assignment
   view, not impersonation: surveys they create remain attributed to their own account.
 - Only Admins and SuperAdmins may select another ID on the ID Dashboard.
+- Project-level ID review and finalized-draft controls are returned only when the
+  authenticated ID's mapped Wrike identity is the trusted assigned ID. Selecting an ID
+  as an administrator does not grant those controls.
 - An unmapped verified SME may be the subject of an ID review, but a debrief requires an
   active SME application account mapped to that identity.
 
@@ -38,6 +48,15 @@ helpers and these caller-aware RPCs:
 It also adds the four-argument survey create/resume function used to identify an ID
 review subject by verified Wrike identity. The previous SME-specific mapping function
 remains as a compatibility wrapper.
+
+Migration `202607230008_restricted_sme_projects_and_finalized_drafts.sql` adds:
+
+- private, organization-scoped `project_finalized_course_drafts` records;
+- append-only finalized-draft audit events that intentionally omit URLs;
+- transactional assigned-ID save/removal functions with authoritative HTTPS URL
+  validation;
+- restricted SME project detail and assigned-ID project-control RPCs; and
+- assigned-ID enforcement in survey context resolution.
 
 ## Deployment
 

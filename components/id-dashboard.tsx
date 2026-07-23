@@ -26,16 +26,18 @@ export type IdDashboardRow = {
   updated_at_wrike: string | null;
   own_review: SurveySummary | null;
   colleague_reviews: SurveySummary[];
+  finalized_draft?: { available: boolean; updatedAt?: string | null; updatedBy?: string | null };
 };
 
 const date = (value: string | null) => value
   ? new Date(value.length === 10 ? `${value}T00:00:00Z` : value).toLocaleDateString("en-US", { timeZone: "UTC" }) : "—";
 
-export function IdDashboard({ identities, selected, rows, canSelect, mappingRequired }: {
+export function IdDashboard({ identities, selected, rows, canSelect, canActAsAssignedId, mappingRequired }: {
   identities: DashboardIdentity[];
   selected: DashboardIdentity | null;
   rows: IdDashboardRow[];
   canSelect: boolean;
+  canActAsAssignedId: boolean;
   mappingRequired: boolean;
 }) {
   const returnTo = selected?.wrike_user_id ? `/id-dashboard?id=${encodeURIComponent(selected.wrike_user_id)}` : "/id-dashboard";
@@ -54,7 +56,7 @@ export function IdDashboard({ identities, selected, rows, canSelect, mappingRequ
             {canSelect ? " Survey actions remain attributed to your administrator account; this view does not impersonate the selected ID." : ""}</p>
           {rows.length ? <div className="dashboard-table-wrap"><table className="dashboard-project-table id-dashboard-table"><thead><tr>
             <th>Course / SME</th><th>Status</th><th>Vertical</th><th>Publication / reporting</th>
-            <th>Due / completed</th><th>Project / folder</th><th>Review actions</th>
+            <th>Due / completed</th><th>Project / folder</th><th>Finalized draft</th><th>Review actions</th>
           </tr></thead><tbody>{rows.map((row) => {
             const startHref = surveyHref(row.task_id, "id-sme-review", row.reviewed_wrike_user_id, returnTo);
             const ownHref = row.own_review ? submissionHref(row.own_review.id, returnTo) : startHref;
@@ -67,9 +69,13 @@ export function IdDashboard({ identities, selected, rows, canSelect, mappingRequ
                 <br />Reporting {row.reporting_year ?? "—"}</td>
               <td data-label="Due / completed">Original: {date(row.original_due_date)}<br />{row.completed_at ? `Completed: ${date(row.completed_at)}` : `Due: ${date(row.due_date)}`}</td>
               <td data-label="Project / folder">{row.folder_context}<br /><span className="muted">{row.updated_at_wrike ? `Synced ${new Date(row.updated_at_wrike).toLocaleString()}` : "Sync time unavailable"}</span></td>
+              <td data-label="Finalized draft">{row.finalized_draft?.available ? "Available" : "Not available"}
+                {canActAsAssignedId ? <><br /><Link href={`/projects/${row.task_id}?returnTo=${encodeURIComponent(returnTo)}#finalized-draft`}>{row.finalized_draft?.available ? "Edit link" : "Add link"}</Link></> : null}</td>
               <td data-label="Review actions"><div className="dashboard-survey-actions">
-                <Link className="button secondary" href={ownHref}>{surveyActionLabel(row.own_review, "review")}</Link>
-                {(row.colleague_reviews ?? []).map((review) => <Link key={review.id} href={submissionHref(review.id, returnTo, true)}>{colleagueReviewLabel(review)}</Link>)}
+                {canActAsAssignedId
+                  ? <><Link className="button secondary" href={ownHref}>{surveyActionLabel(row.own_review, "review")}</Link>
+                    {(row.colleague_reviews ?? []).map((review) => <Link key={review.id} href={submissionHref(review.id, returnTo, true)}>{colleagueReviewLabel(review)}</Link>)}</>
+                  : <span className="muted">{row.own_review ? surveyActionLabel(row.own_review, "review") : "No review by selected ID"}</span>}
               </div></td>
             </tr>;
           })}</tbody></table></div> : <p className="card empty">No eligible course-development projects are assigned to this ID.</p>}

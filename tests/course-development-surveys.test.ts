@@ -100,7 +100,8 @@ describe("route-backed accessible survey experience", () => {
     expect(source("app/projects/[id]/surveys/[surveyType]/page.tsx")).toContain("survey_context_for_task");
     expect(source("app/surveys/page.tsx")).toContain('requirePageCapability("view_surveys")');
     expect(source("components/sme-dashboard.tsx")).toContain('"course-development-debrief"');
-    expect(source("app/projects/[id]/page.tsx")).toContain("/surveys/id-sme-review");
+    expect(source("app/projects/[id]/page.tsx")).toContain('surveyHref(id, "id-sme-review"');
+    expect(source("app/projects/[id]/page.tsx")).toContain("assignedIdControls?.assigned");
   });
 
   it("implements modal, unsaved, critical-operation, semantic, and mobile behavior", () => {

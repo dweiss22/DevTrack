@@ -36,14 +36,16 @@ export function dashboardReturnHref(value: string | string[] | undefined, fallba
   const candidate = Array.isArray(value) ? value[0] : value;
   if (!candidate?.startsWith("/") || candidate.startsWith("//")) return fallback;
   const allowed = candidate === "/sme-dashboard" || candidate.startsWith("/sme-dashboard?")
+    || /^\/sme-dashboard\/projects\/[0-9a-f-]+$/i.test(candidate)
     || candidate === "/id-dashboard" || candidate.startsWith("/id-dashboard?")
     || candidate === "/surveys" || candidate.startsWith("/surveys?")
     || /^\/projects\/[0-9a-f-]+(?:\?.*)?$/i.test(candidate);
   return allowed ? candidate : fallback;
 }
 
-export function surveyHref(taskId: string, type: "course-development-debrief" | "id-sme-review", wrikeUserId: string, returnTo: string) {
-  const query = new URLSearchParams({ sme: wrikeUserId, returnTo });
+export function surveyHref(taskId: string, type: "course-development-debrief" | "id-sme-review", wrikeUserId: string | null, returnTo: string) {
+  const query = new URLSearchParams({ returnTo });
+  if (wrikeUserId) query.set("sme", wrikeUserId);
   return `/projects/${taskId}/surveys/${type}?${query}`;
 }
 

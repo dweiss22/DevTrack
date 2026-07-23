@@ -1,5 +1,5 @@
 begin;
-select plan(24);
+select plan(31);
 select has_table('public','survey_submissions','survey submissions exist');
 select has_table('public','course_development_debrief_responses','debrief responses exist');
 select has_table('public','id_sme_review_responses','ID review responses exist');
@@ -24,5 +24,12 @@ select has_function('public','reporting_id_dashboard_identities',array[]::text[]
 select has_function('public','reporting_id_dashboard_rows',array['uuid'],'ID row RPC exists');
 select has_function('public','survey_browse',array['jsonb','integer','integer'],'caller-aware survey browse RPC exists');
 select has_function('public','set_application_user_wrike_identity',array['uuid','uuid','uuid','uuid'],'general identity mapping RPC exists');
+select has_table('public','project_finalized_course_drafts','finalized course draft storage exists');
+select has_table('public','project_finalized_course_draft_audit','finalized course draft audit exists');
+select has_function('public','is_safe_finalized_course_draft_url',array['text'],'finalized URL validator exists');
+select has_function('public','save_project_finalized_course_draft',array['uuid','text'],'assigned ID save RPC exists');
+select has_function('public','remove_project_finalized_course_draft',array['uuid'],'assigned ID remove RPC exists');
+select has_function('public','assigned_id_project_controls',array['uuid'],'assigned ID project controls exist');
+select has_function('public','sme_project_detail',array['uuid'],'restricted SME project detail exists');
 select * from finish();
 rollback;

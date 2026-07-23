@@ -2,13 +2,15 @@ import React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { FinalizedCourseDraftForm } from "@/components/finalized-course-draft-form";
 import { ProjectDescription } from "@/components/project-description";
 import { ProjectPercentileGauge } from "@/components/project-percentile-gauge";
 import { ProjectTimeAnalytics } from "@/components/project-time-analytics";
 import { TaskCustomFieldList, TaskFolderList } from "@/components/task-metadata";
 import { StatusBadge, UnresolvedReferenceLabel } from "@/components/wrike-reference";
 import { requirePageCapability } from "@/lib/auth";
-import { hasCapability, isAdministratorRole } from "@/lib/auth/roles";
+import { isAdministratorRole } from "@/lib/auth/roles";
+import { submissionHref, surveyActionLabel, surveyHref, type SurveySummary } from "@/lib/dashboards/domain";
 import { ONLINE_LEARNING_WORKFLOW_ID } from "@/lib/reporting/constants";
 import { hours } from "@/lib/metrics";
 import { loadProjectLengthPercentilesResult } from "@/lib/reporting/data";
@@ -31,6 +33,24 @@ type ProjectDetailRow = {
   wrike_time_entries: { id: string; wrike_id: string; entry_date: string; minutes: number; category: string | null; comment: string | null; user_wrike_id: string | null; wrike_users: { display_name: string; email: string | null } | null }[];
 };
 
+type AssignedIdControls = {
+  assigned: boolean;
+  smes: Array<{
+    wrikeUserId: string;
+    applicationUserId: string | null;
+    name: string;
+    email: string | null;
+    mappingStatus: "mapped" | "unmapped";
+    review: SurveySummary | null;
+  }>;
+  finalizedDraft: {
+    available: boolean;
+    url?: string | null;
+    updatedAt?: string | null;
+    updatedBy?: string | null;
+  };
+};
+
 export default async function ProjectDetail({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { id } = await params;
   const query = await searchParams;
@@ -39,14 +59,17 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
     : returnTo.startsWith("/sme-dashboard") ? "SME Dashboard"
       : returnTo.startsWith("/id-dashboard") ? "ID Dashboard" : "Projects";
   const { supabase, profile } = await requirePageCapability("view_standard_pages");
-  const [projectResult, usersResult, categoriesResult, statusesResult, verticalResult, benchmarkResult, identitiesResult] = await Promise.all([
+  const [projectResult, usersResult, categoriesResult, statusesResult, verticalResult, benchmarkResult, identitiesResult, idControlsResult] = await Promise.all([
     supabase.from("wrike_tasks").select("*,wrike_time_entries(id,wrike_id,entry_date,minutes,category,comment,user_wrike_id,wrike_users(display_name,email))").eq("id", id).eq("organization_id", profile.organization_id).eq("wrike_time_entries.is_deleted", false).maybeSingle(),
     supabase.from("wrike_users").select("wrike_id,display_name,email,avatar_url,synced_at,is_active,is_unresolved,identity_verified,identity_verification_source,raw_data").eq("organization_id", profile.organization_id),
     supabase.from("wrike_timelog_categories").select("wrike_id,title,synced_at,is_unresolved").eq("organization_id", profile.organization_id),
     supabase.from("wrike_workflow_statuses").select("wrike_id,title,workflow_id,color,dashboard_classification,synced_at,is_unresolved").eq("organization_id", profile.organization_id),
     supabase.from("wrike_task_normalized_custom_field_values").select("normalized_verticals,vertical_reporting_category,has_unresolved_vertical,unresolved_vertical_tokens,has_conflict,source_wrike_field_ids,source_titles,normalized_field:wrike_normalized_custom_fields!inner(normalized_key)").eq("task_id", id).eq("normalized_field.normalized_key", "vertical").maybeSingle(),
     loadProjectLengthPercentilesResult(supabase, [id]),
-    supabase.from("wrike_person_identities").select("identity_key,display_name,wrike_contact_id,is_displayable,is_verified,verification_source").eq("organization_id", profile.organization_id)
+    supabase.from("wrike_person_identities").select("identity_key,display_name,wrike_contact_id,is_displayable,is_verified,verification_source").eq("organization_id", profile.organization_id),
+    profile.role === "id"
+      ? supabase.rpc("assigned_id_project_controls", { target_task_id: id })
+      : Promise.resolve({ data: null, error: null })
   ]);
   for (const result of [projectResult, usersResult, categoriesResult, statusesResult, verticalResult]) if (result.error) throw result.error;
   if (!projectResult.data) notFound();
@@ -94,13 +117,29 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const benchmark = benchmarkResult.data.get(id) ?? null;
 
   const isAdministrator = isAdministratorRole(profile.role);
+  const assignedIdControls = !idControlsResult.error && idControlsResult.data
+    ? idControlsResult.data as AssignedIdControls : null;
   return <AppShell isAdmin={isAdministrator}>
     <nav className="breadcrumb" aria-label="Breadcrumb"><Link href={returnTo}>{returnLabel}</Link><span aria-hidden="true">/</span><span aria-current="page">Project detail</span></nav>
     <header className="page-header project-detail-header"><div><p className="eyebrow">PROJECT DETAIL</p><h1>{row.title}</h1><p><StatusBadge name={statusReference.name} id={row.custom_status_id} color={statusReference.color} resolved={statusReference.resolved} />{row.due_date && <> <span aria-hidden="true">·</span> Due {formatDate(row.due_date)}</>}</p></div><div className="project-header-actions">
-      {isCourseDevelopment && hasCapability(profile.role, "create_id_review") && <Link className="button" href={`/projects/${id}/surveys/id-sme-review`}>Review of Subject Matter Expert</Link>}
-      {isCourseDevelopment && hasCapability(profile.role, "manage_surveys") && <Link className="button secondary" href={`/projects/${id}/surveys/course-development-debrief`}>Create SME Debrief</Link>}
       {row.permalink && <a className="button secondary" href={row.permalink} target="_blank" rel="noreferrer">Open in Wrike</a>}
     </div></header>
+
+    {isCourseDevelopment && assignedIdControls?.assigned ? <section className="card" aria-labelledby="assigned-id-project-actions">
+      <div className="section-heading"><div><p className="eyebrow">ASSIGNED ID ACTIONS</p><h2 id="assigned-id-project-actions">Review of Subject Matter Expert</h2></div></div>
+      <div className="dashboard-survey-actions">{assignedIdControls.smes.map((sme) => {
+        const href = sme.review
+          ? submissionHref(sme.review.id, `/projects/${id}`)
+          : surveyHref(id, "id-sme-review", sme.wrikeUserId, `/projects/${id}`);
+        return <Link className="button secondary" key={sme.wrikeUserId} href={href}>
+          {surveyActionLabel(sme.review, "review")} — {sme.name}
+        </Link>;
+      })}</div>
+    </section> : null}
+
+    {isCourseDevelopment && assignedIdControls?.assigned
+      ? <FinalizedCourseDraftForm taskId={id} initial={assignedIdControls.finalizedDraft} />
+      : null}
 
     {row.custom_fields_sync_state !== "complete" && <p className="notice project-sync-notice" role="status">Some custom-field data is not currently verified. Previously synchronized values are labeled below and have not been replaced with empty data.</p>}
 

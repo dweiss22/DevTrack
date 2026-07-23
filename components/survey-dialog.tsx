@@ -22,6 +22,7 @@ type Detail = {
     id: string; survey_type: SurveyType; status: "draft" | "submitted"; is_locked: boolean;
     revision_number: number; created_by: string; subject_application_user_id: string | null;
     revision_assignee_id: string | null; context_snapshot: Record<string, unknown>; unlock_reason: string | null;
+    original_submitted_at: string | null; latest_submitted_at: string | null;
   };
   response: Record<string, string | number | boolean | null>;
   attachments: { id: string; original_filename: string; mime_type: string; size_bytes: number; uploaded_at: string }[];
@@ -283,9 +284,11 @@ export function SurveyDialog({ taskId, surveyType, submissionId, fallbackHref, i
         {!locked && detail.submission.status === "submitted" && <p className="notice warning" role="status"><strong>Unlocked for Revision.</strong> {detail.submission.unlock_reason}</p>}
         <ContextHeader type={type} context={contextSnapshot} subject={subject} />
         {message && <p className={message.includes("saved") || message.includes("success") || message.includes("removed") ? "notice" : "notice warning"} role="status">{message}</p>}
-        {type === "course_development_debrief"
-          ? <DebriefForm answers={answers} update={update} errors={fieldErrors} editable={editable} detail={detail} uploadInvoice={uploadInvoice} removeInvoice={removeInvoice} downloadInvoice={downloadInvoice} uploadProgress={uploadProgress} />
-          : <IdReviewForm answers={answers} update={update} errors={fieldErrors} editable={editable} detail={detail} />}
+        {!editable
+          ? <ReadOnlySurveyResponse type={type} answers={answers} detail={detail} downloadInvoice={downloadInvoice} />
+          : type === "course_development_debrief"
+            ? <DebriefForm answers={answers} update={update} errors={fieldErrors} editable detail={detail} uploadInvoice={uploadInvoice} removeInvoice={removeInvoice} downloadInvoice={downloadInvoice} uploadProgress={uploadProgress} />
+            : <IdReviewForm answers={answers} update={update} errors={fieldErrors} editable detail={detail} />}
         {detail.viewer.canManage && <AdminSurveyControls detail={detail} context={contextSnapshot} critical={critical} setCritical={setCritical} setMessage={setMessage} reload={() => loadDetail(detail.submission.id)} />}
         <footer className="survey-actions">
           <button type="button" className="secondary" onClick={close} disabled={critical}>Close</button>
@@ -355,6 +358,70 @@ function ContextHeader({ type, context, subject }: { type: SurveyType; context: 
     ? [["SME", subject.name], ["Email", subject.email ?? "Available from authenticated profile"], ["Course", context.taskTitle], ["Original Due Date", formatDate(context.originalDueDate)]]
     : [["Instructional Designer", viewer.name], ["Course", context.taskTitle], ["Project SME", subject.name], ["Vertical", context.vertical ?? "Requires resolution"], ["Publication Date", formatDate(context.publicationDate)], ["Publication Year", context.publicationYear ?? "Enter below"]];
   return <dl className="survey-context">{values.map(([label, value]) => <div key={String(label)}><dt>{String(label)}</dt><dd>{String(value ?? "Unavailable")}</dd></div>)}</dl>;
+}
+
+function ReadOnlySurveyResponse({ type, answers, detail, downloadInvoice }: {
+  type: SurveyType;
+  answers: Answers;
+  detail: Detail;
+  downloadInvoice: (id: string) => void;
+}) {
+  const statements = type === "course_development_debrief" ? SME_DEBRIEF_STATEMENTS : ID_REVIEW_STATEMENTS;
+  const scale = type === "course_development_debrief" ? AGREEMENT_SCALE : COLLABORATION_SCALE;
+  return <section className="survey-readonly" aria-labelledby="survey-readonly-heading">
+    <h2 id="survey-readonly-heading">Submitted response</h2>
+    <dl className="project-metadata-grid">
+      {type === "course_development_debrief" ? <>
+        <ReadOnlyValue label="Internal employee">{booleanValue(answers.internalEmployee)}</ReadOnlyValue>
+        <ReadOnlyValue label="Billable hours">{answers.internalEmployee === true ? "Not applicable" : valueOrNotProvided(answers.billableHours)}</ReadOnlyValue>
+        <ReadOnlyValue label="Invoiced amount">{answers.internalEmployee === true ? "Not applicable" : currencyOrNotProvided(answers.amountBilled)}</ReadOnlyValue>
+        <ReadOnlyValue label="Work started">{formatDate(answers.workStartedOn)}</ReadOnlyValue>
+        <ReadOnlyValue label="Work finished">{formatDate(answers.workFinishedOn)}</ReadOnlyValue>
+      </> : <>
+        <ReadOnlyValue label="Publication year">{valueOrNotProvided(answers.publicationYear)}</ReadOnlyValue>
+        <ReadOnlyValue label="Vertical">{valueOrNotProvided(answers.vertical)}</ReadOnlyValue>
+        <ReadOnlyValue label="Provided real-world examples">{booleanValue(answers.providedRealWorldExamples)}</ReadOnlyValue>
+        <ReadOnlyValue label="Example effectiveness">{valueOrNotProvided(answers.realWorldExamplesEffectiveness)}</ReadOnlyValue>
+        <ReadOnlyValue label="Recommendation score">{valueOrNotProvided(answers.recommendationScore)}</ReadOnlyValue>
+      </>}
+      <ReadOnlyValue label="Submission date">{formatDateTime(detail.submission.latest_submitted_at)}</ReadOnlyValue>
+      <ReadOnlyValue label="Revision">{detail.submission.revision_number}</ReadOnlyValue>
+      <ReadOnlyValue label="State">{detail.submission.is_locked ? "Submitted and locked" : "Unlocked for revision"}</ReadOnlyValue>
+    </dl>
+    {type === "course_development_debrief" ? <section><h3>Invoice</h3>
+      {answers.internalEmployee === true ? <p>Not applicable</p> : detail.attachments.length
+        ? detail.attachments.map((attachment) => <div className="survey-file" key={attachment.id}>
+          <span>{attachment.original_filename} ({formatBytes(attachment.size_bytes)})</span>
+          <button type="button" className="link-button" onClick={() => downloadInvoice(attachment.id)}>Download</button>
+        </div>) : <p>Not provided</p>}
+    </section> : null}
+    <section><h3>Ratings</h3><ol className="restricted-rating-list">{statements.map((statement, index) => {
+      const rating = Number(answers[`rating${String(index + 1).padStart(2, "0")}`]) || 0;
+      return <li key={statement}><span>{statement}</span><strong>{rating ? `${rating} — ${scale[rating - 1]}` : "Not provided"}</strong></li>;
+    })}</ol></section>
+    <section><h3>Comments</h3><p className="survey-comment-readonly">{String(answers.comments || "Not provided")}</p></section>
+  </section>;
+}
+
+function ReadOnlyValue({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div><dt>{label}</dt><dd>{children}</dd></div>;
+}
+
+function valueOrNotProvided(value: unknown) {
+  return value === "" || value == null ? "Not provided" : String(value);
+}
+
+function booleanValue(value: unknown) {
+  return value === true ? "Yes" : value === false ? "No" : "Not provided";
+}
+
+function currencyOrNotProvided(value: unknown) {
+  if (value === "" || value == null) return "Not provided";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(value));
+}
+
+function formatDateTime(value: string | null) {
+  return value ? new Date(value).toLocaleString() : "Not provided";
 }
 
 function DebriefForm({ answers, update, errors, editable, detail, uploadInvoice, removeInvoice, downloadInvoice, uploadProgress }: {

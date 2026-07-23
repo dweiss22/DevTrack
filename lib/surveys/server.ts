@@ -18,6 +18,21 @@ export async function loadSurveyDetail(supabase: SupabaseClient, id: string) {
   return { submission, response: responseResult.data, attachments: attachmentResult.data ?? [] };
 }
 
+export function surveyDetailForSme<T extends {
+  submission: { context_snapshot: Record<string, unknown> };
+}>(detail: T) {
+  const {
+    organizationId: _organizationId,
+    taskWrikeId: _taskWrikeId,
+    assignedSmes: _assignedSmes,
+    ...safeContext
+  } = detail.submission.context_snapshot;
+  return {
+    ...detail,
+    submission: { ...detail.submission, context_snapshot: safeContext },
+  };
+}
+
 export function surveyTypeFromSlug(value: string): SurveyType | null {
   if (value === "course-development-debrief") return "course_development_debrief";
   if (value === "id-sme-review") return "id_sme_review";

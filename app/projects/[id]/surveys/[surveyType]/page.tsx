@@ -18,7 +18,9 @@ export default async function DirectSurvey({ params, searchParams }: { params: P
   return <>
     <AppShell isAdmin={isAdministratorRole(profile.role)}>
       <header className="page-header"><div><p className="eyebrow">PROJECT SURVEY</p><h1>{context.taskTitle}</h1><p>{surveyTitle(surveyType)} for this trusted synchronized project.</p></div></header>
-      <section className="card"><h2>Project context</h2><p><strong>Status:</strong> {context.status}<br /><strong>Wrike task:</strong> {context.taskWrikeId}<br /><strong>Reporting year:</strong> {context.reportingYear ?? "Unavailable"}</p></section>
+      <section className="card"><h2>Project context</h2><p><strong>Status:</strong> {context.status}
+        {profile.role !== "sme" ? <><br /><strong>Wrike task:</strong> {context.taskWrikeId}</> : null}
+        <br /><strong>Reporting year:</strong> {context.reportingYear ?? "Unavailable"}</p></section>
     </AppShell>
     <SurveyDialog taskId={id} surveyType={surveyType} initialSmeWrikeId={query.sme}
       fallbackHref={dashboardReturnHref(query.returnTo, profile.role === "sme" ? "/sme-dashboard" : `/projects/${id}`)} />

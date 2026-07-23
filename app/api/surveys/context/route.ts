@@ -4,7 +4,7 @@ import { requireCapability } from "@/lib/auth";
 import { SURVEY_TYPES } from "@/lib/surveys/domain";
 
 export async function GET(request: NextRequest) {
-  const { supabase } = await requireCapability("view_surveys");
+  const { user, profile, supabase } = await requireCapability("view_surveys");
   const parsed = z.object({
     taskId: z.string().uuid(),
     type: z.enum(SURVEY_TYPES),
@@ -14,7 +14,19 @@ export async function GET(request: NextRequest) {
     target_task_id: parsed.data.taskId,
     requested_type: parsed.data.type,
   });
-  return error
-    ? NextResponse.json({ error: "Survey context is unavailable." }, { status: error.code === "42501" ? 404 : 400 })
-    : NextResponse.json({ context: data });
+  if (error || !data) {
+    return NextResponse.json({ error: "Survey context is unavailable." }, { status: !error || error.code === "42501" ? 404 : 400 });
+  }
+  if (profile.role !== "sme") return NextResponse.json({ context: data });
+  const { organizationId: _organizationId, taskWrikeId: _taskWrikeId, assignedSmes, ...safeContext } = data as Record<string, unknown>;
+  const ownAssignment = Array.isArray(assignedSmes)
+    ? assignedSmes.filter((item) => {
+      const assignment = item as Record<string, unknown>;
+      return assignment.applicationUserId === user.id;
+    }).map((item) => {
+      const { wrikeId: _wrikeId, ...safeAssignment } = item as Record<string, unknown>;
+      return safeAssignment;
+    })
+    : [];
+  return NextResponse.json({ context: { ...safeContext, assignedSmes: ownAssignment } });
 }
