@@ -91,7 +91,9 @@ describe("role-aware dashboard behavior", () => {
       expect(component).toContain("selectableIdentities.map");
       expect(component).not.toContain("identities.map((identity) => <option");
       expect(component).toContain("<IdentityResolutionWarnings");
-      expect(component).toContain("These values are not selectable users.");
+      expect(component).toContain(file.includes("id-dashboard")
+        ? "These values do not uniquely match an active, verified Wrike identity"
+        : "These values are not selectable users.");
     }
   });
 

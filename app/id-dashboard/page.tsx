@@ -47,7 +47,7 @@ export default async function IdDashboardPage({ searchParams }: { searchParams: 
   return <AppShell isAdmin={isAdministratorRole(profile.role)}>
     <header className="page-header"><div><p className="eyebrow">INSTRUCTIONAL DESIGN ASSIGNMENTS</p>
       <h1>ID Dashboard{selected ? ` — ${selected.display_name}` : ""}</h1>
-      <p>Trusted course assignments and SME-review status for one instructional designer identity.</p></div></header>
+      <p>Trusted Online Learning ID assignments, including courses whose SME identity still needs resolution.</p></div></header>
     <IdDashboard identities={identities} selected={selected} rows={enrichedRows}
       canSelect={canSelect} canActAsAssignedId={ownOperationalView} mappingRequired={!canSelect && !selected}
       ownOperationalView={ownOperationalView} />

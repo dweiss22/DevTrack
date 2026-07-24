@@ -1,5 +1,5 @@
 begin;
-select plan(31);
+select plan(33);
 select has_table('public','survey_submissions','survey submissions exist');
 select has_table('public','course_development_debrief_responses','debrief responses exist');
 select has_table('public','id_sme_review_responses','ID review responses exist');
@@ -22,6 +22,8 @@ select has_function('public','reporting_sme_dashboard_rows',array['uuid'],'SME r
 select has_function('public','reporting_current_id_identity',array[]::text[],'current ID mapping RPC exists');
 select has_function('public','reporting_id_dashboard_identities',array[]::text[],'admin ID identity RPC exists');
 select has_function('public','reporting_id_dashboard_rows',array['uuid'],'ID row RPC exists');
+select has_function('public','normalize_course_development_person_name',array['text'],'canonical assignment-name normalizer exists');
+select has_function('public','course_development_person_tokens',array['text[]'],'safe multi-person assignment tokenizer exists');
 select has_function('public','survey_browse',array['jsonb','integer','integer'],'caller-aware survey browse RPC exists');
 select has_function('public','set_application_user_wrike_identity',array['uuid','uuid','uuid','uuid'],'general identity mapping RPC exists');
 select has_table('public','project_finalized_course_drafts','finalized course draft storage exists');

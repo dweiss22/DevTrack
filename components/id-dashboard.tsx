@@ -1,4 +1,5 @@
 import Link from "next/link";
+import React from "react";
 import { StatusBadge } from "@/components/wrike-reference";
 import {
   canonicalDashboardIdentities, colleagueReviewLabel, dashboardIdentityLabel,
@@ -11,11 +12,13 @@ export type IdDashboardRow = {
   title: string;
   status_name: string;
   status_classification: string;
-  reviewed_wrike_user_id: string;
-  reviewed_sme_name: string;
+  reviewed_wrike_user_id: string | null;
+  reviewed_sme_name: string | null;
   reviewed_sme_email: string | null;
   reviewed_sme_application_user_id: string | null;
-  sme_mapping_status: "mapped" | "unmapped";
+  sme_mapping_status: "mapped" | "unmapped" | null;
+  sme_identity_status: "verified" | "unresolved" | "conflict" | "missing";
+  sme_assignment_values: string[];
   vertical: string | null;
   publication_date: string | null;
   publication_year: number | null;
@@ -61,16 +64,21 @@ export function IdDashboard({ identities, selected, rows, canSelect, canActAsAss
         : <>
           <p className="card dashboard-identity-note"><strong>{ownOperationalView ? "My assigned ID projects" : "Administrative ID view"}</strong><br />
             Showing assignments for <strong>{selected.display_name}</strong>.
+            {" The ID/owner field is authoritative when present; mapped Wrike assignees are used only when that field is empty."}
             {canSelect && !ownOperationalView ? " This selection is read-only and does not grant project actions or survey credit." : ""}</p>
           {rows.length ? <div className="dashboard-table-wrap"><table className="dashboard-project-table id-dashboard-table"><thead><tr>
             <th>Course / SME</th><th>Status</th><th>Vertical</th><th>Publication / reporting</th>
             <th>Due / completed</th><th>Project / folder</th><th>Finalized draft</th><th>Review actions</th>
           </tr></thead><tbody>{rows.map((row) => {
-            const startHref = surveyHref(row.task_id, "id-sme-review", row.reviewed_wrike_user_id, returnTo);
+            const startHref = row.reviewed_wrike_user_id
+              ? surveyHref(row.task_id, "id-sme-review", row.reviewed_wrike_user_id, returnTo) : null;
             const ownHref = row.own_review ? submissionHref(row.own_review.id, returnTo) : startHref;
-            return <tr key={`${row.task_id}:${row.reviewed_wrike_user_id}`}>
+            return <tr key={`${row.task_id}:${row.reviewed_wrike_user_id ?? row.sme_identity_status}`}>
               <td data-label="Course / SME"><Link href={`/projects/${row.task_id}?returnTo=${encodeURIComponent(returnTo)}`}>{row.title}</Link>
-                <br /><strong>{row.reviewed_sme_name}</strong>{row.sme_mapping_status === "unmapped" ? <><br /><span className="muted">No DevTrack SME account</span></> : null}</td>
+                {row.sme_identity_status === "verified" ? <>
+                  <br /><strong>{row.reviewed_sme_name ?? "Verified SME"}</strong>
+                  {row.sme_mapping_status === "unmapped" ? <><br /><span className="muted">No DevTrack SME account</span></> : null}
+                </> : <UnresolvedSmeAssignment row={row} />}</td>
               <td data-label="Status"><StatusBadge name={row.status_name} /></td>
               <td data-label="Vertical">{row.vertical ?? "Needs context review"}</td>
               <td data-label="Publication / reporting">{row.publication_date ? `Published ${date(row.publication_date)}` : row.publication_year ? `Publication ${row.publication_year}` : "Publication unavailable"}
@@ -80,22 +88,36 @@ export function IdDashboard({ identities, selected, rows, canSelect, canActAsAss
               <td data-label="Finalized draft">{row.finalized_draft?.available ? "Available" : "Not available"}
                 {canActAsAssignedId ? <><br /><Link href={`/projects/${row.task_id}?returnTo=${encodeURIComponent(returnTo)}#finalized-draft`}>{row.finalized_draft?.available ? "Edit link" : "Add link"}</Link></> : null}</td>
               <td data-label="Review actions"><div className="dashboard-survey-actions">
-                {canActAsAssignedId
-                  ? <><Link className="button secondary" href={ownHref}>{surveyActionLabel(row.own_review, "review")}</Link>
-                    {(row.colleague_reviews ?? []).map((review) => <Link key={review.id} href={submissionHref(review.id, returnTo, true)}>{colleagueReviewLabel(review)}</Link>)}</>
+                {!row.reviewed_wrike_user_id
+                  ? <span className="muted">Resolve the SME assignment before starting a review.</span>
+                  : canActAsAssignedId
+                  ? ownHref ? <><Link className="button secondary" href={ownHref}>{surveyActionLabel(row.own_review, "review")}</Link>
+                      {(row.colleague_reviews ?? []).map((review) => <Link key={review.id} href={submissionHref(review.id, returnTo, true)}>{colleagueReviewLabel(review)}</Link>)}</>
+                    : <span className="muted">SME review unavailable</span>
                   : <span className="muted">{row.own_review ? surveyActionLabel(row.own_review, "review") : "No review by selected ID"}</span>}
               </div></td>
             </tr>;
-          })}</tbody></table></div> : <p className="card empty">No eligible course-development projects are assigned to this ID.</p>}
+          })}</tbody></table></div> : <p className="card empty">No synchronized, undeleted Online Learning projects have a trusted ID/owner assignment for this identity.</p>}
         </>}
   </>;
+}
+
+function UnresolvedSmeAssignment({ row }: { row: IdDashboardRow }) {
+  const issue = row.sme_identity_status === "conflict"
+    ? "Conflicting SME fields"
+    : row.sme_identity_status === "missing" ? "SME not assigned" : "SME identity needs resolution";
+  return <><br /><strong>{issue}</strong>
+    {row.sme_assignment_values.length
+      ? <><br /><span className="muted">Wrike value: {row.sme_assignment_values.join(", ")}</span></>
+      : null}
+    <br /><span className="muted">Course remains visible; SME review is unavailable.</span></>;
 }
 
 function IdentityResolutionWarnings({ identities }: { identities: DashboardIdentity[] }) {
   if (!identities.length) return null;
   return <details className="dashboard-identity-warnings">
     <summary>{identities.length} assignment value{identities.length === 1 ? "" : "s"} need identity resolution</summary>
-    <p className="muted">These values are not selectable users. Correct the ID assignment identity in Wrike and re-import; verified people remain listed once by their stable Wrike identity.</p>
+    <p className="muted">These values do not uniquely match an active, verified Wrike identity and are not selectable users. Correct ambiguous ID/owner values in Wrike, then re-import; verified people remain listed once by their stable identity.</p>
     <ul>{identities.map((identity) => <li key={identity.identity_key}>{dashboardIdentityLabel(identity)}</li>)}</ul>
   </details>;
 }

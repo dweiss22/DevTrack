@@ -30,8 +30,20 @@ Eligible records are undeleted organization tasks in the Online Learning workflo
 `IEACHQK7K4BHMLHM`, either directly or through a resolved workflow status. Normalized
 SME and owner/ID custom fields are authoritative. A synchronized task assignment from a
 mapped user of the matching role is used only when the role field is absent. Conflicting,
-ambiguous, inactive, cross-organization, or unverified identities receive no task rows
-or survey actions.
+ambiguous, inactive, cross-organization, or unverified ID identities receive no task
+rows or survey actions.
+
+Assignment text is compared with active, verified Wrike identities by stable Wrike ID,
+email, or a unique case- and diacritic-insensitive canonical name. Safely separable
+comma- or semicolon-delimited people are resolved independently. This allows readable
+values such as `Devin Weiss`, spelling variants such as `Koco Budo` / `Koço Budo`, and
+multi-person values to reuse an already verified canonical identity without creating a
+second unresolved dashboard option.
+
+An ID-assigned course remains on the ID Dashboard when its SME field is missing,
+conflicting, or does not uniquely resolve. The course shows the safe synchronized SME
+labels and a resolution warning, while SME-review actions stay unavailable. A verified
+SME identity is still required before a review can be created.
 
 ## Database interfaces
 
@@ -58,6 +70,11 @@ Migration `202607230008_restricted_sme_projects_and_finalized_drafts.sql` adds:
 - restricted SME project detail and assigned-ID project-control RPCs; and
 - assigned-ID enforcement in survey context resolution.
 
+Migration `202607240001_correct_id_dashboard_course_resolution.sql` adds canonical
+person-name normalization and safe multi-person tokenization, updates unresolved-value
+reporting, and makes the ID Dashboard retain trusted ID courses with unresolved SME
+evidence. It operates on existing normalized values; no assignment backfill is needed.
+
 ## Deployment
 
 1. Apply migrations with `npx supabase migration list` and `npx supabase db push`.
@@ -68,6 +85,12 @@ Migration `202607230008_restricted_sme_projects_and_finalized_drafts.sql` adds:
    administrator can use both selectors without changing survey authorship.
 5. Confirm an unmapped verified SME appears to authorized internal users, can be
    reviewed by an ID, and shows “Account mapping required” for debriefs.
+
+6. Confirm Devin Weiss no longer appears as both a selectable identity and an
+   unverified assignment value, and compare Devin's and Koço Budo's course counts with
+   the trusted ID resolver.
+7. Confirm a course with an unresolved or conflicting SME remains visible to its ID,
+   clearly warns about the SME assignment, and offers no SME-review action.
 
 The survey invoice bucket remains private. Dashboard and survey list RPCs do not return
 private storage object keys.
