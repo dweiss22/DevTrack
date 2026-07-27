@@ -1,76 +1,89 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCapability } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { accountSetupRedirectUrl, findAuthenticationUserByEmail, invitationInputSchema, normalizeInvitationEmail } from "@/lib/users/invitations";
+import {
+  findAuthenticationUserByEmail,
+  invitationInputSchema,
+  normalizeInvitationEmail,
+  passwordRecoveryRedirectUrl,
+} from "@/lib/users/invitations";
 
 export async function POST(request: NextRequest) {
-  const { user, profile } = await requireCapability("manage_users");
+  const { profile } = await requireCapability("manage_users");
   const parsed = invitationInputSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Enter a valid email address and application role." }, { status: 400 });
 
   const admin = createAdminClient();
   const email = normalizeInvitationEmail(parsed.data.email);
   let existingAuthUser;
+  let authUser;
   try { existingAuthUser = await findAuthenticationUserByEmail(admin, email); }
   catch { return NextResponse.json({ error: "DevTrack could not verify whether this email already has access." }, { status: 500 }); }
   if (existingAuthUser) {
     const { data: existingMembership, error: membershipError } = await admin.from("application_users").select("id").eq("id", existingAuthUser.id).maybeSingle();
     if (membershipError) return NextResponse.json({ error: "DevTrack could not verify whether this email already has access." }, { status: 500 });
-    if (existingMembership) return NextResponse.json({ error: "This email already has an active membership or open invitation." }, { status: 409 });
+    if (existingMembership) return NextResponse.json({ error: "This email already has an active DevTrack account." }, { status: 409 });
+    authUser = existingAuthUser;
+    if (!existingAuthUser.email_confirmed_at) {
+      const { data, error } = await admin.auth.admin.updateUserById(existingAuthUser.id, { email_confirm: true });
+      if (error || !data.user) return NextResponse.json({ error: "DevTrack could not activate this authentication account." }, { status: 500 });
+      authUser = data.user;
+    }
+  } else {
+    const { data, error } = await admin.auth.admin.createUser({
+      email,
+      email_confirm: true,
+    });
+    if (error || !data.user) {
+      return NextResponse.json({ error: "DevTrack could not create the authentication account." }, { status: 502 });
+    }
+    authUser = data.user;
   }
 
-  const { data: invitation, error: insertError } = await admin
-    .from("application_user_invitations")
+  const { error: membershipError } = await admin
+    .from("application_users")
     .insert({
+      id: authUser.id,
       organization_id: profile.organization_id,
-      email,
-      normalized_email: email,
+      display_name: null,
       role: parsed.data.role,
-      status: "pending",
-      invited_by: user.id,
-      auth_user_id: existingAuthUser?.id ?? null,
-    })
-    .select("id")
-    .single();
+      profile_completed: true,
+      updated_at: new Date().toISOString(),
+    });
 
-  if (insertError || !invitation) {
-    const duplicate = insertError?.code === "23505";
+  if (membershipError) {
+    if (!existingAuthUser) await admin.auth.admin.deleteUser(authUser.id);
+    const duplicate = membershipError.code === "23505";
     return NextResponse.json(
-      { error: duplicate ? "This email already has an active membership or open invitation." : "DevTrack could not create the invitation." },
+      { error: duplicate ? "This email already has an active DevTrack account." : "DevTrack could not add the user to this organization." },
       { status: duplicate ? 409 : 500 },
     );
   }
 
-  let invitedUserId = existingAuthUser?.id ?? null;
-  const sendError = existingAuthUser
-    ? (await admin.auth.resetPasswordForEmail(email, { redirectTo: accountSetupRedirectUrl() })).error
-    : await (async () => {
-        const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-          redirectTo: accountSetupRedirectUrl(),
-          data: { devtrack_invitation_id: invitation.id },
-        });
-        invitedUserId = data.user?.id ?? null;
-        return error;
-      })();
-
-  if (sendError || !invitedUserId) {
-    await admin.from("application_user_invitations").update({
-      status: "failed",
-      last_error: "Supabase could not send the invitation email.",
-      updated_at: new Date().toISOString(),
-    }).eq("id", invitation.id).eq("organization_id", profile.organization_id);
-    return NextResponse.json({ error: "The invitation was saved, but its email could not be sent. Retry it from User Management." }, { status: 502 });
-  }
-
-  const { error: updateError } = await admin.from("application_user_invitations").update({
-    auth_user_id: invitedUserId,
-    last_sent_at: new Date().toISOString(),
+  const now = new Date().toISOString();
+  await admin.from("application_user_invitations").update({
+    status: "canceled",
+    canceled_at: now,
     last_error: null,
-    updated_at: new Date().toISOString(),
-  }).eq("id", invitation.id).eq("organization_id", profile.organization_id);
+    updated_at: now,
+  }).eq("organization_id", profile.organization_id).eq("normalized_email", email).in("status", ["pending", "failed"]);
 
-  if (updateError) {
-    return NextResponse.json({ error: "The email was sent, but DevTrack could not finish recording the invitation." }, { status: 500 });
+  const { error: emailError } = await admin.auth.resetPasswordForEmail(email, {
+    redirectTo: passwordRecoveryRedirectUrl(),
+  });
+  if (emailError) {
+    return NextResponse.json({
+      ok: true,
+      userId: authUser.id,
+      emailSent: false,
+      message: `${email} was added to DevTrack, but the password email could not be delivered. The user can select Set up or reset your password on the sign-in page.`,
+    });
   }
-  return NextResponse.json({ ok: true, invitationId: invitation.id });
+
+  return NextResponse.json({
+    ok: true,
+    userId: authUser.id,
+    emailSent: true,
+    message: `${email} was added to DevTrack and sent the standard password setup link.`,
+  });
 }

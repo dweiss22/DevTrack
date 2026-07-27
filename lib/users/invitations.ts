@@ -12,8 +12,8 @@ export function normalizeInvitationEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-export function accountSetupRedirectUrl() {
-  return new URL("/auth/confirm?next=/account-setup", env.NEXT_PUBLIC_APP_URL).toString();
+export function passwordRecoveryRedirectUrl() {
+  return new URL("/auth/recovery", env.NEXT_PUBLIC_APP_URL).toString();
 }
 
 export async function findAuthenticationUserByEmail(admin: ReturnType<typeof createAdminClient>, email: string) {

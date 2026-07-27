@@ -62,7 +62,7 @@ export default async function UserManagementPage() {
   const currentPersonaWrikeUserId = personaByUser.get(actor.id) ?? null;
   const personaIdentityOptions = identityOptions.filter((option) =>
     option.id === currentPersonaWrikeUserId || !occupiedIdWrikeUsers.has(option.id));
-  return <AppShell isAdmin><header className="page-header"><div><p className="eyebrow">ADMINISTRATIVE FUNCTIONS</p><h1>User Management</h1><p>Invite users, manage organization roles, and map ID and SME accounts to verified Wrike identities.</p></div></header>
+  return <AppShell isAdmin><header className="page-header"><div><p className="eyebrow">ADMINISTRATIVE FUNCTIONS</p><h1>User Management</h1><p>Add users, manage organization roles, and map ID and SME accounts to verified Wrike identities.</p></div></header>
     <UserManagementPanel members={members} invitations={managedInvitations} identities={identityOptions}
       personaIdentities={personaIdentityOptions}
       managerId={actor.id} managerRole={profile.role} impersonating={identity.impersonating} />

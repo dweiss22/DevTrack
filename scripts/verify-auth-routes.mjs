@@ -7,6 +7,7 @@ const expectations = [
   { path: "/", finalStatus: 200, maximumRedirects: 1 },
   { path: "/projects", finalStatus: 200, maximumRedirects: 1 },
   { path: "/recover", finalStatus: 200, maximumRedirects: 0 },
+  { path: "/auth/recovery", finalStatus: 200, maximumRedirects: 0 },
   { path: "/update-password", finalStatus: 200, maximumRedirects: 0 },
   { path: "/auth/callback", finalStatus: 200, maximumRedirects: 1 },
   { path: "/api/auth/logout", finalStatus: 405, maximumRedirects: 0 }

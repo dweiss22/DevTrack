@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     .maybeSingle();
 
   if (!applicationUser) return NextResponse.redirect(new URL("/access-pending", url.origin));
-  if (!applicationUser.profile_completed) return NextResponse.redirect(new URL("/account-setup", url.origin));
+  if (!applicationUser.profile_completed) return NextResponse.redirect(new URL("/update-password", url.origin));
   if (normalizeApplicationRole(applicationUser.role) === "sme") return NextResponse.redirect(new URL(landingPageForRole("sme"), url.origin));
   return NextResponse.redirect(new URL(next, url.origin));
 }

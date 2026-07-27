@@ -91,7 +91,7 @@ describe("authentication entry workflow", () => {
     const callback = source("app/auth/callback/route.ts");
     expect(callback).toContain("exchangeCodeForSession(code)");
     expect(callback).toContain('if (!applicationUser) return NextResponse.redirect(new URL("/access-pending"');
-    expect(callback).toContain('if (!applicationUser.profile_completed) return NextResponse.redirect(new URL("/account-setup"');
+    expect(callback).toContain('if (!applicationUser.profile_completed) return NextResponse.redirect(new URL("/update-password"');
     expect(source("lib/auth.ts")).toContain('redirect("/access-pending")');
   });
 });

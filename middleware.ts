@@ -8,8 +8,8 @@ import {
 } from "@/lib/auth/impersonation";
 
 export function isAuthenticationEntryRequest(requestUrl: string) {
-  const path = requestUrl.split("?", 1)[0].replace(/\/+$/, "").toLowerCase();
-  return path.endsWith("/login") || path.endsWith("/recover") || path.endsWith("/update-password") || path.endsWith("/auth/callback") || path.endsWith("/auth/confirm") || path.includes("/api/auth/");
+  const path = requestUrl.split(/[?#]/, 1)[0].replace(/\/+$/, "").toLowerCase();
+  return path.endsWith("/login") || path.endsWith("/recover") || path.endsWith("/update-password") || path.endsWith("/auth/callback") || path.endsWith("/auth/confirm") || path.endsWith("/auth/recovery") || path.includes("/api/auth/");
 }
 
 export function protectedApiCapability(pathname: string): Capability | null {

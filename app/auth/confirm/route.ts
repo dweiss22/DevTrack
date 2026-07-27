@@ -18,6 +18,10 @@ export async function GET(request: NextRequest) {
   const tokenHash = url.searchParams.get("token_hash");
   const rawType = url.searchParams.get("type") as EmailOtpType | null;
   const next = safeInternalPath(url.searchParams.get("next"));
+  // Legacy default templates return an implicit session in the URL fragment,
+  // which a server route cannot read. Redirecting without a fragment preserves
+  // it in the browser so the client-side recovery bridge can establish cookies.
+  if (!tokenHash && !rawType) return NextResponse.redirect(new URL("/auth/recovery", url.origin));
   if (!tokenHash || !rawType || !acceptedTypes.has(rawType)) return loginError(url.origin);
 
   const supabase = await createClient();
@@ -39,6 +43,7 @@ export async function GET(request: NextRequest) {
     .eq("id", user.id)
     .maybeSingle();
   if (!applicationUser) return NextResponse.redirect(new URL("/access-pending", url.origin));
+  if (rawType === "invite") return NextResponse.redirect(new URL("/update-password", url.origin));
   if (!applicationUser.profile_completed) return NextResponse.redirect(new URL("/account-setup", url.origin));
   if (normalizeApplicationRole(applicationUser.role) === "sme") return NextResponse.redirect(new URL(landingPageForRole("sme"), url.origin));
   return NextResponse.redirect(new URL(next, url.origin));

@@ -24,18 +24,24 @@ describe("SSR email confirmation", () => {
     mocks.maybeSingle.mockResolvedValue({ data: { id: "user-1", profile_completed: false }, error: null });
   });
 
-  it("verifies an invite token, consumes the matching preauthorization, and opens setup", async () => {
+  it("verifies a legacy invite, consumes its preauthorization, and opens the standard password flow", async () => {
     const response = await GET(new NextRequest("https://devtrack.example/auth/confirm?next=%2Faccount-setup&token_hash=safe-token-hash&type=invite"));
     expect(mocks.verifyOtp).toHaveBeenCalledWith({ token_hash: "safe-token-hash", type: "invite" });
     expect(mocks.rpc).toHaveBeenCalledWith("accept_application_user_invitation", {
       target_user_id: "user-1", target_email: "invited@example.com",
     });
-    expect(response.headers.get("location")).toBe("https://devtrack.example/account-setup");
+    expect(response.headers.get("location")).toBe("https://devtrack.example/update-password");
   });
 
   it("rejects missing or unsupported token parameters without calling Supabase", async () => {
     const response = await GET(new NextRequest("https://devtrack.example/auth/confirm?type=invite"));
     expect(response.headers.get("location")).toBe("https://devtrack.example/login?reason=callback_failed");
+    expect(mocks.createClient).not.toHaveBeenCalled();
+  });
+
+  it("bridges a legacy implicit-session fragment instead of dropping it at the server route", async () => {
+    const response = await GET(new NextRequest("https://devtrack.example/auth/confirm"));
+    expect(response.headers.get("location")).toBe("https://devtrack.example/auth/recovery");
     expect(mocks.createClient).not.toHaveBeenCalled();
   });
 

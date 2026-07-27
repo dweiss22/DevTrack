@@ -27,7 +27,7 @@ describe("authentication callback", () => {
     expect(response.headers.get("location")).toBe("https://devtrack.example/projects");
   });
 
-  it("preapproves an invited email and routes it directly to account setup", async () => {
+  it("preapproves a legacy invited email and routes it into the standard password flow", async () => {
     mocks.acceptInvitation.mockResolvedValue({ data: { accepted: true, profileCompleted: false }, error: null });
     mocks.maybeSingle.mockResolvedValue({ data: { id: "user-1", profile_completed: false, role: "id" }, error: null });
     const response = await GET(new NextRequest("https://devtrack.example/auth/callback?code=invite-code&next=%2Faccount-setup"));
@@ -35,7 +35,7 @@ describe("authentication callback", () => {
       target_user_id: "user-1",
       target_email: "user@example.com",
     });
-    expect(response.headers.get("location")).toBe("https://devtrack.example/account-setup");
+    expect(response.headers.get("location")).toBe("https://devtrack.example/update-password");
   });
 
   it("sends authenticated users without application access to access pending", async () => {

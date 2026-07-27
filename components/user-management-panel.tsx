@@ -36,19 +36,19 @@ export function UserManagementPanel({ members, invitations, identities, personaI
     setSubmitting(url); setMessage(""); setError(false);
     try {
       const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const payload = await response.json() as { error?: string };
+      const payload = await response.json() as { error?: string; message?: string };
       if (!response.ok) { setError(true); setMessage(payload.error ?? "The user-management action could not be completed."); return; }
-      setMessage(success); router.refresh();
+      setMessage(payload.message ?? success); router.refresh();
     } catch {
       setError(true); setMessage("The user-management action could not be completed. Please retry.");
     } finally { setSubmitting(""); }
   }
 
-  function invite(event: FormEvent<HTMLFormElement>) {
+  function addUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const email = String(form.get("email") ?? "");
-    void request("/api/admin/users/invitations", "POST", { email, role: form.get("role") }, `Invitation sent to ${email.trim().toLowerCase()}.`);
+    void request("/api/admin/users/invitations", "POST", { email, role: form.get("role") }, `${email.trim().toLowerCase()} was added to DevTrack.`);
     event.currentTarget.reset();
   }
 
@@ -117,21 +117,21 @@ export function UserManagementPanel({ members, invitations, identities, personaI
   return <div className="admin-stack">
     {message && <p className={error ? "notice error" : "notice"} role={error ? "alert" : "status"}>{message}</p>}
     <section className="card" aria-labelledby="add-user-title">
-      <div className="section-heading"><div><p className="eyebrow">APP-MANAGED ACCESS</p><h2 id="add-user-title">Add user</h2></div><p>DevTrack emails a secure setup link and preapproves the selected role.</p></div>
-      <form className="user-invite-form" onSubmit={invite}>
+      <div className="section-heading"><div><p className="eyebrow">APP-MANAGED ACCESS</p><h2 id="add-user-title">Add user</h2></div><p>Creates active DevTrack access immediately and emails the standard password link.</p></div>
+      <form className="user-invite-form" onSubmit={addUser}>
         <label>Email address<input name="email" type="email" autoComplete="email" maxLength={320} required placeholder="person@example.com" /></label>
         <label>Application role<select name="role" defaultValue="id"><option value="id">ID</option><option value="sme">SME</option><option value="admin">Admin</option></select></label>
-        <button disabled={Boolean(submitting) || impersonating}>{submitting === "/api/admin/users/invitations" ? "Sending invitation…" : "Send invitation"}</button>
+        <button disabled={Boolean(submitting) || impersonating}>{submitting === "/api/admin/users/invitations" ? "Adding user…" : "Add user"}</button>
       </form>
-      {impersonating && <p className="notice warning">Invitation and user-security actions are disabled while impersonating.</p>}
+      {impersonating && <p className="notice warning">User access and security actions are disabled while impersonating.</p>}
     </section>
 
     <section className="user-members-section" aria-labelledby="pending-invitations-title">
-      <div className="section-heading"><div><h2 id="pending-invitations-title">Pending invitations</h2></div><p>{invitations.length} open</p></div>
-      {invitations.length ? <div className="admin-table-wrap"><table><thead><tr><th>Email</th><th>Status</th><th>Role</th><th>Sent</th><th>Actions</th></tr></thead><tbody>{invitations.map((invitation) => {
+      <div className="section-heading"><div><h2 id="pending-invitations-title">Legacy pending invitations</h2><p>These records came from the retired invitation-link process. Cancel each one, then add the user above.</p></div><p>{invitations.length} open</p></div>
+      {invitations.length ? <div className="admin-table-wrap"><table><thead><tr><th>Email</th><th>Status</th><th>Role</th><th>Last sent</th><th>Actions</th></tr></thead><tbody>{invitations.map((invitation) => {
         const endpoint = `/api/admin/users/invitations/${invitation.id}`;
-        return <tr key={invitation.id}><td>{invitation.email}</td><td>{invitation.status === "failed" ? "Email failed" : "Invitation pending"}{invitation.lastError ? <><br /><span className="error">{invitation.lastError}</span></> : null}</td><td><select aria-label={`Role for ${invitation.email}`} value={invitation.role} disabled={Boolean(submitting) || impersonating} onChange={(event) => request(endpoint, "PATCH", { action: "change_role", role: event.target.value }, `Role updated for ${invitation.email}.`)}><option value="id">ID</option><option value="sme">SME</option><option value="admin">Admin</option></select></td><td>{invitation.lastSentAt ? new Date(invitation.lastSentAt).toLocaleString() : "Not sent"}</td><td><div className="table-actions"><button className="secondary" disabled={Boolean(submitting) || impersonating} onClick={() => request(endpoint, "PATCH", { action: "resend" }, `Invitation resent to ${invitation.email}.`)}>Resend</button><button className="secondary danger" disabled={Boolean(submitting) || impersonating} onClick={() => { if (confirm(`Cancel the invitation for ${invitation.email}?`)) void request(endpoint, "PATCH", { action: "cancel" }, `Invitation canceled for ${invitation.email}.`); }}>Cancel</button></div></td></tr>;
-      })}</tbody></table></div> : <p className="card empty">No invitations are awaiting account setup.</p>}
+        return <tr key={invitation.id}><td>{invitation.email}</td><td>{invitation.status === "failed" ? "Email failed" : "Legacy invitation pending"}{invitation.lastError ? <><br /><span className="error">{invitation.lastError}</span></> : null}</td><td><select aria-label={`Role for ${invitation.email}`} value={invitation.role} disabled={Boolean(submitting) || impersonating} onChange={(event) => request(endpoint, "PATCH", { action: "change_role", role: event.target.value }, `Role updated for ${invitation.email}.`)}><option value="id">ID</option><option value="sme">SME</option><option value="admin">Admin</option></select></td><td>{invitation.lastSentAt ? new Date(invitation.lastSentAt).toLocaleString() : "Not sent"}</td><td><div className="table-actions"><button className="secondary danger" disabled={Boolean(submitting) || impersonating} onClick={() => { if (confirm(`Cancel the legacy invitation for ${invitation.email}?`)) void request(endpoint, "PATCH", { action: "cancel" }, `Legacy invitation canceled for ${invitation.email}.`); }}>Cancel</button></div></td></tr>;
+      })}</tbody></table></div> : <p className="card empty">No legacy invitations remain.</p>}
     </section>
 
     <section className="user-members-section" aria-labelledby="organization-members-title">

@@ -47,33 +47,30 @@ Authentication and application authorization are deliberately separate:
 - `auth.users` is managed by Supabase Auth and contains email/password identities.
 - `public.application_users` is DevTrack's access list. An authenticated person cannot read reporting data until their Auth user ID is assigned to an organization here.
 
-DevTrack does not expose public registration. To add a user:
+DevTrack does not expose public registration. Add users from **Administration →
+User Management** and assign only Admin, ID, or SME. DevTrack creates the Auth
+identity and active organization membership together, then sends the same
+one-time password-recovery email used by **Set up or reset your password**.
+Administrators do not create or transmit an initial password.
 
-1. In Supabase, open **Authentication → Users**.
-2. Select **Add user → Create new user**.
-3. Enter the user's email and a strong initial password, enable automatic email confirmation, and create the user.
-4. Copy the newly created user's UUID.
-5. Assign that UUID to a DevTrack organization with:
+The user follows that link, chooses a password of at least 12 characters, and
+enters DevTrack immediately. If automatic delivery fails, the account remains
+active and the user can request the same link from the sign-in page. Only email
+addresses already added to an active DevTrack membership receive a recovery
+email.
 
-```sql
-insert into public.application_users (id, organization_id, display_name, role)
-values (
-  '<id-from-auth-users>',
-  '<organization-id>',
-  '<display-name>',
-  'id'
-)
-on conflict (id) do update
-set organization_id = excluded.organization_id,
-    display_name = excluded.display_name,
-    role = excluded.role;
-```
-
-Use User Management for normal invitations and assign only Admin, ID, or SME. The fixed SuperAdmin role belongs only to `dweiss@lexipol.com`; the migration and database guard enforce that rule. SuperAdmin, Admin, and ID can read synchronized reporting data in their organization. SME users can retrieve only tasks assigned to their administrator-mapped Wrike identity through the SME Dashboard. The application shows an **Access awaiting approval** screen until an Auth user is assigned here.
+The fixed SuperAdmin role belongs only to `dweiss@lexipol.com`; the migration
+and database guard enforce that rule. SuperAdmin, Admin, and ID can read
+synchronized reporting data in their organization. SME users can retrieve only
+tasks assigned to their administrator-mapped Wrike identity through the SME
+Dashboard.
 
 See [Role-based access control](docs/role-based-access-control.md) for the capability matrix and [Organization-wide reporting access](docs/organization-wide-reporting-access.md) for the database policy inventory.
 
-Keep public signup disabled under **Authentication → Sign In / Providers → Email**. User creation should be performed by an administrator through the Supabase Dashboard. Provide passwords through an approved secure channel; never include them in source code or SQL saved in the repository.
+Keep public signup disabled under **Authentication → Sign In / Providers →
+Email**. User creation is performed by the server from User Management using the
+server-only service-role key. Never include passwords in source code,
+administrator messages, or SQL saved in the repository.
 
 To audit authentication and application access together:
 
@@ -104,7 +101,10 @@ order by auth_user.email;
 
 Never commit `.env.local`, tokens, service-role keys, or OAuth secrets.
 
-Administrator-managed Supabase invitations, first-time account setup, personal profiles, redirect allowlists, email-template requirements, and the Vercel Deployment Protection limitation are documented in [`docs/user-invitations-and-profiles.md`](docs/user-invitations-and-profiles.md).
+Administrator-managed access, the unified first-time/password-recovery flow,
+redirect allowlists, email-template artifacts, and the Vercel Deployment
+Protection limitation are documented in
+[`docs/user-invitations-and-profiles.md`](docs/user-invitations-and-profiles.md).
 
 Administrator impersonation, retryable user offboarding, retained historical
 principals, and the fixed SuperAdmin ID persona are documented in
