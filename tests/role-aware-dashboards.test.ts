@@ -97,6 +97,15 @@ describe("role-aware dashboard behavior", () => {
     }
   });
 
+  it("adds searchable identity filters to both administrator dashboard selectors", () => {
+    for (const file of ["components/id-dashboard.tsx", "components/sme-dashboard.tsx"]) {
+      expect(source(file)).toContain("SearchableFilterSelect");
+    }
+    const searchable = source("components/searchable-filter-select.tsx");
+    expect(searchable).toContain('type="search"');
+    expect(searchable).toContain("filterSearchableSelectOptions");
+  });
+
   it("renders separate project/SME review rows and mobile cards", () => {
     expect(source("components/id-dashboard.tsx")).toContain("row.task_id}:${row.reviewed_wrike_user_id");
     expect(source("components/id-dashboard.tsx")).toContain("colleague_reviews");

@@ -9,6 +9,7 @@ import type { DashboardIdentity } from "@/lib/dashboards/domain";
 const root = process.cwd();
 const source = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
 const migration = source("supabase/migrations/202607240001_correct_id_dashboard_course_resolution.sql");
+const courseStyleMigration = source("supabase/migrations/202607270003_course_style_project_filter.sql");
 
 const selected: DashboardIdentity = {
   identity_key: "wrike:id", wrike_user_id: "id", application_user_id: null,
@@ -22,7 +23,7 @@ const unresolvedSmeRow: IdDashboardRow = {
   reviewed_sme_name: null, reviewed_sme_email: null,
   reviewed_sme_application_user_id: null, sme_mapping_status: null,
   sme_identity_status: "unresolved", sme_assignment_values: ["Example SME"],
-  vertical: null, publication_date: null, publication_year: null,
+  vertical: null, course_style: "Full Length", publication_date: null, publication_year: null,
   reporting_year: 2026, original_due_date: null, due_date: null,
   completed_at: null, folder_context: "2026 Courses", updated_at_wrike: null,
   own_review: null, colleague_reviews: [], finalized_draft: { available: false },
@@ -54,6 +55,8 @@ describe("corrected ID Dashboard course resolution", () => {
       rows={[unresolvedSmeRow]} canSelect canActAsAssignedId mappingRequired={false}
       ownOperationalView />);
     expect(html).toContain("Visible ID course");
+    expect(html).toContain("Course Style");
+    expect(html).toContain("Full Length");
     expect(html).toContain("SME identity needs resolution");
     expect(html).toContain("Wrike value: Example SME");
     expect(html).toContain("Resolve the SME assignment before starting a review.");
@@ -65,5 +68,13 @@ describe("corrected ID Dashboard course resolution", () => {
     expect(migration).toContain("course_development_person_assignments_with_personas");
     expect(migration).toContain("join public.application_user_principals creator");
     expect(migration).toContain("survey.created_by=viewer.id");
+  });
+
+  it("loads recognized Course Style values through an organization-scoped batch RPC", () => {
+    expect(courseStyleMigration).toContain("reporting_id_dashboard_course_styles");
+    expect(courseStyleMigration).toContain("viewer.organization_id");
+    expect(courseStyleMigration).toContain("public.current_id_operational_identity()");
+    expect(courseStyleMigration).toContain("course_development_person_assignments_with_personas");
+    expect(source("app/id-dashboard/page.tsx")).toContain('supabase.rpc("reporting_id_dashboard_course_styles"');
   });
 });

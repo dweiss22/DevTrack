@@ -35,6 +35,7 @@ export function ProjectsFilters({ filters, statuses, customFields, people, facet
   const ownerOptions = projectPersonOptions(fields.owner, people);
   const smeOptions = projectPersonOptions(fields.sme, people);
   const selectedCourseTypes = projectFilterValues(fields.courseType ? filters.customFields?.[fields.courseType.id] : undefined);
+  const selectedCourseStyles = projectFilterValues(fields.courseStyle ? filters.customFields?.[fields.courseStyle.id] : undefined);
   const verticalOptions = [...APPROVED_VERTICALS];
   const legacySelectedVertical = filters.associatedVertical ? `associated:${filters.associatedVertical}`
       : filters.verticalReportingCategory ? `category:${filters.verticalReportingCategory}`
@@ -49,9 +50,9 @@ export function ProjectsFilters({ filters, statuses, customFields, people, facet
     { value: "state:synchronization_incomplete", label: "Vertical data not fully synchronized" }
   ];
   for (const selected of selectedVerticals) if (!verticalMultiOptions.some((option) => option.value === selected)) verticalMultiOptions.push({ value: selected, label: verticalSelectionLabel(selected) });
-  const advancedCount = selectedVerticals.length + selectedCourseTypes.length + projectFilterValues(fields.sme ? filters.customFields?.[fields.sme.id] : undefined).length + projectFilterValues(fields.courseLength ? filters.customFields?.[fields.courseLength.id] : undefined).length;
+  const advancedCount = selectedVerticals.length + selectedCourseTypes.length + selectedCourseStyles.length + projectFilterValues(fields.sme ? filters.customFields?.[fields.sme.id] : undefined).length + projectFilterValues(fields.courseLength ? filters.customFields?.[fields.courseLength.id] : undefined).length;
   const visibleNames = new Set(["q", "statuses", "reportingYear", "reportingYears", "associatedVertical", "verticalReportingCategory", "verticalState", "unresolvedVerticalOnly", "verticalSelection", "verticalSelections"]);
-  for (const field of [fields.owner, fields.tool, fields.courseType, fields.sme, fields.courseLength]) if (field) visibleNames.add(`cf_${field.id}`);
+  for (const field of [fields.owner, fields.tool, fields.courseType, fields.courseStyle, fields.sme, fields.courseLength]) if (field) visibleNames.add(`cf_${field.id}`);
   const preserved = [...new URLSearchParams(filtersToQuery({ ...filters, page: 1 })).entries()].filter(([name]) => !visibleNames.has(name) && name !== "page");
   const active = activeProjectFilters(filters, fields, people, statuses, selectedVerticals, returnTo);
 
@@ -74,6 +75,7 @@ export function ProjectsFilters({ filters, statuses, customFields, people, facet
       <FilterDisclosure count={advancedCount} initiallyOpen={advancedCount > 0}>
         <div className="projects-advanced-grid">
           <ProjectsMultiSelect label="Course Type" name={fields.courseType ? `cf_${fields.courseType.id}` : "courseTypeUnavailable"} options={withMissingSelections((fields.courseType?.values ?? []).map(valueOption), selectedCourseTypes, (value) => value)} selected={selectedCourseTypes} allLabel="All course types" emptyLabel="No Course Type values are present on accessible synchronized tasks." disabled={!fields.courseType} />
+          <ProjectsMultiSelect label="Course Style" name={fields.courseStyle ? `cf_${fields.courseStyle.id}` : "courseStyleUnavailable"} options={withMissingSelections((fields.courseStyle?.values ?? []).filter(isCourseStyle).map(valueOption), selectedCourseStyles, (value) => value)} selected={selectedCourseStyles} allLabel="All course styles" emptyLabel="No Full Length or Single Video values are present on accessible synchronized tasks." disabled={!fields.courseStyle} />
           <VerticalMultiSelect options={verticalMultiOptions} selected={selectedVerticals} disabled={!fields.vertical && !selectedVerticals.length && !facets.verticalStates.size} />
           <ProjectsMultiSelect label="SME" name={fields.sme ? `cf_${fields.sme.id}` : "smeUnavailable"} options={smeOptions} selected={projectFilterValues(fields.sme ? filters.customFields?.[fields.sme.id] : undefined)} allLabel="All SMEs" emptyLabel="No synchronized SME field is available." disabled={!fields.sme} />
           <ProjectsMultiSelect label="Course Length" name={fields.courseLength ? `cf_${fields.courseLength.id}` : "courseLengthUnavailable"} options={(fields.courseLength?.values ?? []).map(valueOption)} selected={projectFilterValues(fields.courseLength ? filters.customFields?.[fields.courseLength.id] : undefined)} allLabel="All course lengths" emptyLabel="No synchronized Course Length field is available." disabled={!fields.courseLength} />
@@ -95,7 +97,7 @@ function activeProjectFilters(filters: ReportingFilters, fields: ReturnType<type
   for (const year of selectedYears) add(`year-${year}`, `Year: ${year}`, { reportingYears: selectedYears.filter((value) => value !== year).map(String), reportingYear: null });
   for (const statusId of filters.statuses ?? []) add(`status-${statusId}`, `Status: ${statuses.find((status) => status.id === statusId)?.name ?? statusId}`, { statuses: (filters.statuses ?? []).filter((value) => value !== statusId) });
   for (const [key, field, prefix, contact] of [
-    ["owner", fields.owner, "Designer", true], ["tool", fields.tool, "Tool", false], ["course-type", fields.courseType, "Course Type", false], ["sme", fields.sme, "SME", true], ["course-length", fields.courseLength, "Course Length", false]
+    ["owner", fields.owner, "Designer", true], ["tool", fields.tool, "Tool", false], ["course-type", fields.courseType, "Course Type", false], ["course-style", fields.courseStyle, "Course Style", false], ["sme", fields.sme, "SME", true], ["course-length", fields.courseLength, "Course Length", false]
   ] as const) {
     const values = projectFilterValues(field ? filters.customFields?.[field.id] : undefined);
     for (const value of values) if (field) add(`${key}-${value}`, `${prefix}: ${contact ? projectPersonLabel(value, people) : value}`, { [`cf_${field.id}`]: values.filter((item) => item !== value) });
@@ -113,6 +115,7 @@ function activeProjectFilters(filters: ReportingFilters, fields: ReturnType<type
 }
 
 const valueOption = (value: string) => ({ value, label: value });
+const isCourseStyle = (value: string) => ["full length", "single video"].includes(value.trim().toLocaleLowerCase());
 
 function withMissingSelections(options: { value: string; label: string }[], selected: readonly string[], missingLabel: (value: string) => string) {
   return [...options, ...selected.filter((value) => !options.some((option) => option.value === value)).map((value) => ({ value, label: missingLabel(value) }))];

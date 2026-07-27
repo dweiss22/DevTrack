@@ -16,6 +16,7 @@ export type ProjectFilterFields = {
   owner: CustomFieldFilterOption | null;
   tool: CustomFieldFilterOption | null;
   courseType: CustomFieldFilterOption | null;
+  courseStyle: CustomFieldFilterOption | null;
   vertical: CustomFieldFilterOption | null;
   sme: CustomFieldFilterOption | null;
   courseLength: CustomFieldFilterOption | null;
@@ -27,13 +28,14 @@ const FIELD_PATTERNS = {
   owner: /^(instructional designer|course owner|project owner|owner|id|id assigned)$/i,
   tool: /^(authoring tool|authoring tool used)$/i,
   courseType: /^(course type|course development type)$/i,
+  courseStyle: /^course style$/i,
   vertical: /^vertical$/i,
   sme: /^(sme|smes|subject matter expert|subject matter experts)$/i,
   courseLength: /^(course length|course duration|estimated course length)$/i,
   legalReviewer: /^legal reviewer$/i
 } satisfies Record<keyof ProjectFilterFields, RegExp>;
 
-export const PROJECT_OVERVIEW_FIELD_ROLES = new Set<keyof ProjectFilterFields>(["reporting", "owner", "vertical", "courseLength", "tool", "sme", "legalReviewer"]);
+export const PROJECT_OVERVIEW_FIELD_ROLES = new Set<keyof ProjectFilterFields>(["reporting", "owner", "vertical", "courseLength", "courseStyle", "tool", "sme", "legalReviewer"]);
 
 export function projectFilterFields(options: readonly CustomFieldFilterOption[]): ProjectFilterFields {
   const find = (pattern: RegExp) => options.find((field) => pattern.test(field.name.trim())) ?? null;
@@ -42,6 +44,7 @@ export function projectFilterFields(options: readonly CustomFieldFilterOption[])
     owner: find(FIELD_PATTERNS.owner),
     tool: find(FIELD_PATTERNS.tool),
     courseType: find(FIELD_PATTERNS.courseType),
+    courseStyle: find(FIELD_PATTERNS.courseStyle),
     vertical: find(FIELD_PATTERNS.vertical),
     sme: find(FIELD_PATTERNS.sme),
     courseLength: find(FIELD_PATTERNS.courseLength),
@@ -112,6 +115,16 @@ export function projectTableVerticalLabel(field: { values: string[]; normalizedV
   const values = field?.values.filter(Boolean).join(", ");
   if (values) return values;
   return state && state !== "resolved" ? verticalStateLabel(state) : "—";
+}
+
+export function projectCourseStyleLabel(field: { values: string[] } | undefined) {
+  const styles = new Set((field?.values ?? []).flatMap((value) => {
+    const normalized = value.trim().toLocaleLowerCase();
+    if (normalized === "full length") return ["Full Length"];
+    if (normalized === "single video") return ["Single Video"];
+    return [];
+  }));
+  return styles.size ? [...styles].join(", ") : "—";
 }
 
 function resolveProjectPerson(sourceValue: string, people: readonly ProjectPersonOption[]) {

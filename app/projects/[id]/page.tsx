@@ -17,7 +17,7 @@ import { loadProjectLengthPercentilesResult } from "@/lib/reporting/data";
 import { safeProjectsReturnTo } from "@/lib/reporting/dashboard-navigation";
 import { formatCourseLength, formatVerticalMembership, parseCourseLengthMinutes } from "@/lib/reporting/project-overview";
 import { projectTimeMetrics, type ProjectTimeEntry } from "@/lib/reporting/project-time";
-import { extractFieldYear, projectFieldRole, projectOverviewContactValues, projectOverviewFieldKeys, type ProjectPersonOption } from "@/lib/reporting/projects";
+import { extractFieldYear, projectCourseStyleLabel, projectFieldRole, projectOverviewContactValues, projectOverviewFieldKeys, type ProjectPersonOption } from "@/lib/reporting/projects";
 import { mergeNormalizedCustomFields, type NormalizedCustomFieldValue } from "@/lib/wrike/custom-field-normalization";
 import type { ResolvedCustomField, ResolvedFolder } from "@/lib/wrike/metadata";
 import { resolveResponsibleUsers, resolveTaskStatus, resolveTimelogCategory } from "@/lib/wrike/reference-data";
@@ -153,6 +153,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
         <MetadataItem label="ID Assigned">{contactFieldValue(fieldByRole.get("owner"), people)}</MetadataItem>
         <MetadataItem label="Vertical">{formatVerticalMembership(vertical?.displayValues ?? []) ?? "Not assigned"}{vertical?.conflict && <ConflictBadge />}{row.vertical_state === "synchronization_incomplete" && <MetadataWarning>Previously synchronized</MetadataWarning>}{row.vertical_state === "unrecognized" && <MetadataWarning>Needs review</MetadataWarning>}</MetadataItem>
         <MetadataItem label="Length">{courseLengthValue(fieldByRole.get("courseLength"))}</MetadataItem>
+        <MetadataItem label="Course Style">{projectCourseStyleLabel(fieldByRole.get("courseStyle") ? { values: fieldByRole.get("courseStyle")!.displayValues } : undefined)}</MetadataItem>
         <MetadataItem label="Assigned in Wrike">{assignees.length ? assignees.map((person, index) => <React.Fragment key={person.wrikeUserId}>{index > 0 && ", "}{person.resolved ? person.fullName : <UnresolvedReferenceLabel id={person.wrikeUserId} type="user" />}</React.Fragment>) : "Unassigned"}</MetadataItem>
         <MetadataItem label="Authoring Tool">{fieldValue(fieldByRole.get("tool"))}</MetadataItem>
         <MetadataItem label="SME">{contactFieldValue(fieldByRole.get("sme"), people)}</MetadataItem>

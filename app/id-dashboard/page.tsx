@@ -7,6 +7,7 @@ import { loadIdDashboardAnalytics } from "@/lib/dashboards/id-analytics";
 
 type CurrentIdentity = { wrike_user_id: string | null; display_name: string | null; email: string | null; mapping_status: string };
 type DraftStatusRow = { task_id: string; available: boolean; updated_at: string | null; updated_by_name: string | null };
+type CourseStyleRow = { task_id: string; course_style: string | null };
 
 export default async function IdDashboardPage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
   const { profile, supabase } = await requirePageCapability("view_id_dashboard");
@@ -27,13 +28,14 @@ export default async function IdDashboardPage({ searchParams }: { searchParams: 
       application_user_id: null, display_name: current.display_name ?? "Instructional Designer",
       email: current.email, mapping_status: "mapped", identity_status: "verified", selectable: true,
     } : null;
-  const [rowsResult, analyticsResult] = selected?.wrike_user_id
+  const [rowsResult, analyticsResult, courseStylesResult] = selected?.wrike_user_id
     ? await Promise.all([
       supabase.rpc("reporting_id_dashboard_rows", { target_wrike_user_id: selected.wrike_user_id }),
       loadIdDashboardAnalytics(supabase, selected.wrike_user_id),
+      supabase.rpc("reporting_id_dashboard_course_styles", { target_wrike_user_id: selected.wrike_user_id }),
     ])
-    : [{ data: [], error: null }, { data: null, error: null }];
-  if (rowsResult.error) throw new Error("The selected ID Dashboard could not be loaded.");
+    : [{ data: [], error: null }, { data: null, error: null }, { data: [], error: null }];
+  if (rowsResult.error || courseStylesResult.error) throw new Error("The selected ID Dashboard could not be loaded.");
   const dashboardRows = (rowsResult.data ?? []) as IdDashboardRow[];
   const { data: draftStatuses } = dashboardRows.length
     ? await supabase.rpc("project_finalized_draft_statuses", { target_task_ids: [...new Set(dashboardRows.map((row) => row.task_id))] })
@@ -41,8 +43,11 @@ export default async function IdDashboardPage({ searchParams }: { searchParams: 
   const finalizedByTask = new Map<string, NonNullable<IdDashboardRow["finalized_draft"]>>(((draftStatuses ?? []) as DraftStatusRow[]).map((item) => [item.task_id, {
     available: Boolean(item.available), updatedAt: item.updated_at, updatedBy: item.updated_by_name,
   }]));
+  const courseStyleByTask = new Map(((courseStylesResult.data ?? []) as CourseStyleRow[])
+    .map((item) => [item.task_id, item.course_style]));
   const enrichedRows = dashboardRows.map((row) => ({
-    ...row, finalized_draft: finalizedByTask.get(row.task_id) ?? { available: false },
+    ...row, course_style: courseStyleByTask.get(row.task_id) ?? null,
+    finalized_draft: finalizedByTask.get(row.task_id) ?? { available: false },
   }));
 
   const ownOperationalView = profile.role === "id"

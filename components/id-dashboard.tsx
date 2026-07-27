@@ -1,6 +1,7 @@
 import Link from "next/link";
 import React from "react";
 import { IdDashboardAnalyticsSection } from "@/components/id-dashboard-analytics";
+import { SearchableFilterSelect } from "@/components/searchable-filter-select";
 import { StatusBadge } from "@/components/wrike-reference";
 import {
   canonicalDashboardIdentities, colleagueReviewLabel, dashboardIdentityLabel,
@@ -22,6 +23,7 @@ export type IdDashboardRow = {
   sme_identity_status: "verified" | "unresolved" | "conflict" | "missing";
   sme_assignment_values: string[];
   vertical: string | null;
+  course_style?: string | null;
   publication_date: string | null;
   publication_year: number | null;
   reporting_year: number | null;
@@ -55,11 +57,12 @@ export function IdDashboard({ identities, selected, rows, canSelect, canActAsAss
   const unresolvedIdentities = canonicalIdentities.filter((identity) => !identity.selectable);
   return <>
     {canSelect && <section className="card sme-selector-card"><form method="get">
-      <label>Instructional Designer<select name="id" defaultValue={selected?.wrike_user_id ?? ""}>
-        <option value="">Select an ID</option>
-        {selectableIdentities.map((identity) => <option key={identity.wrike_user_id} value={identity.wrike_user_id ?? ""}>
-          {dashboardIdentityLabel(identity)}</option>)}
-      </select></label><button>View dashboard</button>
+      <SearchableFilterSelect label="Instructional Designer" name="id"
+        defaultValue={selected?.wrike_user_id ?? ""} allLabel="Select an ID"
+        options={selectableIdentities.map((identity) => ({
+          value: identity.wrike_user_id ?? "", label: dashboardIdentityLabel(identity),
+        }))} />
+      <button>View dashboard</button>
     </form>
       <IdentityResolutionWarnings identities={unresolvedIdentities} />
     </section>}
@@ -72,7 +75,7 @@ export function IdDashboard({ identities, selected, rows, canSelect, canActAsAss
             {canSelect && !ownOperationalView ? " This selection is read-only and does not grant project actions or survey credit." : ""}</p>
           <IdDashboardAnalyticsSection key={selected.wrike_user_id} analytics={analytics} error={analyticsError} />
           {rows.length ? <div className="dashboard-table-wrap"><table className="dashboard-project-table id-dashboard-table"><thead><tr>
-            <th>Course / SME</th><th>Status</th><th>Vertical</th><th>Publication / reporting</th>
+            <th>Course / SME</th><th>Status</th><th>Vertical</th><th>Course Style</th><th>Publication / reporting</th>
             <th>Due / completed</th><th>Project / folder</th><th>Finalized draft</th><th>Review actions</th>
           </tr></thead><tbody>{rows.map((row) => {
             const startHref = row.reviewed_wrike_user_id
@@ -86,6 +89,7 @@ export function IdDashboard({ identities, selected, rows, canSelect, canActAsAss
                 </> : <UnresolvedSmeAssignment row={row} />}</td>
               <td data-label="Status"><StatusBadge name={row.status_name} /></td>
               <td data-label="Vertical">{row.vertical ?? "Needs context review"}</td>
+              <td data-label="Course Style">{row.course_style ?? "—"}</td>
               <td data-label="Publication / reporting">{row.publication_date ? `Published ${date(row.publication_date)}` : row.publication_year ? `Publication ${row.publication_year}` : "Publication unavailable"}
                 <br />Reporting {row.reporting_year ?? "—"}</td>
               <td data-label="Due / completed">Original: {date(row.original_due_date)}<br />{row.completed_at ? `Completed: ${date(row.completed_at)}` : `Due: ${date(row.due_date)}`}</td>

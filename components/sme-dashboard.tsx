@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SearchableFilterSelect } from "@/components/searchable-filter-select";
 import { StatusBadge } from "@/components/wrike-reference";
 import {
   canonicalDashboardIdentities, dashboardIdentityLabel, submissionHref, surveyActionLabel,
@@ -47,11 +48,12 @@ export function SmeDashboard({ identities, selected, rows, canSelect, canViewPro
   const unresolvedIdentities = canonicalIdentities.filter((identity) => !identity.selectable);
   return <>
     {canSelect && <section className="card sme-selector-card"><form method="get">
-      <label>SME<select name="sme" defaultValue={selected?.wrike_user_id ?? ""}>
-        <option value="">Select an SME</option>
-        {selectableIdentities.map((identity) => <option key={identity.wrike_user_id} value={identity.wrike_user_id ?? ""}>
-          {dashboardIdentityLabel(identity)}</option>)}
-      </select></label><button>View dashboard</button>
+      <SearchableFilterSelect label="SME" name="sme"
+        defaultValue={selected?.wrike_user_id ?? ""} allLabel="Select an SME"
+        options={selectableIdentities.map((identity) => ({
+          value: identity.wrike_user_id ?? "", label: dashboardIdentityLabel(identity),
+        }))} />
+      <button>View dashboard</button>
     </form>
       <IdentityResolutionWarnings identities={unresolvedIdentities} />
     </section>}

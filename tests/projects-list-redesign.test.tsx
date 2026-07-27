@@ -39,16 +39,18 @@ describe("Projects list redesign", () => {
     expect(toolbarSource).toContain("AutoSubmitSelect");
   });
 
-  it("uses the exact six-column table and a formal route loading state", () => {
+  it("uses the seven-column table with Course Style and a formal route loading state", () => {
     const page = fs.readFileSync(path.join(process.cwd(), "app/projects/page.tsx"), "utf8");
     const data = fs.readFileSync(path.join(process.cwd(), "lib/reporting/data.ts"), "utf8");
     const loading = fs.readFileSync(path.join(process.cwd(), "app/projects/loading.tsx"), "utf8");
-    for (const label of ["Project name", "Status", "Vertical", "ID Assigned", "Folders", "Development percentile"]) expect(page).toContain(`label: "${label}"`);
+    for (const label of ["Project name", "Status", "Vertical", "ID Assigned", "Course Style", "Folders", "Development percentile"]) expect(page).toContain(`label: "${label}"`);
     expect(page).toContain("SortableTableHeader");
     for (const removed of ["Vertical Reporting Category", "<th>Assignees</th>", "<th>Due</th>", "<th>Planned</th>", "<th>Last updated</th>"]) expect(page).not.toContain(removed);
     expect(loading).toContain('aria-busy="true"');
     expect(loading).toContain("projects-loading-table");
     expect(loading).toContain("Development percentile");
+    expect(loading).toContain("Course Style");
+    expect(page).toContain("projectCourseStyleLabel(courseStyle)");
     expect(page).toContain("projectTableVerticalLabel(vertical, project.vertical_state)");
     expect(data).toContain('from("wrike_task_normalized_custom_field_values")');
     expect(data).toContain('eq("normalized_field.normalized_key", "vertical")');
