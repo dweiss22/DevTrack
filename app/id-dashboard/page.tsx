@@ -3,6 +3,7 @@ import { IdDashboard, type IdDashboardRow } from "@/components/id-dashboard";
 import { requirePageCapability } from "@/lib/auth";
 import { hasCapability, isAdministratorRole } from "@/lib/auth/roles";
 import type { DashboardIdentity } from "@/lib/dashboards/domain";
+import { loadIdDashboardAnalytics } from "@/lib/dashboards/id-analytics";
 
 type CurrentIdentity = { wrike_user_id: string | null; display_name: string | null; email: string | null; mapping_status: string };
 type DraftStatusRow = { task_id: string; available: boolean; updated_at: string | null; updated_by_name: string | null };
@@ -26,9 +27,12 @@ export default async function IdDashboardPage({ searchParams }: { searchParams: 
       application_user_id: null, display_name: current.display_name ?? "Instructional Designer",
       email: current.email, mapping_status: "mapped", identity_status: "verified", selectable: true,
     } : null;
-  const rowsResult = selected?.wrike_user_id
-    ? await supabase.rpc("reporting_id_dashboard_rows", { target_wrike_user_id: selected.wrike_user_id })
-    : { data: [], error: null };
+  const [rowsResult, analyticsResult] = selected?.wrike_user_id
+    ? await Promise.all([
+      supabase.rpc("reporting_id_dashboard_rows", { target_wrike_user_id: selected.wrike_user_id }),
+      loadIdDashboardAnalytics(supabase, selected.wrike_user_id),
+    ])
+    : [{ data: [], error: null }, { data: null, error: null }];
   if (rowsResult.error) throw new Error("The selected ID Dashboard could not be loaded.");
   const dashboardRows = (rowsResult.data ?? []) as IdDashboardRow[];
   const { data: draftStatuses } = dashboardRows.length
@@ -50,6 +54,7 @@ export default async function IdDashboardPage({ searchParams }: { searchParams: 
       <p>Trusted Online Learning ID assignments, including courses whose SME identity still needs resolution.</p></div></header>
     <IdDashboard identities={identities} selected={selected} rows={enrichedRows}
       canSelect={canSelect} canActAsAssignedId={ownOperationalView} mappingRequired={!canSelect && !selected}
-      ownOperationalView={ownOperationalView} />
+      ownOperationalView={ownOperationalView} analytics={analyticsResult.data}
+      analyticsError={analyticsResult.error} />
   </AppShell>;
 }

@@ -1,11 +1,13 @@
 import Link from "next/link";
 import React from "react";
+import { IdDashboardAnalyticsSection } from "@/components/id-dashboard-analytics";
 import { StatusBadge } from "@/components/wrike-reference";
 import {
   canonicalDashboardIdentities, colleagueReviewLabel, dashboardIdentityLabel,
   submissionHref, surveyActionLabel, surveyHref,
   type DashboardIdentity, type SurveySummary,
 } from "@/lib/dashboards/domain";
+import type { IdDashboardAnalytics } from "@/lib/dashboards/id-analytics";
 
 export type IdDashboardRow = {
   task_id: string;
@@ -36,7 +38,7 @@ export type IdDashboardRow = {
 const date = (value: string | null) => value
   ? new Date(value.length === 10 ? `${value}T00:00:00Z` : value).toLocaleDateString("en-US", { timeZone: "UTC" }) : "—";
 
-export function IdDashboard({ identities, selected, rows, canSelect, canActAsAssignedId, mappingRequired, ownOperationalView = false }: {
+export function IdDashboard({ identities, selected, rows, canSelect, canActAsAssignedId, mappingRequired, ownOperationalView = false, analytics = null, analyticsError = null }: {
   identities: DashboardIdentity[];
   selected: DashboardIdentity | null;
   rows: IdDashboardRow[];
@@ -44,6 +46,8 @@ export function IdDashboard({ identities, selected, rows, canSelect, canActAsAss
   canActAsAssignedId: boolean;
   mappingRequired: boolean;
   ownOperationalView?: boolean;
+  analytics?: IdDashboardAnalytics | null;
+  analyticsError?: string | null;
 }) {
   const returnTo = selected?.wrike_user_id ? `/id-dashboard?id=${encodeURIComponent(selected.wrike_user_id)}` : "/id-dashboard";
   const canonicalIdentities = canonicalDashboardIdentities(identities);
@@ -66,6 +70,7 @@ export function IdDashboard({ identities, selected, rows, canSelect, canActAsAss
             Showing assignments for <strong>{selected.display_name}</strong>.
             {" The ID/owner field is authoritative when present; mapped Wrike assignees are used only when that field is empty."}
             {canSelect && !ownOperationalView ? " This selection is read-only and does not grant project actions or survey credit." : ""}</p>
+          <IdDashboardAnalyticsSection key={selected.wrike_user_id} analytics={analytics} error={analyticsError} />
           {rows.length ? <div className="dashboard-table-wrap"><table className="dashboard-project-table id-dashboard-table"><thead><tr>
             <th>Course / SME</th><th>Status</th><th>Vertical</th><th>Publication / reporting</th>
             <th>Due / completed</th><th>Project / folder</th><th>Finalized draft</th><th>Review actions</th>
