@@ -101,6 +101,6 @@ never be added to the Vercel team merely to access DevTrack.
 
 Already-delivered legacy emails cannot be recalled. An unexpired legacy link is
 bridged into the same password page after this version is deployed, so it no
-longer opens the retired account-setup path. For the cleanest rollout, cancel
-the remaining **Legacy pending invitations** in User Management and add those
-users through the new workflow to send a fresh password link.
+longer opens the retired account-setup path. Legacy records are retained only
+for callback compatibility and automatic provisioning, deletion, and cleanup;
+they are no longer presented as an administrator-managed workflow.

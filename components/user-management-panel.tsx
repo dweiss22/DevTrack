@@ -3,14 +3,12 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { roleLabel, type ApplicationRole } from "@/lib/auth/roles";
 
-type AssignableRole = "admin" | "id" | "sme";
 export type ManagedMember = {
   id: string; name: string; email: string; role: ApplicationRole; createdAt: string;
   wrikeUserId: string | null; accountState: "active" | "deletion_pending";
   profileCompleted: boolean; personaWrikeUserId: string | null;
   deletionJobId: string | null;
 };
-export type ManagedInvitation = { id: string; email: string; role: AssignableRole; status: "pending" | "failed"; invitedAt: string; lastSentAt: string | null; lastError: string | null };
 type IdentityOption = { id: string; name: string; email: string | null };
 type DeletionPreview = {
   targetUserId: string; displayName: string; email: string; role: ApplicationRole;
@@ -18,8 +16,8 @@ type DeletionPreview = {
   retain: { submittedSurveys: number; surveyRevisions: number; surveyAuditEvents: number; historicalLabel: string };
 };
 
-export function UserManagementPanel({ members, invitations, identities, personaIdentities, managerId, managerRole, impersonating }: {
-  members: ManagedMember[]; invitations: ManagedInvitation[]; identities: IdentityOption[];
+export function UserManagementPanel({ members, identities, personaIdentities, managerId, managerRole, impersonating }: {
+  members: ManagedMember[]; identities: IdentityOption[];
   personaIdentities: IdentityOption[];
   managerId: string; managerRole: ApplicationRole; impersonating: boolean;
 }) {
@@ -124,14 +122,6 @@ export function UserManagementPanel({ members, invitations, identities, personaI
         <button disabled={Boolean(submitting) || impersonating}>{submitting === "/api/admin/users/invitations" ? "Adding user…" : "Add user"}</button>
       </form>
       {impersonating && <p className="notice warning">User access and security actions are disabled while impersonating.</p>}
-    </section>
-
-    <section className="user-members-section" aria-labelledby="pending-invitations-title">
-      <div className="section-heading"><div><h2 id="pending-invitations-title">Legacy pending invitations</h2><p>These records came from the retired invitation-link process. Cancel each one, then add the user above.</p></div><p>{invitations.length} open</p></div>
-      {invitations.length ? <div className="admin-table-wrap"><table><thead><tr><th>Email</th><th>Status</th><th>Role</th><th>Last sent</th><th>Actions</th></tr></thead><tbody>{invitations.map((invitation) => {
-        const endpoint = `/api/admin/users/invitations/${invitation.id}`;
-        return <tr key={invitation.id}><td>{invitation.email}</td><td>{invitation.status === "failed" ? "Email failed" : "Legacy invitation pending"}{invitation.lastError ? <><br /><span className="error">{invitation.lastError}</span></> : null}</td><td><select aria-label={`Role for ${invitation.email}`} value={invitation.role} disabled={Boolean(submitting) || impersonating} onChange={(event) => request(endpoint, "PATCH", { action: "change_role", role: event.target.value }, `Role updated for ${invitation.email}.`)}><option value="id">ID</option><option value="sme">SME</option><option value="admin">Admin</option></select></td><td>{invitation.lastSentAt ? new Date(invitation.lastSentAt).toLocaleString() : "Not sent"}</td><td><div className="table-actions"><button className="secondary danger" disabled={Boolean(submitting) || impersonating} onClick={() => { if (confirm(`Cancel the legacy invitation for ${invitation.email}?`)) void request(endpoint, "PATCH", { action: "cancel" }, `Legacy invitation canceled for ${invitation.email}.`); }}>Cancel</button></div></td></tr>;
-      })}</tbody></table></div> : <p className="card empty">No legacy invitations remain.</p>}
     </section>
 
     <section className="user-members-section" aria-labelledby="organization-members-title">

@@ -8,7 +8,7 @@ import { assignedDashboardRows, dashboardDrilldownHref, safeDashboardReturnTo, s
 describe("application navigation", () => {
   it("uses the requested order, two dividers, and Projects presentation", () => {
     expect(APPLICATION_NAVIGATION.map((entry) => entry.kind === "divider" ? "divider" : entry.label)).toEqual([
-      "Dashboard", "Development", "SME Dashboard", "ID Dashboard", "Surveys", "divider", "Projects", "divider", "User Management", "Data"
+      "Dashboard", "Development", "SME Dashboard", "ID Dashboard", "Surveys", "divider", "Projects", "divider", "User Management", "Data", "Surveys"
     ]);
     expect(APPLICATION_NAVIGATION.some((entry) => entry.kind === "link"
       && (entry.href === "/other-teams" || entry.href === "/sme-collaboration"))).toBe(false);
@@ -20,6 +20,8 @@ describe("application navigation", () => {
     expect(memberItems.some((entry) => entry.kind === "link" && (entry.id === "users" || entry.id === "data"))).toBe(false);
     expect(memberItems.filter((entry) => entry.kind === "divider")).toHaveLength(1);
     expect(navigationForRole("admin").filter((entry) => entry.kind === "divider")).toHaveLength(2);
+    expect(navigationForRole("admin").some((entry) => entry.kind === "link" && entry.href === "/admin/surveys")).toBe(true);
+    expect(navigationForRole("admin").some((entry) => entry.kind === "link" && entry.href === "/surveys")).toBe(false);
   });
 
   it("keeps a Lexipol-branded operational logout control", () => {

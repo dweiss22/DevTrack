@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireCapability } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { surveySaveSchema } from "@/lib/surveys/domain";
+import {
+  applyContextBindings,
+  orderedQuestions,
+  questionIsVisible,
+  surveyDefinitionSchema,
+  validateSurveyAnswers,
+} from "@/lib/surveys/definition";
 import { loadSurveyDetail, surveyDetailForSme } from "@/lib/surveys/server";
 
 const idSchema = z.string().uuid();
@@ -53,17 +59,53 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { supabase } = await requireCapability("view_surveys");
-  const parsed = surveySaveSchema.safeParse(await request.json().catch(() => null));
+  const parsed = z.object({
+    submit: z.boolean().default(false),
+    answers: z.record(z.unknown()),
+  }).safeParse(await request.json().catch(() => null));
   if (!idSchema.safeParse(id).success || !parsed.success) {
-    const fieldErrors = parsed.success ? undefined : parsed.error.flatten().fieldErrors;
-    return NextResponse.json({ error: "Review the highlighted survey fields.", fieldErrors }, { status: 400 });
+    return NextResponse.json({ error: "Review the highlighted survey fields." }, { status: 400 });
   }
-  const { data, error } = await supabase.rpc("survey_save", {
+  const detail = await loadSurveyDetail(supabase, id);
+  const definition = surveyDefinitionSchema.safeParse(detail?.definition);
+  if (!detail || !definition.success) return NextResponse.json({ error: "Survey is unavailable." }, { status: 404 });
+  const answers = applyContextBindings(definition.data, parsed.data.answers, detail.submission.context_snapshot);
+  const attachmentIds = new Set(detail.attachments.map((attachment) => attachment.question_id));
+  const validation = validateSurveyAnswers(definition.data, answers, attachmentIds);
+  if (parsed.data.submit && !validation.success) {
+    return NextResponse.json({
+      error: "Complete every required field before submitting.",
+      fieldErrors: validation.errors,
+    }, { status: 400 });
+  }
+  // Persist only visible, schema-valid values even for drafts so changing a
+  // conditional answer cannot leave hidden data behind.
+  const nextAnswers = validation.answers;
+  const hiddenFileQuestionIds = new Set(orderedQuestions(definition.data)
+    .filter((question) => question.type === "file_upload" && !questionIsVisible(question, nextAnswers))
+    .map((question) => question.id));
+  let hiddenDraftObjectKeys: string[] = [];
+  if (detail.submission.status === "draft" && hiddenFileQuestionIds.size) {
+    const hiddenAttachmentIds = detail.attachments
+      .filter((attachment) => hiddenFileQuestionIds.has(attachment.question_id))
+      .map((attachment) => attachment.id);
+    if (hiddenAttachmentIds.length) {
+      const admin = createAdminClient();
+      const { data: hiddenFiles } = await admin.from("survey_attachments")
+        .select("object_key").in("id", hiddenAttachmentIds);
+      hiddenDraftObjectKeys = (hiddenFiles ?? []).map((file) => file.object_key);
+    }
+  }
+  const { data, error } = await supabase.rpc("survey_save_versioned", {
     target_submission_id: id,
-    answers: parsed.data.answers,
+    next_answers: nextAnswers,
     submit_now: parsed.data.submit,
   });
-  return error
-    ? NextResponse.json({ error: error.message || "The survey could not be saved." }, { status: error.code === "42501" ? 403 : 400 })
-    : NextResponse.json(data);
+  if (error) {
+    return NextResponse.json({ error: error.message || "The survey could not be saved." }, { status: error.code === "42501" ? 403 : 400 });
+  }
+  if (hiddenDraftObjectKeys.length) {
+    await createAdminClient().storage.from("survey-invoices").remove(hiddenDraftObjectKeys);
+  }
+  return NextResponse.json(data);
 }

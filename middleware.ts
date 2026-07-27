@@ -13,7 +13,8 @@ export function isAuthenticationEntryRequest(requestUrl: string) {
 }
 
 export function protectedApiCapability(pathname: string): Capability | null {
-  if (pathname.startsWith("/api/surveys")) return "view_surveys";
+  if (pathname.startsWith("/api/admin/surveys")) return "manage_surveys";
+  if (pathname.startsWith("/api/surveys")) return "view_personal_surveys";
   if (pathname.startsWith("/api/projects/")) return "view_surveys";
   if (pathname === "/api/ask" || pathname === "/api/conversations" || pathname.startsWith("/api/conversations/")) return "view_standard_pages";
   if (pathname.startsWith("/api/admin/users")) return "manage_users";

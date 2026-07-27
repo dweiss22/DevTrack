@@ -79,9 +79,10 @@ describe("restricted SME projects and assigned-ID actions", () => {
 
   it("renders locked and otherwise non-editable survey responses without form controls", () => {
     const dialog = source("components/survey-dialog.tsx");
-    expect(dialog).toContain("!editable");
-    expect(dialog).toContain("<ReadOnlySurveyResponse");
-    expect(dialog).toContain("Submitted and locked");
-    expect(dialog).toContain("survey-comment-readonly");
+    const renderer = source("components/survey-renderer.tsx");
+    expect(dialog).toContain("readOnly={!editable}");
+    expect(dialog).toContain("detail?.viewer.canEdit");
+    expect(renderer).toContain("<ReadOnlyAnswer");
+    expect(renderer).toContain("survey-comment-readonly");
   });
 });

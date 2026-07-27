@@ -9,9 +9,8 @@ import { normalizeApplicationRole } from "@/lib/auth/roles";
 export default async function UserManagementPage() {
   const { supabase, profile, identity, actor } = await requirePageCapability("manage_users");
   const admin = createAdminClient();
-  const [{ data: users, error }, { data: invitations, error: invitationError }, { data: authentication, error: authenticationError }, { data: assignedUsers, error: assignmentsError }, { data: wrikeUsers, error: wrikeUsersError }, { data: personas, error: personasError }, { data: deletionJobs, error: deletionJobsError }] = await Promise.all([
+  const [{ data: users, error }, { data: authentication, error: authenticationError }, { data: assignedUsers, error: assignmentsError }, { data: wrikeUsers, error: wrikeUsersError }, { data: personas, error: personasError }, { data: deletionJobs, error: deletionJobsError }] = await Promise.all([
     supabase.from("application_users").select("id,display_name,role,created_at,wrike_user_id,account_state,profile_completed").eq("organization_id", profile.organization_id).order("display_name"),
-    supabase.from("application_user_invitations").select("id,email,role,status,invited_at,last_sent_at,last_error,auth_user_id").eq("organization_id", profile.organization_id).in("status", ["pending", "failed"]).order("invited_at"),
     admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
     admin.from("application_users").select("id"),
     admin.from("wrike_users").select("id,display_name,email,is_unresolved,is_active,identity_verified").eq("organization_id", profile.organization_id).eq("is_active", true).eq("is_unresolved", false).eq("identity_verified", true).order("display_name"),
@@ -19,7 +18,6 @@ export default async function UserManagementPage() {
     admin.from("administrator_user_deletions").select("id,target_user_id,updated_at").eq("organization_id", profile.organization_id).neq("stage", "finalized").order("updated_at", { ascending: false }),
   ]);
   if (error) throw new Error(`User management could not be loaded: ${error.message}`);
-  if (invitationError) throw new Error(`Invitations could not be loaded: ${invitationError.message}`);
   if (authenticationError) throw new Error(`User names could not be loaded from authentication: ${authenticationError.message}`);
   if (assignmentsError) throw new Error(`Pending approvals could not be loaded: ${assignmentsError.message}`);
   if (wrikeUsersError) throw new Error(`Synchronized Wrike identities could not be loaded: ${wrikeUsersError.message}`);
@@ -28,9 +26,8 @@ export default async function UserManagementPage() {
 
   const authenticationById = new Map(authentication.users.map((user) => [user.id, user]));
   const assignedUserIds = new Set((assignedUsers ?? []).map((user) => user.id));
-  const invitedUserIds = new Set((invitations ?? []).map((invitation) => invitation.auth_user_id).filter(Boolean));
   const pendingUsers = authentication.users
-    .filter((user) => !assignedUserIds.has(user.id) && !invitedUserIds.has(user.id))
+    .filter((user) => !assignedUserIds.has(user.id))
     .map((user) => ({ id: user.id, name: applicationUserDisplayName(null, user), email: applicationUserEmail(user), createdAt: user.created_at }))
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 
@@ -48,12 +45,6 @@ export default async function UserManagementPage() {
       deletionJobId: deletionJobByUser.get(user.id) ?? null,
     };
   });
-  const managedInvitations = (invitations ?? []).map((invitation) => ({
-    id: invitation.id, email: invitation.email, role: normalizeApplicationRole(invitation.role) as "admin" | "id" | "sme",
-    status: invitation.status as "pending" | "failed", invitedAt: invitation.invited_at,
-    lastSentAt: invitation.last_sent_at, lastError: invitation.last_error,
-  }));
-
   const identityOptions = (wrikeUsers ?? []).map((identity) => ({ id: identity.id, name: identity.display_name, email: identity.email }));
   const occupiedIdWrikeUsers = new Set([
     ...(users ?? []).filter((user) => user.role === "id" && user.wrike_user_id).map((user) => user.wrike_user_id as string),
@@ -63,7 +54,7 @@ export default async function UserManagementPage() {
   const personaIdentityOptions = identityOptions.filter((option) =>
     option.id === currentPersonaWrikeUserId || !occupiedIdWrikeUsers.has(option.id));
   return <AppShell isAdmin><header className="page-header"><div><p className="eyebrow">ADMINISTRATIVE FUNCTIONS</p><h1>User Management</h1><p>Add users, manage organization roles, and map ID and SME accounts to verified Wrike identities.</p></div></header>
-    <UserManagementPanel members={members} invitations={managedInvitations} identities={identityOptions}
+    <UserManagementPanel members={members} identities={identityOptions}
       personaIdentities={personaIdentityOptions}
       managerId={actor.id} managerRole={profile.role} impersonating={identity.impersonating} />
     <UserApprovalQueue users={pendingUsers} /></AppShell>;

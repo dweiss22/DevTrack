@@ -30,6 +30,17 @@ describe("administrator user presentation", () => {
     expect(route).toContain('role: "id"');
   });
 
+  it("removes the legacy invitation presentation without removing standard onboarding", () => {
+    const page = readFileSync(join(root, "app", "admin", "users", "page.tsx"), "utf8");
+    const panel = readFileSync(join(root, "components", "user-management-panel.tsx"), "utf8");
+    const onboarding = readFileSync(join(root, "app", "api", "admin", "users", "invitations", "route.ts"), "utf8");
+    expect(page).not.toContain("application_user_invitations");
+    expect(panel).not.toContain("Legacy pending invitations");
+    expect(panel).not.toContain("ManagedInvitation");
+    expect(onboarding).toContain('status: "canceled"');
+    expect(onboarding).toContain("resetPasswordForEmail");
+  });
+
   it("keeps task source identifiers inside collapsed diagnostics", () => {
     const source = readFileSync(join(root, "app", "projects", "[id]", "page.tsx"), "utf8");
     const disclosure = source.indexOf("<details>");

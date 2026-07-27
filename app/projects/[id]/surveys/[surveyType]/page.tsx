@@ -12,7 +12,7 @@ export default async function DirectSurvey({ params, searchParams }: { params: P
   const query = await searchParams;
   const surveyType = surveyTypeFromSlug(slug);
   if (!surveyType) notFound();
-  const { profile, supabase } = await requirePageCapability("view_surveys");
+  const { profile, supabase } = await requirePageCapability("view_personal_surveys");
   const { data: context, error } = await supabase.rpc("survey_context_for_task", { target_task_id: id, requested_type: surveyType });
   if (error || !context) notFound();
   return <>

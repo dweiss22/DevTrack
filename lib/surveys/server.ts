@@ -3,7 +3,7 @@ import type { SurveyType } from "@/lib/surveys/domain";
 
 export async function loadSurveyDetail(supabase: SupabaseClient, id: string) {
   const submissionResult = await supabase.from("survey_submissions").select(
-    "id,survey_type,task_id,project_id,subject_application_user_id,reviewed_wrike_user_id,created_by,revision_assignee_id,context_snapshot,status,is_locked,revision_number,original_submitted_at,latest_submitted_at,unlock_reason,created_at,updated_at"
+    "id,survey_type,task_id,project_id,subject_application_user_id,reviewed_wrike_user_id,created_by,revision_assignee_id,context_snapshot,status,is_locked,revision_number,original_submitted_at,latest_submitted_at,unlock_reason,created_at,updated_at,survey_version_id,survey_version_number,definition_snapshot,answers"
   ).eq("id", id).maybeSingle();
   if (submissionResult.error || !submissionResult.data) return null;
   const submission = submissionResult.data;
@@ -11,11 +11,18 @@ export async function loadSurveyDetail(supabase: SupabaseClient, id: string) {
     ? "course_development_debrief_responses" : "id_sme_review_responses";
   const [responseResult, attachmentResult] = await Promise.all([
     supabase.from(responseTable).select("*").eq("submission_id", id).maybeSingle(),
-    supabase.from("survey_attachments").select("id,revision_number,original_filename,mime_type,size_bytes,uploaded_at,is_active")
+    supabase.from("survey_attachments").select("id,revision_number,question_id,original_filename,mime_type,size_bytes,uploaded_at,is_active")
       .eq("submission_id", id).eq("is_active", true).order("uploaded_at", { ascending: false }),
   ]);
   if (responseResult.error || attachmentResult.error) return null;
-  return { submission, response: responseResult.data, attachments: attachmentResult.data ?? [] };
+  return {
+    submission,
+    response: submission.answers ?? responseResult.data,
+    legacyResponse: responseResult.data,
+    definition: submission.definition_snapshot,
+    versionNumber: submission.survey_version_number,
+    attachments: attachmentResult.data ?? [],
+  };
 }
 
 export function surveyDetailForSme<T extends {

@@ -1,5 +1,5 @@
 begin;
-select plan(33);
+select plan(48);
 select has_table('public','survey_submissions','survey submissions exist');
 select has_table('public','course_development_debrief_responses','debrief responses exist');
 select has_table('public','id_sme_review_responses','ID review responses exist');
@@ -33,5 +33,20 @@ select has_function('public','save_project_finalized_course_draft',array['uuid',
 select has_function('public','remove_project_finalized_course_draft',array['uuid'],'assigned ID remove RPC exists');
 select has_function('public','assigned_id_project_controls',array['uuid'],'assigned ID project controls exist');
 select has_function('public','sme_project_detail',array['uuid'],'restricted SME project detail exists');
+select has_table('public','survey_templates','survey templates exist');
+select has_table('public','survey_template_drafts','survey template drafts exist');
+select has_table('public','survey_template_versions','immutable survey versions exist');
+select has_table('public','survey_template_audit_log','template audit log exists');
+select has_column('public','survey_submissions','survey_version_id','submissions pin a survey version');
+select has_column('public','survey_submissions','survey_version_number','submissions expose their pinned version number');
+select has_column('public','survey_submissions','definition_snapshot','submissions retain a definition snapshot');
+select has_column('public','survey_submissions','answers','submissions use generic answers');
+select has_column('public','survey_revisions','definition_snapshot','revisions retain definition snapshots');
+select has_column('public','survey_revisions','answers_snapshot','revisions retain normalized answer snapshots');
+select has_column('public','survey_attachments','question_id','attachments bind to stable question ids');
+select has_function('public','survey_admin_templates',array[]::text[],'admin template browser exists');
+select has_function('public','survey_personal_requirements',array[]::text[],'personal assignment list exists');
+select has_function('public','survey_personal_create_or_resume',array['uuid','uuid'],'assignment-bound personal start exists');
+select has_function('public','survey_save_versioned',array['uuid','jsonb','boolean'],'version-aware save exists');
 select * from finish();
 rollback;

@@ -14,6 +14,7 @@ const source = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
 const principalsMigration = source("supabase/migrations/202607230009_application_principals_and_impersonation.sql");
 const deletionMigration = source("supabase/migrations/202607230010_retryable_user_offboarding.sql");
 const personaMigration = source("supabase/migrations/202607230011_superadmin_id_persona.sql");
+const versionedSurveyMigration = source("supabase/migrations/202607270001_versioned_survey_management.sql");
 
 describe("secure administrator identity workflows", () => {
   it("generates opaque split tokens and stores only their hashes", async () => {
@@ -99,8 +100,8 @@ describe("secure administrator identity workflows", () => {
     expect(principalsMigration).toContain("actor_user_id");
     expect(principalsMigration).toContain("effective_user_id");
     expect(principalsMigration).toContain("record_impersonated_external_mutation");
-    const invoiceRoute = source("app/api/surveys/[id]/invoice/route.ts");
-    expect(invoiceRoute).toContain("authenticated_actor_id: actor.id");
-    expect(invoiceRoute).toContain('target_relation_name: "public.survey_attachments"');
+    const attachmentRoute = source("lib/surveys/attachment-http.ts");
+    expect(versionedSurveyMigration).toContain("public.current_actor_user_id()");
+    expect(attachmentRoute).toContain('target_relation_name: "public.survey_attachments"');
   });
 });

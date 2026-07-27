@@ -6,10 +6,16 @@ import {
   ID_REVIEW_STATEMENTS, SME_DEBRIEF_STATEMENTS, debriefDraftSchema,
   idReviewDraftSchema, validateInvoiceFile,
 } from "@/lib/surveys/domain";
+import {
+  INITIAL_SURVEY_DEFINITIONS,
+  surveyDefinitionSchema,
+  validateSurveyAnswers,
+} from "@/lib/surveys/definition";
 
 const root = process.cwd();
 const source = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
 const migration = source("supabase/migrations/202607230004_course_development_surveys.sql");
+const versionedMigration = source("supabase/migrations/202607270001_versioned_survey_management.sql");
 const completeRatings = (count: number) => Object.fromEntries(Array.from({ length: count }, (_, index) => [`rating${String(index + 1).padStart(2, "0")}`, 5]));
 
 describe("course-development survey contracts", () => {
@@ -49,6 +55,21 @@ describe("course-development survey contracts", () => {
     expect(validateInvoiceFile("invoice.pdf", "application/pdf", Uint8Array.from([1, 2, 3]))).toContain("detected");
     expect(validateInvoiceFile("invoice.pdf", "image/png", Uint8Array.from([0x25, 0x50, 0x44, 0x46]))).toContain("does not match");
   });
+
+  it("validates both seeded no-code definitions and conditional required answers", () => {
+    expect(surveyDefinitionSchema.safeParse(INITIAL_SURVEY_DEFINITIONS.course_development_debrief).success).toBe(true);
+    expect(surveyDefinitionSchema.safeParse(INITIAL_SURVEY_DEFINITIONS.id_sme_review).success).toBe(true);
+    const definition = INITIAL_SURVEY_DEFINITIONS.course_development_debrief;
+    const internal = validateSurveyAnswers(definition, {
+      originalDueYear: 2026, internalEmployee: true, workStartedOn: "2026-01-01",
+      workFinishedOn: "2026-01-02",
+      collaborationRatings: Object.fromEntries(Array.from({ length: 10 }, (_, index) =>
+        [`rating${String(index + 1).padStart(2, "0")}`, 5])),
+    });
+    expect(internal.errors.invoice).toBeUndefined();
+    const external = validateSurveyAnswers(definition, { ...internal.answers, internalEmployee: false });
+    expect(external.errors.invoice).toContain("required");
+  });
 });
 
 describe("survey persistence and security migration", () => {
@@ -62,6 +83,21 @@ describe("survey persistence and security migration", () => {
     expect(migration).toContain("survey_one_active_invoice_per_revision_idx");
     expect(migration).toContain("preserve_wrike_task_original_due_date");
     for (let index = 1; index <= 10; index++) expect(migration).toContain(`rating_${String(index).padStart(2, "0")}`);
+  });
+
+  it("adds immutable organization-scoped templates, version pins, normalized snapshots, and personal requirements", () => {
+    for (const table of ["survey_templates", "survey_template_drafts", "survey_template_versions", "survey_template_audit_log"]) {
+      expect(versionedMigration).toContain(`table public.${table}`);
+      expect(versionedMigration).toContain(`alter table public.${table} enable row level security`);
+    }
+    expect(versionedMigration).toContain("immutable_published_survey_version");
+    expect(versionedMigration).toContain("survey_version_id");
+    expect(versionedMigration).toContain("definition_snapshot");
+    expect(versionedMigration).toContain("answers_snapshot");
+    expect(versionedMigration).toContain("function public.survey_personal_requirements");
+    expect(versionedMigration).toContain("course_development_person_assignments(viewer.organization_id,'sme')");
+    expect(versionedMigration).toContain("course_development_person_assignments(viewer.organization_id,'id')");
+    expect(versionedMigration).toContain("'testing','testing revisions','ready for loading','published','completed'");
   });
 
   it("derives caller identity and lifecycle state in transactional functions", () => {
@@ -98,7 +134,8 @@ describe("route-backed accessible survey experience", () => {
   it("provides canonical/intercepted routes and role-aware launch points", () => {
     expect(source("app/@modal/(.)projects/[id]/surveys/[surveyType]/page.tsx")).toContain("<SurveyDialog");
     expect(source("app/projects/[id]/surveys/[surveyType]/page.tsx")).toContain("survey_context_for_task");
-    expect(source("app/surveys/page.tsx")).toContain('requirePageCapability("view_surveys")');
+    expect(source("app/surveys/page.tsx")).toContain('requirePageCapability("view_personal_surveys")');
+    expect(source("app/admin/surveys/page.tsx")).toContain('requirePageCapability("manage_surveys")');
     expect(source("components/sme-dashboard.tsx")).toContain('"course-development-debrief"');
     expect(source("app/projects/[id]/page.tsx")).toContain('surveyHref(id, "id-sme-review"');
     expect(source("app/projects/[id]/page.tsx")).toContain("assignedIdControls?.assigned");
@@ -110,10 +147,11 @@ describe("route-backed accessible survey experience", () => {
     expect(component).toContain("showModal()");
     expect(component).toContain('addEventListener("beforeunload"');
     expect(component).toContain("You have unsaved changes");
-    expect(component).toContain("onCancel={onCancel}");
+    expect(component).toContain("onCancel={(event)");
     expect(component).toContain("disabled={critical}");
-    expect(component).toContain("<fieldset");
-    expect(component).toContain("<legend>");
+    expect(component).toContain("<SurveyRenderer");
+    expect(source("components/survey-renderer.tsx")).toContain("<fieldset");
+    expect(source("components/survey-renderer.tsx")).toContain("<legend>");
     expect(css).toContain(".survey-dialog::backdrop");
     expect(css).toContain("width: 100vw; height: 100dvh");
     expect(css).toContain("table.survey-matrix { display: block");
