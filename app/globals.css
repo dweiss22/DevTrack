@@ -227,7 +227,10 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
 .user-invite-form button { margin-bottom: 1px; }
 .table-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .danger { color: #9f1d20; border-color: #dca6a8; }
+.profile-sections { display: grid; gap: 20px; }
 .profile-card { max-width: 640px; }
+.profile-card h2 { margin-top: 0; }
+.profile-card > .muted { margin-top: -4px; }
 .profile-card form { display: grid; gap: 14px; }
 .sme-selector-card form { display: flex; align-items: flex-end; gap: 12px; }
 .sme-selector-card label { min-width: min(360px, 100%); }

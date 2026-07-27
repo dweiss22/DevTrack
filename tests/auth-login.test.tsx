@@ -59,6 +59,16 @@ describe("authentication entry workflow", () => {
     expect(source("components/password-recovery-form.tsx")).toContain('fetch("/api/auth/recover"');
   });
 
+  it("lets an authenticated user update their password from the profile page", () => {
+    const profilePage = source("app/profile/page.tsx");
+    const passwordForm = source("components/profile-password-form.tsx");
+    expect(profilePage).toContain("<ProfilePasswordForm />");
+    expect(passwordForm).toContain('fetch("/api/auth/update-password"');
+    expect(passwordForm).toContain('autoComplete="new-password"');
+    expect(passwordForm).toContain("password !== confirmation");
+    expect(passwordForm).toContain('aria-live="polite"');
+  });
+
   it("keeps the public login page independent of protected reporting loaders", () => {
     const loginPage = source("app/login/page.tsx");
     const rootLoading = source("app/loading.tsx");
