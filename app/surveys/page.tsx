@@ -19,7 +19,7 @@ type Requirements = {
 };
 
 export default async function SurveysPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
-  const { profile, supabase } = await requirePageCapability("view_personal_surveys");
+  const { supabase } = await requirePageCapability("view_personal_survey_index");
   const tab = (await searchParams).tab === "completed" ? "completed" : "incomplete";
   const { data, error } = await supabase.rpc("survey_personal_requirements");
   const requirements = (data ?? {
@@ -27,11 +27,11 @@ export default async function SurveysPage({ searchParams }: { searchParams: Prom
   }) as Requirements;
   const rows = tab === "completed" ? requirements.completed : requirements.incomplete;
   const returnTo = `/surveys?tab=${tab}`;
-  const dashboardHref = profile.role === "sme" ? "/sme-dashboard" : "/id-dashboard";
+  const dashboardHref = "/id-dashboard";
   return <AppShell>
     <header className="page-header"><div><p className="eyebrow">MY ASSIGNED SURVEYS</p><h1>Surveys</h1>
-      <p>{profile.role === "sme" ? "Course debriefs for your exact SME assignments." : "SME reviews for courses assigned to your ID identity."}</p></div>
-      <Link className="button secondary" href={dashboardHref}>Return to {profile.role === "sme" ? "SME" : "ID"} Dashboard</Link></header>
+      <p>SME reviews for courses assigned to your ID identity.</p></div>
+      <Link className="button secondary" href={dashboardHref}>Return to ID Dashboard</Link></header>
     <nav className="survey-tabs" aria-label="Personal survey status">
       <Link href="/surveys?tab=incomplete" aria-current={tab === "incomplete" ? "page" : undefined}>
         Incomplete <span>{requirements.incompleteCount}</span></Link>
@@ -42,11 +42,11 @@ export default async function SurveysPage({ searchParams }: { searchParams: Prom
       : rows.length ? <div className="dashboard-table-wrap"><table className="dashboard-project-table personal-survey-table"><thead><tr>
         <th>Course</th><th>Survey</th><th>Workflow status</th><th>SME</th><th>Year context</th>
         {tab === "completed" ? <><th>Submitted</th><th>Version</th><th>Review</th></> : <><th>State</th><th>Action</th></>}
-      </tr></thead><tbody>{rows.map((row) => <tr key={`${row.task_id}:${row.reviewed_wrike_user_id ?? profile.role}:${row.submission_id ?? "new"}`}>
+      </tr></thead><tbody>{rows.map((row) => <tr key={`${row.task_id}:${row.reviewed_wrike_user_id ?? "id"}:${row.submission_id ?? "new"}`}>
         <td data-label="Course"><strong>{row.course_name}</strong></td>
         <td data-label="Survey">{surveyTitle(row.survey_type)}</td>
         <td data-label="Workflow status">{row.workflow_status}</td>
-        <td data-label="SME">{row.sme_name ?? (profile.role === "sme" ? "You" : "Unavailable")}</td>
+        <td data-label="SME">{row.sme_name ?? "Unavailable"}</td>
         <td data-label="Year context">{row.publication_year ? `Publication ${row.publication_year}` : row.reporting_year ? `Reporting ${row.reporting_year}` : row.original_due_year ? `Original due ${row.original_due_year}` : "Unavailable"}</td>
         {tab === "completed" ? <>
           <td data-label="Submitted">{row.submitted_at ? new Date(row.submitted_at).toLocaleString() : "Unavailable"}</td>

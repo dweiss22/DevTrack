@@ -1,114 +1,90 @@
 import Link from "next/link";
 import { SearchableFilterSelect } from "@/components/searchable-filter-select";
-import { StatusBadge } from "@/components/wrike-reference";
+import { SmeDashboardAnalytics } from "@/components/sme-dashboard-analytics";
 import {
   canonicalDashboardIdentities, dashboardIdentityLabel, submissionHref, surveyActionLabel,
   surveyHref, type DashboardIdentity, type SurveySummary,
 } from "@/lib/dashboards/domain";
 
 export type SmeDashboardRow = {
-  task_id: string;
-  title: string;
-  status_name: string;
-  status_classification: string;
-  reporting_year: number | null;
-  original_due_date: string | null;
-  due_date: string | null;
-  completed_at: string | null;
-  actual_minutes: number;
-  folder_context: string;
-  updated_at_wrike: string | null;
-  is_overdue: boolean;
-  subject_application_user_id: string | null;
-  submission_id: string | null;
-  survey_status: "draft" | "submitted" | null;
-  survey_is_locked: boolean | null;
-  survey_can_edit: boolean | null;
-  finalized_draft_available?: boolean;
+  task_id: string; title: string; status_name: string; status_color: string | null;
+  status_classification: string; reporting_year: number | null; start_date: string | null;
+  original_due_date: string | null; due_date: string | null; completed_at: string | null;
+  actual_minutes: number; is_overdue: boolean; subject_application_user_id: string | null;
+  submission_id: string | null; survey_status: "draft" | "submitted" | null;
+  survey_is_locked: boolean | null; survey_can_edit: boolean | null; is_recent: boolean;
+  submitted_billable_hours: number | null; submitted_amount_billed: number | null; submitted_at: string | null;
 };
 
-const date = (value: string | null) => value
-  ? new Date(value.length === 10 ? `${value}T00:00:00Z` : value).toLocaleDateString("en-US", { timeZone: "UTC" }) : "—";
-const hours = (minutes: number) => `${(minutes / 60).toFixed(1)}h`;
-
-export function SmeDashboard({ identities, selected, rows, canSelect, canViewProjects, canLaunchDebrief, restrictedSmeView, administrativeView, mappingRequired }: {
-  identities: DashboardIdentity[];
-  selected: DashboardIdentity | null;
-  rows: SmeDashboardRow[];
-  canSelect: boolean;
-  canViewProjects: boolean;
-  canLaunchDebrief: boolean;
-  restrictedSmeView: boolean;
-  administrativeView: boolean;
-  mappingRequired: boolean;
+export function SmeDashboard({ identities, selected, rows, canSelect, canLaunchDebrief, currentUserId, scope, administrativeView, mappingRequired }: {
+  identities: DashboardIdentity[]; selected: DashboardIdentity | null; rows: SmeDashboardRow[];
+  canSelect: boolean; canLaunchDebrief: boolean; currentUserId: string | null; scope: "recent" | "all";
+  administrativeView: boolean; mappingRequired: boolean;
 }) {
-  const returnTo = selected?.wrike_user_id ? `/sme-dashboard?sme=${encodeURIComponent(selected.wrike_user_id)}` : "/sme-dashboard";
+  const returnTo = selected?.wrike_user_id
+    ? `/sme-dashboard?sme=${encodeURIComponent(selected.wrike_user_id)}&scope=${scope}` : `/sme-dashboard?scope=${scope}`;
   const canonicalIdentities = canonicalDashboardIdentities(identities);
   const selectableIdentities = canonicalIdentities.filter((identity) => identity.selectable && identity.wrike_user_id);
   const unresolvedIdentities = canonicalIdentities.filter((identity) => !identity.selectable);
+  const scopeHref = (nextScope: "recent" | "all") => selected?.wrike_user_id
+    ? `/sme-dashboard?sme=${encodeURIComponent(selected.wrike_user_id)}&scope=${nextScope}`
+    : `/sme-dashboard?scope=${nextScope}`;
   return <>
     {canSelect && <section className="card sme-selector-card"><form method="get">
-      <SearchableFilterSelect label="SME" name="sme"
-        defaultValue={selected?.wrike_user_id ?? ""} allLabel="Select an SME"
-        options={selectableIdentities.map((identity) => ({
+      <SearchableFilterSelect label="SME" name="sme" defaultValue={selected?.wrike_user_id ?? ""}
+        allLabel="Select an SME" options={selectableIdentities.map((identity) => ({
           value: identity.wrike_user_id ?? "", label: dashboardIdentityLabel(identity),
         }))} />
-      <button>View dashboard</button>
-    </form>
-      <IdentityResolutionWarnings identities={unresolvedIdentities} />
-    </section>}
-    {mappingRequired
-      ? <p className="card notice warning" role="status">Your DevTrack account is not mapped to a verified Wrike identity. Ask an administrator to configure the mapping in User Management.</p>
-      : !selected
-        ? <p className="card empty">{selectableIdentities.length ? "Select a verified SME to view assigned work." : "No trusted SME assignments are available."}</p>
-        : <>
-          <p className="card dashboard-identity-note">Showing assignments for <strong>{selected.display_name}</strong>
-            {selected.email ? <> ({selected.email})</> : null}. {selected.mapping_status === "unmapped" ? "This person does not yet have a DevTrack account." : "Identity verified and mapped."}
-            {administrativeView ? " This is an administrative assignment view; you are not impersonating the SME." : ""}</p>
-          <div className="metric-grid sme-metrics">
-            <article className="card metric-card"><span>Assigned courses</span><strong>{rows.length}</strong></article>
-            <article className="card metric-card"><span>Active</span><strong>{rows.filter((row) => row.status_classification === "active").length}</strong></article>
-            <article className="card metric-card"><span>Completed</span><strong>{rows.filter((row) => row.completed_at || row.status_classification === "completed").length}</strong></article>
-            {!restrictedSmeView && <article className="card metric-card"><span>Logged time</span><strong>{hours(rows.reduce((sum, row) => sum + Number(row.actual_minutes || 0), 0))}</strong></article>}
+      <input type="hidden" name="scope" value={scope} /><button>View dashboard</button>
+    </form><IdentityResolutionWarnings identities={unresolvedIdentities} /></section>}
+    {mappingRequired ? <p className="card notice warning" role="status">Your DevTrack account is not mapped to a verified Wrike identity. Ask an administrator to configure the mapping.</p>
+      : !selected ? <p className="card empty">{selectableIdentities.length ? "Select a verified SME to view assigned work." : "No trusted SME assignments are available."}</p>
+      : <>
+        <div className="card dashboard-identity-note"><p>Showing assignments for <strong>{selected.display_name}</strong>
+          {selected.email ? <> ({selected.email})</> : null}. {administrativeView ? "This is a management view; you are not impersonating the SME." : ""}</p>
+          <div className="scope-toggle" role="group" aria-label="Assignment period">
+            <Link className={scope === "recent" ? "button" : "button secondary"} href={scopeHref("recent")}>Recent</Link>
+            <Link className={scope === "all" ? "button" : "button secondary"} href={scopeHref("all")}>All Time</Link>
           </div>
-          {rows.length ? <div className="dashboard-table-wrap"><table className="dashboard-project-table"><thead><tr>
-            <th>Course</th><th>Status</th><th>Reporting year</th>
-            {!restrictedSmeView && <><th>Original due</th><th>Due / completed</th><th>Project / folder</th><th>Last synchronized</th></>}
-            {restrictedSmeView && <th>Finalized draft</th>}<th>Debrief</th>
-          </tr></thead><tbody>{rows.map((row) => {
-            const summary: SurveySummary | null = row.submission_id && row.survey_status ? {
-              id: row.submission_id, status: row.survey_status, isLocked: Boolean(row.survey_is_locked),
-              canEdit: Boolean(row.survey_can_edit), revisionNumber: 1,
-            } : null;
-            const href = summary ? submissionHref(summary.id, returnTo)
-              : selected.wrike_user_id ? surveyHref(row.task_id, "course-development-debrief", selected.wrike_user_id, returnTo) : "";
-            const allowed = canLaunchDebrief && Boolean(selected.application_user_id) && Boolean(href);
-            return <tr key={row.task_id}>
-              <td data-label="Course">{restrictedSmeView
-                ? <Link href={`/sme-dashboard/projects/${row.task_id}`}>{row.title}</Link>
-                : canViewProjects ? <Link href={`/projects/${row.task_id}?returnTo=${encodeURIComponent(returnTo)}`}>{row.title}</Link> : row.title}</td>
-              <td data-label="Status"><StatusBadge name={row.status_name} />{row.is_overdue ? <><br /><span className="error">Overdue</span></> : null}</td>
-              <td data-label="Reporting year">{row.reporting_year ?? "—"}</td>
-              {!restrictedSmeView && <><td data-label="Original due">{date(row.original_due_date)}</td>
-                <td data-label="Due / completed">{row.completed_at ? `Completed ${date(row.completed_at)}` : date(row.due_date)}</td>
-                <td data-label="Project / folder">{row.folder_context}</td>
-                <td data-label="Last synchronized">{row.updated_at_wrike ? new Date(row.updated_at_wrike).toLocaleString() : "—"}</td></>}
-              {restrictedSmeView && <td data-label="Finalized draft">{row.finalized_draft_available ? "Available" : "Not available"}</td>}
-              <td data-label="Debrief">{allowed ? <Link className="button secondary" href={href}>{surveyActionLabel(summary, "survey")}</Link>
-                : summary ? <span className="muted">{summary.status === "draft" ? "Draft"
-                  : summary.isLocked ? "Submitted · Locked" : "Submitted · Unlocked"}</span>
-                  : selected.mapping_status === "unmapped" ? <span className="muted">Account mapping required</span> : "—"}</td>
-            </tr>;
-          })}</tbody></table></div> : <p className="card empty">No eligible course-development projects are assigned to this SME.</p>}
-        </>}
+        </div>
+        <SmeDashboardAnalytics rows={rows} />
+        {rows.length ? <div className="dashboard-table-wrap"><table className="dashboard-project-table sme-project-list"><thead><tr>
+          <th>Course</th><th>Status</th><th>Survey</th>
+        </tr></thead><tbody>{rows.map((row) => {
+          const summary: SurveySummary | null = row.submission_id && row.survey_status ? {
+            id: row.submission_id, status: row.survey_status, isLocked: Boolean(row.survey_is_locked),
+            canEdit: Boolean(row.survey_can_edit), revisionNumber: 1,
+          } : null;
+          const href = summary ? submissionHref(summary.id, returnTo)
+            : selected.wrike_user_id ? surveyHref(row.task_id, "course-development-debrief", selected.wrike_user_id, returnTo) : "";
+          const ownsSelection = Boolean(currentUserId && currentUserId === selected.application_user_id);
+          const allowed = row.is_recent && canLaunchDebrief && ownsSelection && Boolean(href);
+          const projectHref = `/sme-dashboard/projects/${row.task_id}?sme=${encodeURIComponent(selected.wrike_user_id ?? "")}&scope=${scope}`;
+          return <tr key={row.task_id}>
+            <td data-label="Course"><Link href={projectHref}>{row.title}</Link></td>
+            <td data-label="Status"><span className="sme-status-indicator" title={row.status_name}>
+              <span className="sme-status-dot" style={{ backgroundColor: row.status_color ?? statusColor(row.status_classification) }} aria-hidden="true" />
+              <span className="sr-only">{row.status_name}</span>
+            </span></td>
+            <td data-label="Survey">{allowed ? <Link className="button secondary" href={href}>{surveyActionLabel(summary, "survey")}</Link>
+              : row.is_recent && summary ? <span className="muted">{summary.status === "submitted" ? "Submitted" : "Draft"}</span>
+                : <span className="muted">—</span>}</td>
+          </tr>;
+        })}</tbody></table></div> : <p className="card empty">No assigned projects match this period.</p>}
+      </>}
   </>;
+}
+
+function statusColor(classification: string) {
+  if (classification === "completed") return "#0c8f78";
+  if (classification === "active") return "#3b82c4";
+  if (classification === "stalled_or_canceled") return "#64748b";
+  return "#d97706";
 }
 
 function IdentityResolutionWarnings({ identities }: { identities: DashboardIdentity[] }) {
   if (!identities.length) return null;
-  return <details className="dashboard-identity-warnings">
-    <summary>{identities.length} assignment value{identities.length === 1 ? "" : "s"} need identity resolution</summary>
-    <p className="muted">These values are not selectable users. Correct the SME assignment identity in Wrike and re-import; verified people remain listed once by their stable Wrike identity.</p>
-    <ul>{identities.map((identity) => <li key={identity.identity_key}>{dashboardIdentityLabel(identity)}</li>)}</ul>
-  </details>;
+  return <details className="dashboard-identity-warnings"><summary>{identities.length} assignment value{identities.length === 1 ? "" : "s"} need identity resolution</summary>
+    <p className="muted">These values are not selectable users. Correct the SME assignment identity in Wrike and re-import.</p>
+    <ul>{identities.map((identity) => <li key={identity.identity_key}>{dashboardIdentityLabel(identity)}</li>)}</ul></details>;
 }

@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { hasCapability, landingPageForRole, normalizeApplicationRole, type Capability } from "@/lib/auth/roles";
+import { hasCapability, landingPageForRole, normalizeAccessProfile, normalizeApplicationRole, type Capability } from "@/lib/auth/roles";
 import type { RequestIdentityContext } from "@/lib/auth/impersonation";
 
 export const requireContext = cache(async function requireContext() {
@@ -16,7 +16,13 @@ export const requireContext = cache(async function requireContext() {
   const { data: storedProfile, error } = await supabase.from("application_users").select("organization_id, role, display_name, profile_completed,wrike_user_id,account_state").eq("id", identity.effectiveUserId).maybeSingle();
   if (error) throw new Error("DevTrack could not verify your organization access. Retry the request.");
   if (!storedProfile || storedProfile.account_state !== "active") redirect("/access-pending");
-  const profile = { ...storedProfile, role: normalizeApplicationRole(storedProfile.role) };
+  const role = normalizeApplicationRole(storedProfile.role);
+  const access = normalizeAccessProfile({
+    legacyRole: role,
+    operationalRoles: identity.operationalRoles,
+    managementRoles: identity.managementRoles,
+  }, role);
+  const profile = { ...storedProfile, role, access };
   if (!profile.profile_completed) redirect("/account-setup");
   const user = {
     id: identity.effectiveUserId,
@@ -30,11 +36,11 @@ export async function requireAdmin() {
 }
 export async function requireCapability(capability: Capability) {
   const context = await requireContext();
-  if (!hasCapability(context.profile.role, capability)) throw new Error("You do not have permission to perform this action.");
+  if (!hasCapability(context.profile.access, capability)) throw new Error("You do not have permission to perform this action.");
   return context;
 }
 export async function requirePageCapability(capability: Capability) {
   const context = await requireContext();
-  if (!hasCapability(context.profile.role, capability)) redirect(landingPageForRole(context.profile.role));
+  if (!hasCapability(context.profile.access, capability)) redirect(landingPageForRole(context.profile.access));
   return context;
 }

@@ -52,11 +52,14 @@ describe("versioned survey management", () => {
 
   it("separates personal and administrative navigation and route capabilities", () => {
     expect(hasCapability("sme", "view_personal_surveys")).toBe(true);
+    expect(hasCapability("sme", "view_personal_survey_index")).toBe(false);
     expect(hasCapability("id", "view_personal_surveys")).toBe(true);
+    expect(hasCapability("id", "view_personal_survey_index")).toBe(true);
     expect(hasCapability("admin", "view_personal_surveys")).toBe(false);
     expect(hasCapability("admin", "manage_surveys")).toBe(true);
-    expect(navigationForRole("admin").find((entry) => entry.kind === "link" && entry.id === "admin-surveys")?.href).toBe("/admin/surveys");
-    expect(navigationForRole("sme").some((entry) => entry.kind === "link" && entry.href === "/admin/surveys")).toBe(false);
+    const adminSurveys = navigationForRole("admin").find((entry) => entry.kind === "link" && entry.id === "admin-surveys");
+    expect(adminSurveys?.kind === "link" ? adminSurveys.href : null).toBe("/admin/surveys");
+    expect(navigationForRole("sme").some((entry) => entry.kind === "link" ? entry.href === "/admin/surveys" : false)).toBe(false);
     expect(source("middleware.ts")).toContain('pathname.startsWith("/api/admin/surveys")');
   });
 

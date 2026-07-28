@@ -12,7 +12,7 @@ type CourseStyleRow = { task_id: string; course_style: string | null };
 export default async function IdDashboardPage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
   const { profile, supabase } = await requirePageCapability("view_id_dashboard");
   const requested = (await searchParams).id;
-  const canSelect = hasCapability(profile.role, "select_id_dashboard_user");
+  const canSelect = hasCapability(profile.access, "select_id_dashboard_user");
   const [identityResult, personaResult] = await Promise.all([
     canSelect ? supabase.rpc("reporting_id_dashboard_identities") : supabase.rpc("reporting_current_id_identity"),
     profile.role === "super_admin" ? supabase.rpc("superadmin_id_persona") : Promise.resolve({ data: [], error: null }),
@@ -53,7 +53,7 @@ export default async function IdDashboardPage({ searchParams }: { searchParams: 
   const ownOperationalView = profile.role === "id"
     || (profile.role === "super_admin" && Boolean(persona?.wrike_user_id)
       && selected?.wrike_user_id === persona?.wrike_user_id);
-  return <AppShell isAdmin={isAdministratorRole(profile.role)}>
+  return <AppShell isAdmin={isAdministratorRole(profile.access)}>
     <header className="page-header"><div><p className="eyebrow">INSTRUCTIONAL DESIGN ASSIGNMENTS</p>
       <h1>ID Dashboard{selected ? ` — ${selected.display_name}` : ""}</h1>
       <p>Trusted Online Learning ID assignments, including courses whose SME identity still needs resolution.</p></div></header>

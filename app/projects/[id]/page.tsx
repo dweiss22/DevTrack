@@ -116,7 +116,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const reportingYear = extractFieldYear(fieldByRole.get("reporting")?.displayValues ?? []);
   const benchmark = benchmarkResult.data.get(id) ?? null;
 
-  const isAdministrator = isAdministratorRole(profile.role);
+  const isAdministrator = isAdministratorRole(profile.access);
   const assignedIdControls = !idControlsResult.error && idControlsResult.data
     ? idControlsResult.data as AssignedIdControls : null;
   return <AppShell isAdmin={isAdministrator}>

@@ -7,7 +7,7 @@ export async function AppShell({ children, lastSynced, isAdmin = false }: { chil
   const { identity, profile } = await requireContext();
   const profileName = profile.display_name?.trim() || identity.effectiveName || "My profile";
   return <div className="app-shell">
-    <SidebarNavigation role={profile.role} lastSynced={lastSynced} profileName={profileName} impersonating={identity.impersonating} />
+    <SidebarNavigation access={profile.access} lastSynced={lastSynced} profileName={profileName} impersonating={identity.impersonating} />
     <main>
       {identity.impersonating && identity.lastActivityAt && identity.absoluteExpiresAt
         ? <ImpersonationBanner effectiveName={identity.effectiveName} actorName={identity.actorName}

@@ -8,7 +8,7 @@ import { assignedDashboardRows, dashboardDrilldownHref, safeDashboardReturnTo, s
 describe("application navigation", () => {
   it("uses the requested order, two dividers, and Projects presentation", () => {
     expect(APPLICATION_NAVIGATION.map((entry) => entry.kind === "divider" ? "divider" : entry.label)).toEqual([
-      "Dashboard", "Development", "SME Dashboard", "ID Dashboard", "Surveys", "divider", "Projects", "divider", "User Management", "Data", "Surveys"
+      "Dashboard", "Development", "SME Dashboard", "SME Management", "ID Dashboard", "Surveys", "divider", "Projects", "divider", "User Management", "Data", "Surveys"
     ]);
     expect(APPLICATION_NAVIGATION.some((entry) => entry.kind === "link"
       && (entry.href === "/other-teams" || entry.href === "/sme-collaboration"))).toBe(false);

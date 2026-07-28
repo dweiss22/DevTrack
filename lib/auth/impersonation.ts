@@ -17,6 +17,8 @@ export type RequestIdentityContext = {
   lastActivityAt: string | null;
   absoluteExpiresAt: string | null;
   operationalPersonaRole?: "id" | null;
+  operationalRoles?: Array<"id" | "sme">;
+  managementRoles?: Array<"sme_coordinator" | "admin" | "super_admin">;
 };
 
 export async function newImpersonationToken() {

@@ -1,12 +1,13 @@
 "use client";
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { roleLabel, type ApplicationRole } from "@/lib/auth/roles";
+import { roleLabel, type ApplicationRole, type ManagementRole, type OperationalRole } from "@/lib/auth/roles";
 
 export type ManagedMember = {
   id: string; name: string; email: string; role: ApplicationRole; createdAt: string;
   wrikeUserId: string | null; accountState: "active" | "deletion_pending";
   profileCompleted: boolean; personaWrikeUserId: string | null;
+  operationalRoles: OperationalRole[]; managementRoles: ManagementRole[]; accessWrikeUserId: string | null;
   deletionJobId: string | null;
 };
 type IdentityOption = { id: string; name: string; email: string | null };

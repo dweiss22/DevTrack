@@ -32,7 +32,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     captureProjectsRequest("Wrike user names", supabase.from("wrike_users").select("wrike_id,display_name,is_unresolved,identity_verified,identity_verification_source").eq("organization_id", profile.organization_id).order("display_name")),
     supabase.from("wrike_person_identities").select("identity_key,display_name,wrike_contact_id,is_displayable,is_verified,verification_source").eq("organization_id", profile.organization_id).order("display_name")
   ]);
-  const isAdministrator = isAdministratorRole(profile.role);
+  const isAdministrator = isAdministratorRole(profile.access);
   if (projectsLoad.failure || statusesLoad.failure || facetsLoad.failure || peopleLoad.failure) return <AppShell isAdmin={isAdministrator}>
     <ProjectsLoadFailure failure={(projectsLoad.failure ?? statusesLoad.failure ?? facetsLoad.failure ?? peopleLoad.failure)!} isAdmin={isAdministrator} />
   </AppShell>;

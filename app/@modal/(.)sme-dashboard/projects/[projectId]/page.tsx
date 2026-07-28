@@ -1,11 +1,10 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AppShell } from "@/components/app-shell";
 import { SmeProjectDetail, type SmeProjectDetailData } from "@/components/sme-project-detail";
+import { SmeProjectModal } from "@/components/sme-project-modal";
 import { requirePageCapability } from "@/lib/auth";
 import { hasCapability } from "@/lib/auth/roles";
 
-export default async function SmeProjectPage({ params, searchParams }: {
+export default async function SmeProjectInterceptedModal({ params, searchParams }: {
   params: Promise<{ projectId: string }>;
   searchParams: Promise<{ sme?: string; scope?: string }>;
 }) {
@@ -18,9 +17,7 @@ export default async function SmeProjectPage({ params, searchParams }: {
   const detail = data as SmeProjectDetailData;
   const scope = query.scope === "all" ? "all" : "recent";
   const returnTo = `/sme-dashboard?sme=${encodeURIComponent(detail.selectedSmeWrikeUserId)}&scope=${scope}`;
-  return <AppShell><nav className="breadcrumb" aria-label="Breadcrumb"><Link href={returnTo}>SME Dashboard</Link>
-    <span aria-hidden="true">/</span><span aria-current="page">Course detail</span></nav>
-    <SmeProjectDetail detail={detail} returnTo={returnTo}
-      canLaunchSurvey={detail.subjectApplicationUserId === user.id}
-      managementView={hasCapability(profile.access, "view_sme_survey_details")} /></AppShell>;
+  return <SmeProjectModal><SmeProjectDetail detail={detail} returnTo={returnTo}
+    canLaunchSurvey={detail.subjectApplicationUserId === user.id}
+    managementView={hasCapability(profile.access, "view_sme_survey_details")} /></SmeProjectModal>;
 }

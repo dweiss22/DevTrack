@@ -6,7 +6,8 @@ import { finalizedCourseDraftUrlSchema } from "@/lib/projects/finalized-draft";
 const root = process.cwd();
 const source = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
 const migration = source("supabase/migrations/202607230008_restricted_sme_projects_and_finalized_drafts.sql");
-const smeProject = source("app/sme-dashboard/projects/[projectId]/page.tsx");
+const smeProject = source("components/sme-project-detail.tsx");
+const smeProjectPage = source("app/sme-dashboard/projects/[projectId]/page.tsx");
 const internalProject = source("app/projects/[id]/page.tsx");
 const smeDashboard = source("components/sme-dashboard.tsx");
 const idDashboard = source("components/id-dashboard.tsx");
@@ -14,7 +15,7 @@ const idDashboard = source("components/id-dashboard.tsx");
 describe("restricted SME projects and assigned-ID actions", () => {
   it("routes an SME to a dedicated project page backed by one restricted RPC", () => {
     expect(smeDashboard).toContain("/sme-dashboard/projects/${row.task_id}");
-    expect(smeProject).toContain('rpc("sme_project_detail"');
+    expect(smeProjectPage).toContain('rpc("sme_project_detail"');
     expect(smeProject).not.toContain('from("wrike_tasks")');
     for (const prohibited of ["Open in Wrike", "raw_data", "wrike_time_entries", "ID review", "survey_audit_log"]) {
       expect(smeProject).not.toContain(prohibited);

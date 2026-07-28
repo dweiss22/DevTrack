@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isPublicAuthenticationPath, loginHref } from "@/lib/auth/redirects";
-import { hasCapability, normalizeApplicationRole, type Capability } from "@/lib/auth/roles";
+import { hasCapability, normalizeAccessProfile, normalizeApplicationRole, type Capability } from "@/lib/auth/roles";
 import {
   dataApiFetch, IMPERSONATION_COOKIE, impersonationCookieOptions,
   isBlockedDuringImpersonation, type RequestIdentityContext,
@@ -14,6 +14,7 @@ export function isAuthenticationEntryRequest(requestUrl: string) {
 
 export function protectedApiCapability(pathname: string): Capability | null {
   if (pathname.startsWith("/api/admin/surveys")) return "manage_surveys";
+  if (pathname.startsWith("/api/sme-management")) return "manage_smes";
   if (pathname.startsWith("/api/surveys")) return "view_personal_surveys";
   if (pathname.startsWith("/api/projects/")) return "view_surveys";
   if (pathname === "/api/ask" || pathname === "/api/conversations" || pathname.startsWith("/api/conversations/")) return "view_standard_pages";
@@ -81,7 +82,14 @@ export async function middleware(request: NextRequest) {
     if (user && apiCapability) {
       let permitted = false;
       try {
-        permitted = Boolean(identity && hasCapability(normalizeApplicationRole(identity.effectiveRole), apiCapability));
+        if (identity) {
+          const role = normalizeApplicationRole(identity.effectiveRole);
+          permitted = hasCapability(normalizeAccessProfile({
+            legacyRole: role,
+            operationalRoles: identity.operationalRoles,
+            managementRoles: identity.managementRoles,
+          }, role), apiCapability);
+        }
       } catch {
         permitted = false;
       }
@@ -117,6 +125,8 @@ export const config = {
     "/projects/:path*",
     "/profile",
     "/sme-dashboard/:path*",
+    "/sme-management/:path*",
+    "/api/sme-management/:path*",
     "/surveys/:path*",
     "/tasks/:path*",
     "/team/:path*",
