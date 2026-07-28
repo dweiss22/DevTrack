@@ -278,7 +278,7 @@ async function reconcileReadBack(
       });
       continue;
     }
-    taskUpdates.push(repairedTaskUpdate(organizationId, task, { vertical_state: state, vertical_repaired_at: repairedAt }));
+    taskUpdates.push(repairedTaskUpdate(task, { vertical_state: state, vertical_repaired_at: repairedAt }));
     const prior = initial.get(task.row.id) ?? null;
     const changed = verticalSnapshotChanged(task.row.vertical_state, prior, state, row);
     if (changed) repaired++; else unchanged++;
@@ -286,7 +286,10 @@ async function reconcileReadBack(
     if (row?.has_conflict) conflicting++;
   }
   for (let offset = 0; offset < taskUpdates.length; offset += 500) {
-    const { error } = await db.from("wrike_tasks").upsert(taskUpdates.slice(offset, offset + 500), { onConflict: "id" });
+    const { error } = await db.rpc("repair_wrike_vertical_task_states", {
+      target_organization_id: organizationId,
+      task_updates: taskUpdates.slice(offset, offset + 500)
+    });
     if (error) throw new Error(`Supabase could not persist verified Vertical task states: ${error.message}`);
   }
   return { repaired, unchanged, unresolved, conflicting, failed, failedProjects };
@@ -318,14 +321,12 @@ async function loadAllRepairFields(db: ReturnType<typeof createAdminClient>, org
 }
 
 function repairedTaskUpdate(
-  organizationId: string,
   task: ReturnType<typeof resolveTask>,
   updates: Record<string, unknown>
 ) {
   const enriched = task.row.enriched_metadata && typeof task.row.enriched_metadata === "object" ? task.row.enriched_metadata : {};
   return {
     id: task.row.id,
-    organization_id: organizationId,
     ...updates,
     enriched_metadata: { ...enriched, customFields: task.fields, customFieldsNormalized: task.normalized },
     updated_at: new Date().toISOString()

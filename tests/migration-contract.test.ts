@@ -35,6 +35,7 @@ const verticalLegacyAliasesMigration = fs.readFileSync(path.join(process.cwd(), 
 const superAdminDataAccessMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607230006_restore_superadmin_data_access.sql"), "utf8");
 const reliableVerticalRepairMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607280007_reliable_vertical_repair.sql"), "utf8");
 const manageDataCapabilityMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607280008_manage_data_capability.sql"), "utf8");
+const batchVerticalStateMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607280009_batch_vertical_task_state_updates.sql"), "utf8");
 
 function sqlFunctionDefinition(sql: string, name: string) {
   const start = sql.indexOf(`create or replace function public.${name}`);
@@ -233,6 +234,14 @@ describe("reporting migration contract", () => {
     expect(definition).toContain("when 'manage_data'");
     expect(definition).toContain("current_has_management_role('admin')");
     expect(definition).toContain("current_has_management_role('super_admin')");
+  });
+  it("updates verified Vertical task states in one organization-scoped set operation", () => {
+    const definition = sqlFunctionDefinition(batchVerticalStateMigration, "repair_wrike_vertical_task_states");
+    expect(definition).toContain("jsonb_to_recordset(task_updates)");
+    expect(definition).toContain("task.organization_id=target_organization_id");
+    expect(definition).toContain("updated_count<>jsonb_array_length(task_updates)");
+    expect(batchVerticalStateMigration).toContain("to service_role");
+    expect(batchVerticalStateMigration).toContain("from public,anon,authenticated");
   });
   it("strictly parses Reporting course years and scopes dashboard work before time aggregation", () => {
     expect(reportingPerformanceMigration).toContain("Courses$','i'");

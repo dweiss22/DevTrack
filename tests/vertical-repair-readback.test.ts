@@ -32,7 +32,8 @@ describe("Vertical repair persistence read-back", () => {
   it("paginates the full synchronized dataset and persists verified task states in batches", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "lib/wrike/vertical-repair.ts"), "utf8");
     expect(source).toContain(".range(offset, offset + 999)");
-    expect(source).toContain('from("wrike_tasks").upsert(taskUpdates.slice(offset, offset + 500)');
+    expect(source).toContain('rpc("repair_wrike_vertical_task_states"');
+    expect(source).toContain("task_updates: taskUpdates.slice(offset, offset + 500)");
     expect(source).not.toContain("if (task.state === task.row.vertical_state) unchanged++");
   });
 });
