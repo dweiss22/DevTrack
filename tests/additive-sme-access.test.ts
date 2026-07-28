@@ -28,6 +28,8 @@ describe("additive SME access", () => {
     const roles = source("supabase/migrations/202607280001_additive_management_roles.sql");
     const experience = source("supabase/migrations/202607280002_sme_management_experience.sql");
     expect(roles).toContain("application_user_management_role_audit");
+    expect(roles).toContain("execute function public.guard_append_only_security_audit()");
+    expect(roles).not.toContain("prevent_audit_mutation");
     expect(roles).toContain("current_access_operational_roles");
     expect(roles).toContain("current_access_management_roles");
     expect(experience).toContain("current_date-interval '12 months'");

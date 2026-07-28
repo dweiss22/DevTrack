@@ -6,6 +6,7 @@ import { requirePageCapability } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { applicationUserDisplayName, applicationUserEmail } from "@/lib/users/application-user-display";
 import { normalizeApplicationRole } from "@/lib/auth/roles";
+import { reportingFailure } from "@/lib/reporting/failure";
 
 export default async function UserManagementPage() {
   const { supabase, profile, identity, actor } = await requirePageCapability("manage_users");
@@ -24,8 +25,10 @@ export default async function UserManagementPage() {
   if (assignmentsError) throw new Error(`Pending approvals could not be loaded: ${assignmentsError.message}`);
   if (wrikeUsersError) throw new Error(`Synchronized Wrike identities could not be loaded: ${wrikeUsersError.message}`);
   if (personasError) throw new Error(`Operational personas could not be loaded: ${personasError.message}`);
-  if (managementRolesError) throw new Error(`Management roles could not be loaded: ${managementRolesError.message}`);
   if (deletionJobsError) throw new Error(`User deletion status could not be loaded: ${deletionJobsError.message}`);
+  const managementRolesFailure = managementRolesError
+    ? reportingFailure(managementRolesError, "Additive role management", "202607280001_additive_management_roles.sql")
+    : null;
 
   const authenticationById = new Map(authentication.users.map((user) => [user.id, user]));
   const assignedUserIds = new Set((assignedUsers ?? []).map((user) => user.id));
@@ -65,14 +68,19 @@ export default async function UserManagementPage() {
   const personaIdentityOptions = identityOptions.filter((option) =>
     option.id === currentPersonaWrikeUserId || !occupiedIdWrikeUsers.has(option.id));
   return <AppShell isAdmin><header className="page-header"><div><p className="eyebrow">ADMINISTRATIVE FUNCTIONS</p><h1>User Management</h1><p>Add users, manage organization roles, and map ID and SME accounts to verified Wrike identities.</p></div></header>
+    {managementRolesFailure ? <section className="notice warning" role="status">
+      <strong>{managementRolesFailure.title}</strong>{" "}
+      <span>{managementRolesFailure.message} Existing user administration remains available, but additive management-role controls are temporarily hidden.</span>
+      {managementRolesFailure.diagnosticCode ? <p><strong>Database code:</strong> <code>{managementRolesFailure.diagnosticCode}</code></p> : null}
+    </section> : null}
     <UserManagementPanel members={members} identities={identityOptions}
       personaIdentities={personaIdentityOptions}
       managerId={actor.id} managerRole={profile.role} impersonating={identity.impersonating} />
-    <AdditiveAccessPanel members={members.map((member) => ({
+    {!managementRolesFailure ? <AdditiveAccessPanel members={members.map((member) => ({
       id: member.id, name: member.name, email: member.email,
       operationalRoles: member.operationalRoles, managementRoles: member.managementRoles,
       accessWrikeUserId: member.accessWrikeUserId,
       locked: member.managementRoles.includes("super_admin"),
-    }))} identities={identityOptions} impersonating={identity.impersonating} />
+    }))} identities={identityOptions} impersonating={identity.impersonating} /> : null}
     <UserApprovalQueue users={pendingUsers} /></AppShell>;
 }

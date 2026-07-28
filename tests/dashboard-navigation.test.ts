@@ -8,7 +8,7 @@ import { assignedDashboardRows, dashboardDrilldownHref, safeDashboardReturnTo, s
 describe("application navigation", () => {
   it("uses the requested order, two dividers, and Projects presentation", () => {
     expect(APPLICATION_NAVIGATION.map((entry) => entry.kind === "divider" ? "divider" : entry.label)).toEqual([
-      "Dashboard", "Development", "SME Dashboard", "SME Management", "ID Dashboard", "Surveys", "divider", "Projects", "divider", "User Management", "Data", "Surveys"
+      "Dashboard", "Development", "SME Dashboard", "ID Dashboard", "Surveys", "divider", "Projects", "divider", "SME Management", "User Management", "Data", "Surveys"
     ]);
     expect(APPLICATION_NAVIGATION.some((entry) => entry.kind === "link"
       && (entry.href === "/other-teams" || entry.href === "/sme-collaboration"))).toBe(false);
@@ -22,6 +22,21 @@ describe("application navigation", () => {
     expect(navigationForRole("admin").filter((entry) => entry.kind === "divider")).toHaveLength(2);
     expect(navigationForRole("admin").some((entry) => entry.kind === "link" && entry.href === "/admin/surveys")).toBe(true);
     expect(navigationForRole("admin").some((entry) => entry.kind === "link" && entry.href === "/surveys")).toBe(false);
+  });
+
+  it("places SME Management in Administration and gives Coordinators only that admin link", () => {
+    const administrationDivider = APPLICATION_NAVIGATION.findIndex((entry) => entry.kind === "divider" && entry.id === "administration-divider");
+    const smeManagement = APPLICATION_NAVIGATION.findIndex((entry) => entry.kind === "link" && entry.id === "sme-management");
+    expect(smeManagement).toBeGreaterThan(administrationDivider);
+
+    const coordinatorItems = navigationForRole({
+      legacyRole: "sme",
+      operationalRoles: ["sme"],
+      managementRoles: ["sme_coordinator"],
+    });
+    const coordinatorAdminLinks = coordinatorItems.filter((entry) => entry.kind === "link"
+      && ["sme-management", "users", "data", "admin-surveys"].includes(entry.id));
+    expect(coordinatorAdminLinks.map((entry) => entry.id)).toEqual(["sme-management"]);
   });
 
   it("keeps a Lexipol-branded operational logout control", () => {

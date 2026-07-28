@@ -55,7 +55,7 @@ create table public.application_user_management_role_audit (
 
 create trigger application_user_management_role_audit_append_only
 before update or delete on public.application_user_management_role_audit
-for each row execute function public.prevent_audit_mutation();
+for each row execute function public.guard_append_only_security_audit();
 
 insert into public.application_user_operational_personas(
   organization_id,application_user_id,operational_role,wrike_user_id,created_by,updated_by

@@ -8,12 +8,12 @@ export const APPLICATION_NAVIGATION: readonly NavigationEntry[] = [
   { kind: "link", id: "dashboard", href: "/", label: "Dashboard", capability: "view_standard_pages" },
   { kind: "link", id: "development", href: "/development", label: "Development", capability: "view_standard_pages" },
   { kind: "link", id: "sme-dashboard", href: "/sme-dashboard", label: "SME Dashboard", capability: "view_sme_dashboard" },
-  { kind: "link", id: "sme-management", href: "/sme-management", label: "SME Management", capability: "manage_smes" },
   { kind: "link", id: "id-dashboard", href: "/id-dashboard", label: "ID Dashboard", capability: "view_id_dashboard" },
   { kind: "link", id: "surveys", href: "/surveys", label: "Surveys", capability: "view_personal_survey_index" },
   { kind: "divider", id: "projects-divider" },
   { kind: "link", id: "projects", href: "/projects", label: "Projects", capability: "view_standard_pages" },
   { kind: "divider", id: "administration-divider" },
+  { kind: "link", id: "sme-management", href: "/sme-management", label: "SME Management", capability: "manage_smes" },
   { kind: "link", id: "users", href: "/admin/users", label: "User Management", capability: "manage_users" },
   { kind: "link", id: "data", href: "/admin", label: "Data", capability: "manage_data" },
   { kind: "link", id: "admin-surveys", href: "/admin/surveys", label: "Surveys", capability: "manage_surveys" }
