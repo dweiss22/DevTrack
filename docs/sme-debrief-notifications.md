@@ -16,9 +16,10 @@ Configure these server-only variables in Vercel:
 - `CRON_SECRET`: shared secret used by the notification retry route.
 
 The protected `/api/cron/sme-debrief-notifications` route retries due
-deliveries and removes stale private draft invoices. Vercel invokes it every
-ten minutes. Admins can also retry a failed delivery from the submitted survey
-detail.
+deliveries and removes stale private draft invoices. DevTrack attempts
+delivery immediately after each committed submission; the Vercel Hobby-safe
+schedule provides a daily retry at 07:15 UTC. Admins can also retry a failed
+delivery from the submitted survey detail.
 
 External-SME invoices are read from the private `survey-invoices` bucket and
 attached directly to the Resend message. If attachment preparation fails, the
