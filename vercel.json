@@ -1,1 +1,6 @@
-{ "crons": [{ "path": "/api/cron/reporting-cleanup", "schedule": "0 7 * * *" }] }
+{
+  "crons": [
+    { "path": "/api/cron/reporting-cleanup", "schedule": "0 7 * * *" },
+    { "path": "/api/cron/sme-debrief-notifications", "schedule": "*/10 * * * *" }
+  ]
+}

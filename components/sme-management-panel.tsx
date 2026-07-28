@@ -3,12 +3,15 @@
 import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { smeClassificationLabel, type SmeClassification } from "@/lib/smes/domain";
 
 export type SmeManagementRow = {
   wrike_user_id: string; application_user_id: string | null; display_name: string; email: string | null;
   mapping_status: string; coordinator: boolean; assigned_projects: number; active_projects: number;
   completed_projects: number; stalled_projects: number; submitted_surveys: number;
   billable_hours: number; invoiced_amount: number;
+  sme_classification: SmeClassification | null;
+  sme_classification_updated_at: string | null;
 };
 type IdentityOption = { id: string; name: string; email: string | null };
 
@@ -48,14 +51,18 @@ export function SmeManagementPanel({ rows, identities }: { rows: SmeManagementRo
       <article className="card metric-card"><span>Invoiced</span><strong>{currency(totals.amount)}</strong></article>
     </div>
     <section className="card"><div className="section-heading"><div><p className="eyebrow">SCOPED ACCESS</p><h2>Invite SME</h2></div>
-      <p>Creates SME-only access. Management grants, impersonation, and deletion remain administrator-controlled.</p></div>
+      <p>Creates SME-only access with “SME type not configured.” An Admin must classify the account before debrief submission.</p></div>
       <form className="user-invite-form" onSubmit={invite}><label>Email address<input name="email" type="email" required maxLength={320} /></label>
         <button disabled={Boolean(working)}>{working.includes("invitations") ? "Inviting…" : "Invite SME"}</button></form></section>
     <section className="card"><div className="section-heading"><div><p className="eyebrow">ALL SMEs</p><h2>SME oversight</h2></div>
       <label className="sme-management-search">Search<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name or email" /></label></div>
-      {visible.length ? <div className="admin-table-wrap"><table><thead><tr><th>SME</th><th>Mapping</th><th>Projects</th><th>Surveys</th><th>Billing</th><th>Access</th></tr></thead>
+      {visible.length ? <div className="admin-table-wrap"><table><thead><tr><th>SME</th><th>SME type</th><th>Mapping</th><th>Projects</th><th>Surveys</th><th>Billing</th><th>Access</th></tr></thead>
         <tbody>{visible.map((row) => <tr key={row.wrike_user_id}><td><strong>{row.display_name}</strong>{row.email ? <><br /><span className="muted">{row.email}</span></> : null}
           {row.coordinator ? <><br /><span className="role-chip">SME Coordinator</span></> : null}</td>
+          <td>{row.application_user_id ? <>{smeClassificationLabel(row.sme_classification)}
+            {row.sme_classification_updated_at ? <><br /><span className="muted">
+              Updated {new Date(row.sme_classification_updated_at).toLocaleDateString()}
+            </span></> : null}</> : <span className="muted">No DevTrack account</span>}</td>
           <td>{row.application_user_id ? <select aria-label={`Wrike identity for ${row.display_name}`} value={row.wrike_user_id}
             disabled={Boolean(working)} onChange={(event) => void request(`/api/sme-management/users/${row.application_user_id}/identity`, "PATCH",
               { wrikeUserId: event.target.value }, `Identity updated for ${row.display_name}.`)}>

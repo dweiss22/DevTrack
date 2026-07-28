@@ -1,12 +1,22 @@
 import { env } from "@/lib/env";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
+import { smeClassificationSchema } from "@/lib/smes/domain";
 
 export const applicationRoleSchema = z.enum(["admin", "id", "sme"]);
 export const operationalInvitationRoleSchema = z.enum(["id", "sme"]);
 export const invitationInputSchema = z.object({
   email: z.string().trim().email().max(320),
   role: operationalInvitationRoleSchema,
+  smeClassification: smeClassificationSchema.optional(),
+}).superRefine((value, context) => {
+  if (value.role === "sme" && !value.smeClassification) {
+    context.addIssue({
+      code: "custom",
+      path: ["smeClassification"],
+      message: "Select Internal SME or External SME.",
+    });
+  }
 });
 
 export function normalizeInvitationEmail(email: string) {

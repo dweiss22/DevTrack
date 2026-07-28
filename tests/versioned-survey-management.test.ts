@@ -22,7 +22,7 @@ describe("versioned survey management", () => {
       "single_choice", "multiple_choice", "rating_scale", "rating_matrix", "file_upload",
     ]);
     const invalid = structuredClone(INITIAL_SURVEY_DEFINITIONS.course_development_debrief);
-    invalid.sections[0].questions[0].visibility = {
+    invalid.sections[1].questions[0].visibility = {
       match: "all", rules: [{ questionId: "comments", operator: "answered" }],
     };
     expect(surveyDefinitionSchema.safeParse(invalid).success).toBe(false);

@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   resetPasswordForEmail: vi.fn(),
   membershipMaybeSingle: vi.fn(),
   membershipInsert: vi.fn(),
+  smeProfileUpsert: vi.fn(),
+  smeProfileAuditInsert: vi.fn(),
   invitationUpdate: vi.fn(),
 }));
 
@@ -40,6 +42,7 @@ describe("administrator user provisioning", () => {
 
     mocks.requireCapability.mockResolvedValue({
       profile: { organization_id: "organization-1", role: "admin" },
+      user: { id: "11111111-1111-4111-8111-111111111111" },
     });
     mocks.listUsers.mockResolvedValue({ data: { users: [] }, error: null });
     mocks.createUser.mockResolvedValue({
@@ -51,6 +54,8 @@ describe("administrator user provisioning", () => {
     mocks.resetPasswordForEmail.mockResolvedValue({ error: null });
     mocks.membershipMaybeSingle.mockResolvedValue({ data: null, error: null });
     mocks.membershipInsert.mockResolvedValue({ error: null });
+    mocks.smeProfileUpsert.mockResolvedValue({ error: null });
+    mocks.smeProfileAuditInsert.mockResolvedValue({ error: null });
     mocks.invitationUpdate.mockReturnValue(chain("in", vi.fn()));
 
     mocks.createAdminClient.mockReturnValue({
@@ -72,6 +77,12 @@ describe("administrator user provisioning", () => {
         }
         if (table === "application_user_invitations") {
           return { update: mocks.invitationUpdate };
+        }
+        if (table === "application_user_sme_profiles") {
+          return { upsert: mocks.smeProfileUpsert };
+        }
+        if (table === "application_user_sme_profile_audit") {
+          return { insert: mocks.smeProfileAuditInsert };
         }
         throw new Error(`Unexpected table ${table}`);
       },
@@ -132,7 +143,7 @@ describe("administrator user provisioning", () => {
     mocks.resetPasswordForEmail.mockResolvedValue({ error: { message: "provider unavailable" } });
     const response = await POST(new NextRequest("https://devtrack.example/api/admin/users/invitations", {
       method: "POST",
-      body: JSON.stringify({ email: "learner@example.com", role: "sme" }),
+      body: JSON.stringify({ email: "learner@example.com", role: "sme", smeClassification: "external" }),
     }));
 
     expect(response.status).toBe(200);
@@ -141,6 +152,9 @@ describe("administrator user provisioning", () => {
       emailSent: false,
       message: expect.stringContaining("was added to DevTrack"),
     });
+    expect(mocks.smeProfileUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      classification: "external",
+    }), { onConflict: "application_user_id" });
   });
 
   it("rejects invalid input before creating a user", async () => {

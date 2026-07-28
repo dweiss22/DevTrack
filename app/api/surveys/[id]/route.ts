@@ -11,6 +11,7 @@ import {
   validateSurveyAnswers,
 } from "@/lib/surveys/definition";
 import { loadSurveyDetail, surveyDetailForSme } from "@/lib/surveys/server";
+import { dispatchPendingSmeDebriefNotifications } from "@/lib/notifications/sme-debrief";
 
 const idSchema = z.string().uuid();
 
@@ -18,6 +19,18 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const { id } = await params;
   const { profile, supabase } = await requireCapability("view_surveys");
   if (!idSchema.safeParse(id).success) return NextResponse.json({ error: "Survey is unavailable." }, { status: 404 });
+  const { data: refresh, error: refreshError } = await supabase.rpc("refresh_sme_debrief_draft_context", {
+    target_submission_id: id,
+  });
+  if (refreshError && refreshError.code !== "42501") {
+    console.error("sme_debrief_context_refresh_failed", {
+      submissionId: id, code: refreshError.code, message: refreshError.message,
+    });
+  }
+  const refreshResult = refresh as { cleanupObjectKeys?: string[] } | null;
+  if (refreshResult?.cleanupObjectKeys?.length) {
+    await createAdminClient().storage.from("survey-invoices").remove(refreshResult.cleanupObjectKeys);
+  }
   const detail = await loadSurveyDetail(supabase, id);
   if (!detail) return NextResponse.json({ error: "Survey is unavailable." }, { status: 404 });
   const { data: canEdit } = await supabase.rpc("can_edit_survey", { target_submission_id: id });
@@ -27,12 +40,20 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       ? surveyDetailForSme(detail) : detail;
     return NextResponse.json({ ...visibleDetail, viewer: { role: profile.role, canEdit: Boolean(canEdit), canManage: false } });
   }
-  const [audit, revisions, revisers, actors] = await Promise.all([
+  const [audit, revisions, revisers, actors, notificationEvents] = await Promise.all([
     supabase.from("survey_audit_log").select("id,event_type,actor_id,actor_role,reason,previous_values,new_values,created_at").eq("submission_id", id).order("created_at", { ascending: false }),
     supabase.from("survey_revisions").select("id,revision_number,changed_fields,submitted_by,submitted_at").eq("submission_id", id).order("revision_number", { ascending: false }),
     supabase.from("application_users").select("id,display_name").eq("organization_id", profile.organization_id).eq("role", "id").order("display_name"),
     supabase.from("application_users").select("id,display_name").eq("organization_id", profile.organization_id),
+    supabase.from("sme_debrief_notification_events").select("id,revision_number,created_at")
+      .eq("submission_id", id).order("revision_number", { ascending: false }),
   ]);
+  const eventIds = (notificationEvents.data ?? []).map((event) => event.id);
+  const { data: notificationDeliveries } = eventIds.length
+    ? await supabase.from("sme_debrief_notification_deliveries")
+      .select("id,event_id,recipient_application_user_id,status,attempt_count,provider_message_id,last_error,delivered_at,next_attempt_at,updated_at")
+      .in("event_id", eventIds).order("updated_at", { ascending: false })
+    : { data: [] };
   const historicalIds = [...new Set([
     ...(audit.data ?? []).map((event) => event.actor_id),
     ...(revisions.data ?? []).map((revision) => revision.submitted_by),
@@ -56,6 +77,12 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     revisions: (revisions.data ?? []).map((revision) => ({ ...revision, submitted_by_name: actorNames[revision.submitted_by] ?? "Deleted user" })),
     revisers: revisers.data ?? [],
     actors: actorNames,
+    notifications: (notificationDeliveries ?? []).map((delivery) => ({
+      ...delivery,
+      recipient_name: actorNames[delivery.recipient_application_user_id] ?? "Coordinator",
+      revision_number: (notificationEvents.data ?? [])
+        .find((event) => event.id === delivery.event_id)?.revision_number ?? null,
+    })),
   });
 }
 
@@ -105,7 +132,21 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     submit_now: parsed.data.submit,
   });
   if (error) {
-    return NextResponse.json({ error: error.message || "The survey could not be saved." }, { status: error.code === "42501" ? 403 : 400 });
+    const configurationError = error.message?.includes("configured")
+      || error.message?.includes("Reporting Year")
+      || error.message?.includes("Wrike identity")
+      || error.message?.includes("Wrike SME field");
+    return NextResponse.json(
+      { error: error.message || "The survey could not be saved." },
+      { status: error.code === "42501" ? 403 : configurationError ? 409 : 400 },
+    );
+  }
+  const saveResult = data && typeof data === "object" && !Array.isArray(data)
+    ? data as Record<string, unknown> : {};
+  const cleanupObjectKeys = Array.isArray(saveResult.cleanupObjectKeys)
+    ? saveResult.cleanupObjectKeys.filter((key): key is string => typeof key === "string") : [];
+  if (cleanupObjectKeys.length) {
+    await createAdminClient().storage.from("survey-invoices").remove(cleanupObjectKeys);
   }
   if (hiddenDraftObjectKeys.length) {
     await createAdminClient().storage.from("survey-invoices").remove(hiddenDraftObjectKeys);
@@ -119,8 +160,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       .eq("organization_id", profile.organization_id)
       .eq("status", "submitted")
       .maybeSingle();
+    await dispatchPendingSmeDebriefNotifications(10).catch((reason) => {
+      console.error("sme_debrief_notification_dispatch_failed", {
+        submissionId: id,
+        message: reason instanceof Error ? reason.message : "Unknown notification failure",
+      });
+    });
     return NextResponse.json({
-      ...(data && typeof data === "object" && !Array.isArray(data) ? data : {}),
+      ...saveResult,
+      cleanupObjectKeys: undefined,
       submittedAt: receipt?.latest_submitted_at ?? null,
     });
   }

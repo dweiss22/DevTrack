@@ -34,5 +34,7 @@ export async function POST(request: NextRequest) {
   if (accessError) return NextResponse.json({ error: "The account was created, but SME access could not be initialized." }, { status: 500 });
   const { error: emailError } = await admin.auth.resetPasswordForEmail(email, { redirectTo: passwordRecoveryRedirectUrl() });
   return NextResponse.json({ ok: true, emailSent: !emailError,
-    message: emailError ? `${email} was added, but the password email could not be delivered.` : `${email} was added and sent a password setup link.` });
+    message: emailError
+      ? `${email} was added with SME type not configured, but the password email could not be delivered.`
+      : `${email} was added and sent a password setup link. An Admin must configure the SME type before debrief submission.` });
 }

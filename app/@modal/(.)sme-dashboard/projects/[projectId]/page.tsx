@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
 import { SmeProjectDetail, type SmeProjectDetailData } from "@/components/sme-project-detail";
 import { SmeProjectModal } from "@/components/sme-project-modal";
+import { SmeProjectAccessState } from "@/components/sme-project-access-state";
 import { requirePageCapability } from "@/lib/auth";
 import { hasCapability } from "@/lib/auth/roles";
+import { loadSmeProjectDetail } from "@/lib/smes/project-detail";
 
 export default async function SmeProjectInterceptedModal({ params, searchParams }: {
   params: Promise<{ projectId: string }>;
@@ -10,12 +12,19 @@ export default async function SmeProjectInterceptedModal({ params, searchParams 
 }) {
   const { projectId } = await params; const query = await searchParams;
   const { supabase, profile, user } = await requirePageCapability("view_sme_dashboard");
-  const { data, error } = await supabase.rpc("sme_project_detail", {
-    target_task_id: projectId, target_sme_wrike_user_id: query.sme ?? null,
+  const canSelect = profile.access.managementRoles.some((role) =>
+    role === "sme_coordinator" || role === "admin" || role === "super_admin");
+  const result = await loadSmeProjectDetail({
+    supabase, projectId, requestedSme: query.sme, canSelect,
   });
-  if (error || !data) notFound();
-  const detail = data as SmeProjectDetailData;
+  if (!result) notFound();
+  if (!result.ok && result.state === "not_found") notFound();
   const scope = query.scope === "all" ? "all" : "recent";
+  const fallback = `/sme-dashboard?scope=${scope}`;
+  if (!result.ok) return <SmeProjectModal>
+    <SmeProjectAccessState state={result.state} returnTo={fallback} />
+  </SmeProjectModal>;
+  const detail = result.detail;
   const returnTo = `/sme-dashboard?sme=${encodeURIComponent(detail.selectedSmeWrikeUserId)}&scope=${scope}`;
   return <SmeProjectModal><SmeProjectDetail detail={detail} returnTo={returnTo}
     canLaunchSurvey={detail.subjectApplicationUserId === user.id}

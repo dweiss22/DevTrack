@@ -26,7 +26,7 @@ export const QUESTION_TYPES = [
 export type SurveyQuestionType = typeof QUESTION_TYPES[number];
 
 export const QUESTION_WIDTHS = ["full", "half", "third"] as const;
-export const CONTEXT_BINDINGS = ["originalDueYear", "publicationYear", "vertical"] as const;
+export const CONTEXT_BINDINGS = ["originalDueYear", "reportingYear", "publicationYear", "vertical"] as const;
 export const CONDITION_OPERATORS = [
   "equals",
   "not_equals",
@@ -112,7 +112,14 @@ export const surveyDefinitionSchema = z.object({
   })).min(1).max(30),
 }).superRefine((definition, context) => {
   const seen = new Set<string>();
-  const priorQuestions = new Map<string, SurveyQuestionType>();
+  const trustedSmeContextIds = new Set([
+    "internalEmployee", "originalDueYear", "reportingYear", "smeClassification",
+  ]);
+  const priorQuestions = new Map<string, SurveyQuestionType>(
+    definition.surveyType === "course_development_debrief"
+      ? [["internalEmployee", "yes_no"]]
+      : [],
+  );
   let questionCount = 0;
   for (const section of definition.sections) {
     if (seen.has(section.id)) {
@@ -121,6 +128,13 @@ export const surveyDefinitionSchema = z.object({
     seen.add(section.id);
     for (const question of section.questions) {
       questionCount += 1;
+      if (definition.surveyType === "course_development_debrief"
+        && trustedSmeContextIds.has(question.id)) {
+        context.addIssue({
+          code: "custom",
+          message: "SME type and Course Reporting Year are trusted context and cannot be editable questions.",
+        });
+      }
       if (seen.has(question.id)) context.addIssue({ code: "custom", message: `Duplicate identifier: ${question.id}` });
       for (const rule of question.visibility?.rules ?? []) {
         const referencedType = priorQuestions.get(rule.questionId);
@@ -161,7 +175,8 @@ export const surveyDefinitionSchema = z.object({
       if (question.contextBinding === "vertical" && question.type !== "single_choice") {
         context.addIssue({ code: "custom", message: "Vertical bindings require a single-choice question." });
       }
-      if ((question.contextBinding === "originalDueYear" || question.contextBinding === "publicationYear")
+      if ((question.contextBinding === "originalDueYear" || question.contextBinding === "reportingYear"
+          || question.contextBinding === "publicationYear")
         && question.type !== "number") {
         context.addIssue({ code: "custom", message: "Year bindings require a number question." });
       }
@@ -223,7 +238,7 @@ export const INITIAL_SURVEY_DEFINITIONS: Record<SurveyType, SurveyDefinition> = 
             id: "internalEmployee", type: "yes_no", label: "Are you an internal Lexipol employee?",
             helpText: "", required: true, width: "half", validation: {},
           },
-        ],
+        ].filter((question) => !["originalDueYear", "internalEmployee"].includes(question.id)) as SurveyDefinition["sections"][number]["questions"],
       },
       {
         id: "billing",
@@ -413,6 +428,14 @@ export function questionIsVisible(question: SurveyQuestion, answers: SurveyAnswe
 
 export function applyContextBindings(definition: SurveyDefinition, answers: SurveyAnswers, context: Record<string, unknown>) {
   const next = { ...answers };
+  if (definition.surveyType === "course_development_debrief") {
+    if (context.smeClassification === "internal") next.internalEmployee = true;
+    else if (context.smeClassification === "external") next.internalEmployee = false;
+    else delete next.internalEmployee;
+    delete next.originalDueYear;
+    delete next.reportingYear;
+    delete next.smeClassification;
+  }
   for (const question of orderedQuestions(definition)) {
     if (!question.contextBinding) continue;
     const value = context[question.contextBinding];
@@ -501,8 +524,8 @@ export function responseRecordToAnswers(type: SurveyType, response: Record<strin
   if (type === "course_development_debrief") {
     return {
       ...common,
-      originalDueYear: response.original_due_year ?? "",
-      internalEmployee: response.internal_employee ?? "",
+      internalEmployee: response.sme_classification === "internal"
+        ? true : response.sme_classification === "external" ? false : response.internal_employee ?? "",
       billableHours: response.billable_hours ?? "",
       amountBilled: response.amount_billed ?? "",
       workStartedOn: response.work_started_on ?? "",

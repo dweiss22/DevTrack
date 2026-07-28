@@ -12,6 +12,8 @@ import {
   type SurveyAnswers,
   type SurveyDefinition,
 } from "@/lib/surveys/definition";
+import { smeClassificationLabel } from "@/lib/smes/domain";
+import type { NotificationDeliveryStatus } from "@/lib/notifications/types";
 
 type Detail = {
   submission: {
@@ -27,6 +29,11 @@ type Detail = {
   viewer: { role: string; canEdit: boolean; canManage: boolean };
   audit?: { id: number; event_type: string; actor_role: string; actor_name: string; reason: string | null; created_at: string }[];
   revisions?: { id: string; revision_number: number; submitted_at: string; submitted_by_name: string }[];
+  notifications?: {
+    id: string; recipient_name: string; status: NotificationDeliveryStatus; attempt_count: number;
+    provider_message_id: string | null; last_error: string | null; delivered_at: string | null;
+    next_attempt_at: string; revision_number: number | null;
+  }[];
 };
 
 export function SurveyDialog({
@@ -87,7 +94,7 @@ export function SurveyDialog({
     setCritical(true);
     fetch("/api/surveys", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ taskId, reviewedWrikeUserId: initialSmeWrikeId ?? null }),
+      body: JSON.stringify({ taskId, surveyType, reviewedWrikeUserId: initialSmeWrikeId ?? null }),
     }).then(async (response) => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Survey context is unavailable.");
@@ -202,6 +209,9 @@ export function SurveyDialog({
           <span>Survey version {detail.versionNumber}</span><span>Response revision {detail.submission.revision_number}</span>
         </div>
         <ContextHeader context={context} />
+        {typeof context.configurationMessage === "string" && context.configurationMessage
+          ? <p className="notice warning" role="status">{context.configurationMessage}</p>
+          : null}
         {message && <p className={message.includes("saved") || message.includes("uploaded") || message.includes("removed") ? "notice" : "notice warning"} role="status">{message}</p>}
         <SurveyRenderer definition={detail.definition} answers={answers}
           onChange={(id, value) => { setAnswers((current) => ({ ...current, [id]: value })); setFieldErrors((current) => ({ ...current, [id]: "" })); }}
@@ -209,6 +219,10 @@ export function SurveyDialog({
           onUpload={editable ? upload : undefined} onRemove={editable ? remove : undefined} onDownload={download} />
         {detail.viewer.canManage && <AdminSurveyControls detail={detail} apiBase={apiBase} critical={critical}
           setCritical={setCritical} setMessage={setMessage} reload={() => loadDetail(detail.submission.id)} />}
+        {detail.viewer.canManage && detail.notifications ? <NotificationDeliveryPanel
+          detail={detail} apiBase={apiBase} critical={critical}
+          setCritical={setCritical} setMessage={setMessage}
+          reload={() => loadDetail(detail.submission.id)} /> : null}
         <footer className="survey-actions">
           <button type="button" className="secondary" onClick={close} disabled={critical}>Close</button>
           {editable && <><button type="button" className="secondary" onClick={() => void save(false)} disabled={critical}>{detail.definition.buttons.saveDraft}</button>
@@ -221,14 +235,59 @@ export function SurveyDialog({
   </dialog>;
 }
 
+function NotificationDeliveryPanel({ detail, apiBase, critical, setCritical, setMessage, reload }: {
+  detail: Detail;
+  apiBase: string;
+  critical: boolean;
+  setCritical: (value: boolean) => void;
+  setMessage: (value: string) => void;
+  reload: () => Promise<void>;
+}) {
+  async function retry(deliveryId: string) {
+    setCritical(true); setMessage("");
+    try {
+      const response = await fetch(`${apiBase}/${detail.submission.id}/notifications`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deliveryId }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Notification retry failed.");
+      setMessage("Notification retry requested."); await reload();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Notification retry failed.");
+    } finally { setCritical(false); }
+  }
+  return <section className="survey-admin card" aria-labelledby="notification-delivery-heading">
+    <h2 id="notification-delivery-heading">Coordinator notifications</h2>
+    {detail.notifications?.length ? <div className="admin-table-wrap"><table><thead><tr>
+      <th>Recipient</th><th>Status</th><th>Attempts</th><th>Delivery</th><th>Action</th>
+    </tr></thead><tbody>{detail.notifications.map((delivery) => <tr key={delivery.id}>
+      <td>{delivery.recipient_name}<br /><span className="muted">Revision {delivery.revision_number ?? "—"}</span></td>
+      <td><span className={`survey-status ${delivery.status}`}>{delivery.status.replaceAll("_", " ")}</span></td>
+      <td>{delivery.attempt_count}</td>
+      <td>{delivery.delivered_at ? new Date(delivery.delivered_at).toLocaleString()
+        : delivery.last_error ? <span className="error">{delivery.last_error}</span>
+          : `Next attempt ${new Date(delivery.next_attempt_at).toLocaleString()}`}</td>
+      <td>{delivery.status !== "delivered" ? <button className="secondary" type="button"
+        disabled={critical} onClick={() => void retry(delivery.id)}>Retry</button> : "Delivered"}</td>
+    </tr>)}</tbody></table></div> : <p className="empty">No Coordinator notification was queued for this submission.</p>}
+  </section>;
+}
+
 function ContextHeader({ context }: { context: Record<string, unknown> }) {
   return <dl className="survey-context">
     <div><dt>Course</dt><dd>{String(context.taskTitle ?? "Unavailable")}</dd></div>
     <div><dt>Workflow status</dt><dd>{String(context.status ?? "Unavailable")}</dd></div>
     <div><dt>SME</dt><dd>{String((context.subject as Record<string, unknown> | undefined)?.name ?? "See assignment context")}</dd></div>
-    <div><dt>Reporting year</dt><dd>{String(context.reportingYear ?? "Unavailable")}</dd></div>
-    <div><dt>Publication year</dt><dd>{String(context.publicationYear ?? "Unavailable")}</dd></div>
-    <div><dt>Original due year</dt><dd>{String(context.originalDueYear ?? "Unavailable")}</dd></div>
+    {context.smeClassification != null || context.configurationCode === "classification_missing"
+      ? <div><dt>SME type</dt><dd>{smeClassificationLabel(
+        context.smeClassification === "internal" || context.smeClassification === "external"
+          ? context.smeClassification : null,
+      )}</dd></div> : null}
+    {context.reportingYear != null || context.smeClassification != null
+      ? <div><dt>Course Reporting Year</dt><dd>{String(context.reportingYear ?? "Unavailable")}</dd></div> : null}
+    {context.publicationYear != null
+      ? <div><dt>Publication year</dt><dd>{String(context.publicationYear)}</dd></div> : null}
   </dl>;
 }
 

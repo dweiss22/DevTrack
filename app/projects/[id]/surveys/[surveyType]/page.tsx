@@ -13,7 +13,7 @@ export default async function DirectSurvey({ params, searchParams }: { params: P
   const query = await searchParams;
   const surveyType = surveyTypeFromSlug(slug);
   if (!surveyType) notFound();
-  const { profile, supabase } = await requirePageCapability("view_personal_surveys");
+  const { profile, supabase, user } = await requirePageCapability("view_personal_surveys");
   if (surveyType === "course_development_debrief"
     && profile.access.operationalRoles.includes("sme")) {
     const { data: submittedAt } = await supabase.rpc("survey_sme_submission_receipt", {
@@ -27,7 +27,25 @@ export default async function DirectSurvey({ params, searchParams }: { params: P
       </AppShell>;
     }
   }
-  const { data: context, error } = await supabase.rpc("survey_context_for_task", { target_task_id: id, requested_type: surveyType });
+  const { data: baseContext, error } = await supabase.rpc("survey_context_for_task", {
+    target_task_id: id, requested_type: surveyType,
+  });
+  let context = baseContext;
+  if (!error && surveyType === "course_development_debrief"
+    && profile.access.operationalRoles.includes("sme")) {
+    const { data: configuration } = await supabase.rpc("sme_debrief_configuration", {
+      target_task_id: id, target_application_user_id: user.id,
+    });
+    const trusted = configuration as {
+      code?: string; message?: string; context?: Record<string, unknown>;
+    } | null;
+    context = {
+      ...(baseContext as Record<string, unknown>),
+      ...(trusted?.context ?? {}),
+      configurationCode: trusted?.code,
+      configurationMessage: trusted?.message,
+    };
+  }
   if (error || !context) notFound();
   return <>
     <AppShell isAdmin={isAdministratorRole(profile.role)}>

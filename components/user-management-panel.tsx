@@ -2,6 +2,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { roleLabel, type ApplicationRole, type ManagementRole, type OperationalRole } from "@/lib/auth/roles";
+import { smeClassificationLabel, type SmeClassification } from "@/lib/smes/domain";
 
 export type ManagedMember = {
   id: string; name: string; email: string; role: ApplicationRole; createdAt: string;
@@ -9,6 +10,8 @@ export type ManagedMember = {
   profileCompleted: boolean; personaWrikeUserId: string | null;
   operationalRoles: OperationalRole[]; managementRoles: ManagementRole[]; accessWrikeUserId: string | null;
   deletionJobId: string | null;
+  smeClassification: SmeClassification | null;
+  smeClassificationUpdatedAt: string | null;
 };
 type IdentityOption = { id: string; name: string; email: string | null };
 type DeletionPreview = {
@@ -30,6 +33,7 @@ export function UserManagementPanel({ members, identities, personaIdentities, ma
   const [deletionTarget, setDeletionTarget] = useState<ManagedMember | null>(null);
   const [deletionPreview, setDeletionPreview] = useState<DeletionPreview | null>(null);
   const [deletionStage, setDeletionStage] = useState("");
+  const [inviteRole, setInviteRole] = useState<OperationalRole>("id");
 
   async function request(url: string, method: string, body: unknown, success: string) {
     setSubmitting(url); setMessage(""); setError(false);
@@ -47,7 +51,11 @@ export function UserManagementPanel({ members, identities, personaIdentities, ma
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const email = String(form.get("email") ?? "");
-    void request("/api/admin/users/invitations", "POST", { email, role: form.get("role") }, `${email.trim().toLowerCase()} was added to DevTrack.`);
+    void request("/api/admin/users/invitations", "POST", {
+      email,
+      role: form.get("role"),
+      smeClassification: form.get("role") === "sme" ? form.get("smeClassification") : undefined,
+    }, `${email.trim().toLowerCase()} was added to DevTrack.`);
     event.currentTarget.reset();
   }
 
@@ -119,7 +127,14 @@ export function UserManagementPanel({ members, identities, personaIdentities, ma
       <div className="section-heading"><div><p className="eyebrow">APP-MANAGED ACCESS</p><h2 id="add-user-title">Add user</h2></div><p>Creates active DevTrack access immediately and emails the standard password link.</p></div>
       <form className="user-invite-form" onSubmit={addUser}>
         <label>Email address<input name="email" type="email" autoComplete="email" maxLength={320} required placeholder="person@example.com" /></label>
-        <label>Initial operational role<select name="role" defaultValue="id"><option value="id">ID</option><option value="sme">SME</option></select></label>
+        <label>Initial operational role<select name="role" value={inviteRole}
+          onChange={(event) => setInviteRole(event.target.value as OperationalRole)}>
+          <option value="id">ID</option><option value="sme">SME</option></select></label>
+        {inviteRole === "sme" ? <label>SME type<select name="smeClassification" required defaultValue="">
+          <option value="" disabled>Select SME type</option>
+          <option value="internal">Internal SME</option>
+          <option value="external">External SME</option>
+        </select></label> : null}
         <button disabled={Boolean(submitting) || impersonating}>{submitting === "/api/admin/users/invitations" ? "Adding user…" : "Add user"}</button>
       </form>
       <p className="muted">Grant Admin or SME Coordinator access after adding the user in Operational and app management roles.</p>
@@ -128,7 +143,7 @@ export function UserManagementPanel({ members, identities, personaIdentities, ma
 
     <section className="user-members-section" aria-labelledby="organization-members-title">
       <div className="section-heading"><div><h2 id="organization-members-title">Organization members</h2></div><p>{members.length} active</p></div>
-      {members.length ? <div className="admin-table-wrap"><table><thead><tr><th>User</th><th>Email</th><th>Access profile</th><th>Wrike identity / persona</th><th>Added</th><th>Actions</th></tr></thead><tbody>{members.map((member) => {
+      {members.length ? <div className="admin-table-wrap"><table><thead><tr><th>User</th><th>Email</th><th>Access profile</th><th>SME type</th><th>Wrike identity / persona</th><th>Added</th><th>Actions</th></tr></thead><tbody>{members.map((member) => {
         const locked = member.role === "super_admin";
         const persona = locked && managerRole === "super_admin" && member.id === managerId;
         const identityOption = identities.find((identity) => identity.id === member.accessWrikeUserId);
@@ -140,6 +155,20 @@ export function UserManagementPanel({ members, identities, personaIdentities, ma
             {member.managementRoles.map((role) => <span className="role-chip" key={role}>{role === "sme_coordinator" ? "SME Coordinator" : role === "admin" ? "Admin" : "SuperAdmin"}</span>)}
             {!member.operationalRoles.length && !member.managementRoles.length ? <span className="muted">No active roles</span> : null}
           </div>}</td>
+          <td>{member.operationalRoles.includes("sme") ? <label>
+            <span className="sr-only">SME type for {member.name}</span>
+            <select aria-label={`SME type for ${member.name}`} value={member.smeClassification ?? ""}
+              disabled={Boolean(submitting) || impersonating}
+              onChange={(event) => request(`/api/admin/users/${member.id}/sme-classification`, "PATCH",
+                { classification: event.target.value }, `SME type updated for ${member.email}.`)}>
+              <option value="" disabled>SME type not configured</option>
+              <option value="internal">Internal SME</option>
+              <option value="external">External SME</option>
+            </select>
+            <span className="muted">{smeClassificationLabel(member.smeClassification)}
+              {member.smeClassificationUpdatedAt ? ` · Updated ${new Date(member.smeClassificationUpdatedAt).toLocaleDateString()}` : ""}
+            </span>
+          </label> : "Not applicable"}</td>
           <td>{persona ? <label>ID operational persona<select aria-label="ID operational persona" value={member.personaWrikeUserId ?? ""} disabled={Boolean(submitting) || impersonating} onChange={(event) => request(`/api/admin/users/${member.id}/operational-personas/id`, event.target.value ? "PUT" : "DELETE", event.target.value ? { wrikeUserId: event.target.value } : {}, event.target.value ? "ID persona assigned." : "ID persona removed.")}><option value="">Not assigned</option>{personaIdentities.map((identity) => <option key={identity.id} value={identity.id}>{identity.name}{identity.email ? ` (${identity.email})` : ""}</option>)}</select></label> : member.operationalRoles.length ? identityOption ? <>{identityOption.name}{identityOption.email ? <><br /><span className="muted">{identityOption.email}</span></> : null}</> : <span className="muted">Not mapped</span> : "Not applicable"}</td>
           <td>{new Date(member.createdAt).toLocaleDateString()}</td>
           <td><div className="table-actions">{member.accountState === "deletion_pending" && member.deletionJobId && !impersonating ? <button className="secondary danger" type="button" disabled={Boolean(submitting)} onClick={() => { setDeletionTarget(member); setDeletionStage("Resuming deletion…"); void advanceDeletion(member.deletionJobId!); }}>Retry deletion</button> : canManageTarget(member) ? <><button className="secondary" type="button" onClick={() => setImpersonationTarget(member)}>Log in as</button><button className="secondary danger" type="button" onClick={() => void openDeletion(member)}>Delete user</button></> : <span className="muted">Protected</span>}</div></td>

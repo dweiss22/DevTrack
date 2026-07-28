@@ -9,6 +9,8 @@ const migration = source("supabase/migrations/202607230008_restricted_sme_projec
 const securityMigration = source("supabase/migrations/202607280005_strict_dashboard_assignments_and_sme_survey_lock.sql");
 const smeProject = source("components/sme-project-detail.tsx");
 const smeProjectPage = source("app/sme-dashboard/projects/[projectId]/page.tsx");
+const smeProjectModal = source("app/@modal/(.)sme-dashboard/projects/[projectId]/page.tsx");
+const smeProjectLoader = source("lib/smes/project-detail.ts");
 const internalProject = source("app/projects/[id]/page.tsx");
 const smeDashboard = source("components/sme-dashboard.tsx");
 const idDashboard = source("components/id-dashboard.tsx");
@@ -16,7 +18,9 @@ const idDashboard = source("components/id-dashboard.tsx");
 describe("restricted SME projects and assigned-ID actions", () => {
   it("routes an SME to a dedicated project page backed by one restricted RPC", () => {
     expect(smeDashboard).toContain("/sme-dashboard/projects/${row.task_id}");
-    expect(smeProjectPage).toContain('rpc("sme_project_detail"');
+    expect(smeProjectPage).toContain("loadSmeProjectDetail");
+    expect(smeProjectModal).toContain("loadSmeProjectDetail");
+    expect(smeProjectLoader).toContain('rpc("sme_project_detail"');
     expect(smeProject).not.toContain('from("wrike_tasks")');
     for (const prohibited of ["Open in Wrike", "raw_data", "wrike_time_entries", "ID review", "survey_audit_log"]) {
       expect(smeProject).not.toContain(prohibited);

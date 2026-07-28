@@ -17,6 +17,22 @@ export async function GET(request: NextRequest) {
   if (error || !data) {
     return NextResponse.json({ error: "Survey context is unavailable." }, { status: !error || error.code === "42501" ? 404 : 400 });
   }
+  if (parsed.data.type === "course_development_debrief"
+    && profile.access.operationalRoles.includes("sme")) {
+    const { data: configuration } = await supabase.rpc("sme_debrief_configuration", {
+      target_task_id: parsed.data.taskId,
+      target_application_user_id: user.id,
+    });
+    const trusted = configuration as {
+      code?: string; message?: string; context?: Record<string, unknown>;
+    } | null;
+    return NextResponse.json({ context: {
+      ...(data as Record<string, unknown>),
+      ...(trusted?.context ?? {}),
+      configurationCode: trusted?.code,
+      configurationMessage: trusted?.message,
+    } });
+  }
   if (profile.role !== "sme") return NextResponse.json({ context: data });
   const { organizationId: _organizationId, taskWrikeId: _taskWrikeId, assignedSmes, ...safeContext } = data as Record<string, unknown>;
   const ownAssignment = Array.isArray(assignedSmes)

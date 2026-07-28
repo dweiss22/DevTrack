@@ -10,7 +10,10 @@ const schema = z.object({
   WRIKE_OAUTH_BASE_URL: z.string().url().default("https://login.wrike.com"),
   WRIKE_API_BASE_URL: z.string().url().default("https://www.wrike.com/api/v4"),
   TOKEN_ENCRYPTION_KEY: z.string().min(32).optional(),
-  CRON_SECRET: z.string().min(24).optional()
+  CRON_SECRET: z.string().min(24).optional(),
+  RESEND_API_KEY: z.string().min(1).optional(),
+  NOTIFICATION_FROM_EMAIL: z.string().email().optional(),
+  NOTIFICATION_REPLY_TO: z.string().email().optional()
 });
 
 type Environment = z.infer<typeof schema>;
@@ -25,7 +28,10 @@ function readEnvironment(): Environment {
     WRIKE_OAUTH_BASE_URL: process.env.WRIKE_OAUTH_BASE_URL,
     WRIKE_API_BASE_URL: process.env.WRIKE_API_BASE_URL,
     TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY,
-    CRON_SECRET: process.env.CRON_SECRET
+    CRON_SECRET: process.env.CRON_SECRET,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    NOTIFICATION_FROM_EMAIL: process.env.NOTIFICATION_FROM_EMAIL,
+    NOTIFICATION_REPLY_TO: process.env.NOTIFICATION_REPLY_TO
   });
 }
 

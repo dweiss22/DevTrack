@@ -19,12 +19,22 @@ export async function handleAttachmentPost(
   if (!idSchema.safeParse(id).success) return unavailable();
   const [{ data: canEdit }, { data: submission }] = await Promise.all([
     supabase.rpc("can_edit_survey", { target_submission_id: id }),
-    supabase.from("survey_submissions").select("id,organization_id,status,revision_number,definition_snapshot").eq("id", id).maybeSingle(),
+    supabase.from("survey_submissions").select("id,organization_id,survey_type,status,revision_number,definition_snapshot").eq("id", id).maybeSingle(),
   ]);
   if (!canEdit || !submission) return unavailable();
   const definition = surveyDefinitionSchema.safeParse(submission.definition_snapshot);
   const form = await request.formData().catch(() => null);
   const questionId = options.forcedQuestionId ?? String(form?.get("questionId") ?? "");
+  if (submission.survey_type === "course_development_debrief" && questionId === "invoice") {
+    const { data: invoiceAllowed } = await supabase.rpc("sme_debrief_invoice_upload_allowed", {
+      target_submission_id: id,
+    });
+    if (!invoiceAllowed) {
+      return NextResponse.json({
+        error: "Invoice upload is available only for a configured External SME.",
+      }, { status: 409 });
+    }
+  }
   const file = form?.get(options.fileField ?? "file");
   const question = definition.success
     ? orderedQuestions(definition.data).find((item) => item.id === questionId && item.type === "file_upload")

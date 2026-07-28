@@ -9,9 +9,11 @@ import {
 } from "@/lib/users/invitations";
 
 export async function POST(request: NextRequest) {
-  const { profile } = await requireCapability("manage_users");
+  const { profile, user } = await requireCapability("manage_users");
   const parsed = invitationInputSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Enter a valid email address and application role." }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({
+    error: "Enter a valid email and select an SME type when inviting an SME.",
+  }, { status: 400 });
 
   const admin = createAdminClient();
   const email = normalizeInvitationEmail(parsed.data.email);
@@ -58,6 +60,37 @@ export async function POST(request: NextRequest) {
       { error: duplicate ? "This email already has an active DevTrack account." : "DevTrack could not add the user to this organization." },
       { status: duplicate ? 409 : 500 },
     );
+  }
+
+  if (parsed.data.role === "sme") {
+    const { error: profileError } = await admin.from("application_user_sme_profiles").upsert({
+      application_user_id: authUser.id,
+      organization_id: profile.organization_id,
+      classification: parsed.data.smeClassification,
+      updated_by: user.id,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "application_user_id" });
+    if (profileError) {
+      await admin.from("application_users").delete().eq("id", authUser.id)
+        .eq("organization_id", profile.organization_id);
+      if (!existingAuthUser) await admin.auth.admin.deleteUser(authUser.id);
+      return NextResponse.json({ error: "The SME account type could not be configured." }, { status: 500 });
+    }
+    const { error: auditError } = await admin.from("application_user_sme_profile_audit").insert({
+      organization_id: profile.organization_id,
+      application_user_id: authUser.id,
+      actor_user_id: user.id,
+      previous_classification: null,
+      classification: parsed.data.smeClassification,
+    });
+    if (auditError) {
+      return NextResponse.json({
+        ok: true,
+        userId: authUser.id,
+        emailSent: false,
+        message: "The SME was added, but the SME-type audit record could not be completed. Review User Management.",
+      });
+    }
   }
 
   const now = new Date().toISOString();
