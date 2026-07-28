@@ -1,5 +1,5 @@
 begin;
-select plan(50);
+select plan(62);
 select has_table('public','survey_submissions','survey submissions exist');
 select has_table('public','course_development_debrief_responses','debrief responses exist');
 select has_table('public','id_sme_review_responses','ID review responses exist');
@@ -50,5 +50,17 @@ select has_function('public','survey_admin_templates',array[]::text[],'admin tem
 select has_function('public','survey_personal_requirements',array[]::text[],'personal assignment list exists');
 select has_function('public','survey_personal_create_or_resume',array['uuid','uuid'],'assignment-bound personal start exists');
 select has_function('public','survey_save_versioned',array['uuid','jsonb','boolean'],'version-aware save exists');
+select has_table('public','survey_historical_import_batches','historical survey import batches exist');
+select has_table('public','survey_historical_import_upload_attempts','historical upload attempts exist');
+select has_table('public','survey_historical_import_column_mappings','historical column mappings exist');
+select has_table('public','survey_historical_import_rows','historical staged rows exist');
+select has_table('public','survey_historical_import_issues','historical row issues exist');
+select has_table('public','survey_historical_import_resolution_audit','historical resolution audit exists');
+select has_table('public','survey_historical_import_integrations','historical canonical links exist');
+select has_column('public','application_user_principals','historical_wrike_user_id','historical principals retain verified Wrike identity');
+select has_column('public','survey_templates','is_import_only','survey templates distinguish import-only definitions');
+select has_column('public','survey_template_versions','version_origin','survey versions retain their origin');
+select has_function('public','integrate_historical_survey_import_batch',array['uuid'],'historical batch integration RPC exists');
+select has_function('public','rollback_historical_survey_import_batch',array['uuid'],'protected historical rollback RPC exists');
 select * from finish();
 rollback;

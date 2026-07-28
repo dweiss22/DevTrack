@@ -34,6 +34,12 @@ type Detail = {
     provider_message_id: string | null; last_error: string | null; delivered_at: string | null;
     next_attempt_at: string; revision_number: number | null;
   }[];
+  historicalImport?: {
+    fingerprint: string; source_row_id: string; batch_id: string; integrated_at: string;
+    row: { row_number: number } | { row_number: number }[];
+    batch: { source_filename: string; source_timezone: string; file_checksum: string }
+      | { source_filename: string; source_timezone: string; file_checksum: string }[];
+  }[];
 };
 
 export function SurveyDialog({
@@ -207,7 +213,11 @@ export function SurveyDialog({
             {detail.submission.is_locked ? "Locked" : detail.submission.status === "submitted" ? "Admin revision" : "Editable"}
           </span>
           <span>Survey version {detail.versionNumber}</span><span>Response revision {detail.submission.revision_number}</span>
+          {detail.viewer.canManage && detail.historicalImport?.length
+            ? <span className="survey-status historical">Historical import</span> : null}
         </div>
+        {detail.viewer.canManage && detail.historicalImport?.length
+          ? <HistoricalImportProvenance integrations={detail.historicalImport} /> : null}
         <ContextHeader context={context} />
         {typeof context.configurationMessage === "string" && context.configurationMessage
           ? <p className="notice warning" role="status">{context.configurationMessage}</p>
@@ -233,6 +243,24 @@ export function SurveyDialog({
       </>}
     </div>
   </dialog>;
+}
+
+function HistoricalImportProvenance({ integrations }: { integrations: NonNullable<Detail["historicalImport"]> }) {
+  return <details className="survey-admin historical-provenance">
+    <summary><strong>Historical import provenance</strong></summary>
+    <div className="admin-table-wrap"><table><thead><tr><th>Source</th><th>Row</th><th>Timezone</th><th>Integrated</th><th>Fingerprint</th></tr></thead>
+      <tbody>{integrations.map((integration) => {
+        const batch = Array.isArray(integration.batch) ? integration.batch[0] : integration.batch;
+        const row = Array.isArray(integration.row) ? integration.row[0] : integration.row;
+        return <tr key={integration.source_row_id}>
+          <td>{batch?.source_filename ?? "Historical CSV"}</td>
+          <td>{row?.row_number ?? "—"}</td>
+          <td>{batch?.source_timezone ?? "—"}</td>
+          <td>{new Date(integration.integrated_at).toLocaleString()}</td>
+          <td><code>{integration.fingerprint.slice(0, 12)}…</code></td>
+        </tr>;
+      })}</tbody></table></div>
+  </details>;
 }
 
 function NotificationDeliveryPanel({ detail, apiBase, critical, setCritical, setMessage, reload }: {

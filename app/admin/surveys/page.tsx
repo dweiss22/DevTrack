@@ -9,6 +9,7 @@ type BrowseRow = {
   is_locked: boolean; revision_number: number; updated_at: string; task_id: string;
   project_title: string; sme_name: string; creator_id: string; creator_name: string;
   vertical: string | null; reporting_year: number | null; publication_year: number | null;
+  is_historical_import?: boolean;
 };
 
 export default async function AdminSurveysPage({ searchParams }: {
@@ -31,12 +32,20 @@ export default async function AdminSurveysPage({ searchParams }: {
     ? await supabase.rpc("survey_browse", { filters, page_number: page, page_size: 50 })
     : { data: [], error: null };
   const rows = (browseResult.data ?? []) as BrowseRow[];
+  const submissionIds = rows.map((row) => row.id);
+  const importedResult = submissionIds.length
+    ? await supabase.from("survey_historical_import_integrations").select("submission_id")
+      .in("submission_id", submissionIds).is("rolled_back_at", null)
+    : { data: [], error: null };
+  const importedSubmissionIds = new Set((importedResult.data ?? []).map((row) => row.submission_id));
+  for (const row of rows) row.is_historical_import = importedSubmissionIds.has(row.id);
   const total = Number(rows[0]?.total_count ?? 0);
   const pages = Math.max(1, Math.ceil(total / 50));
   const pageHref = (target: number) => {
     const next = new URLSearchParams({ ...filters, view: "submissions", page: String(target) });
     return `/admin/surveys?${next}`;
   };
+  const exportHref = `/api/admin/surveys/export?${new URLSearchParams(filters)}`;
 
   return <AppShell isAdmin>
     <header className="page-header"><div><p className="eyebrow">ADMINISTRATIVE FUNCTIONS</p>
@@ -64,13 +73,13 @@ export default async function AdminSurveysPage({ searchParams }: {
           <label>Creator ID<input name="creator" defaultValue={filters.creator ?? ""} /></label>
           <label>Vertical<input name="vertical" defaultValue={filters.vertical ?? ""} /></label>
           <label>Reporting year<input name="reportingYear" type="number" min="1000" max="9999" defaultValue={filters.reportingYear ?? ""} /></label>
-          <div className="filter-actions"><button>Apply filters</button><Link className="button secondary" href="/admin/surveys?view=submissions">Clear</Link></div>
+          <div className="filter-actions"><button>Apply filters</button><Link className="button secondary" href="/admin/surveys?view=submissions">Clear</Link><a className="button secondary" href={exportHref}>Export CSV</a></div>
         </form>
         {browseResult.error ? <p className="card notice error" role="alert">Survey submissions could not be loaded.</p>
           : rows.length ? <div className="dashboard-table-wrap"><table className="survey-list dashboard-project-table"><thead><tr>
             <th>Survey</th><th>Course / SME</th><th>Creator</th><th>Context</th><th>Status</th><th>Updated</th>
           </tr></thead><tbody>{rows.map((row) => <tr key={row.id}>
-            <td data-label="Survey"><Link href={`/admin/surveys/submissions/${row.id}`}>{surveyTitle(row.survey_type)}</Link></td>
+            <td data-label="Survey"><Link href={`/admin/surveys/submissions/${row.id}`}>{surveyTitle(row.survey_type)}</Link>{row.is_historical_import ? <><br /><span className="survey-status historical">Historical import</span></> : null}</td>
             <td data-label="Course / SME"><strong>{row.project_title}</strong><br />{row.sme_name}</td>
             <td data-label="Creator">{row.creator_name}</td>
             <td data-label="Context">{row.vertical ?? "—"}<br />{row.publication_year ? `Publication ${row.publication_year}` : row.reporting_year ? `Reporting ${row.reporting_year}` : "Year unavailable"}</td>

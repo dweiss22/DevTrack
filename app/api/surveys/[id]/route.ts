@@ -40,13 +40,16 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       ? surveyDetailForSme(detail) : detail;
     return NextResponse.json({ ...visibleDetail, viewer: { role: profile.role, canEdit: Boolean(canEdit), canManage: false } });
   }
-  const [audit, revisions, revisers, actors, notificationEvents] = await Promise.all([
+  const [audit, revisions, revisers, actors, notificationEvents, historicalImport] = await Promise.all([
     supabase.from("survey_audit_log").select("id,event_type,actor_id,actor_role,reason,previous_values,new_values,created_at").eq("submission_id", id).order("created_at", { ascending: false }),
     supabase.from("survey_revisions").select("id,revision_number,changed_fields,submitted_by,submitted_at").eq("submission_id", id).order("revision_number", { ascending: false }),
     supabase.from("application_users").select("id,display_name").eq("organization_id", profile.organization_id).eq("role", "id").order("display_name"),
     supabase.from("application_users").select("id,display_name").eq("organization_id", profile.organization_id),
     supabase.from("sme_debrief_notification_events").select("id,revision_number,created_at")
       .eq("submission_id", id).order("revision_number", { ascending: false }),
+    supabase.from("survey_historical_import_integrations")
+      .select("fingerprint,source_row_id,batch_id,integrated_at,row:survey_historical_import_rows!inner(row_number),batch:survey_historical_import_batches!inner(source_filename,source_timezone,file_checksum)")
+      .eq("submission_id", id).is("rolled_back_at", null).order("integrated_at", { ascending: true }),
   ]);
   const eventIds = (notificationEvents.data ?? []).map((event) => event.id);
   const { data: notificationDeliveries } = eventIds.length
@@ -83,6 +86,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       revision_number: (notificationEvents.data ?? [])
         .find((event) => event.id === delivery.event_id)?.revision_number ?? null,
     })),
+    historicalImport: historicalImport.data ?? [],
   });
 }
 

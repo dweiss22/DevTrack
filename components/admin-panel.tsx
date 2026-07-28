@@ -1,5 +1,12 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
+import {
+  HistoricalSurveyImports,
+  type HistoricalColumnMapping,
+  type HistoricalImportBatch,
+  type HistoricalImportIssue,
+  type HistoricalImportRow,
+} from "@/components/historical-survey-imports";
 import { ImportConflictReview, type ImportConflict } from "@/components/import-conflict-review";
 import { UnresolvedReferenceLabel } from "@/components/wrike-reference";
 
@@ -30,9 +37,24 @@ type UnresolvedReference = { id: string; reference_type: "custom_field" | "user"
 type RepairRun = { id: string; status: string; examined_count: number; repaired_count: number; unchanged_count: number; unresolved_count: number; conflicting_count: number; failed_count: number; retained_count: number; still_incomplete_count: number; started_at: string; completed_at: string | null; error_summary: string | null };
 type VerticalDiagnosticProject = { projectId: string; projectTitle: string; wrikeTaskId: string; verticalFieldIds: string[]; verticalFieldTitles: string[]; rawStoredValue: unknown; parsedDisplayValues: string[]; normalizedResult: string[]; reason: string; verticalState: string; lastSynchronizedAt: string | null; lastRepairedAt: string | null };
 type VerticalDiagnostics = { quality?: Record<string, unknown> | null; repair?: { generatedAt?: string; counts?: Record<string, number>; projects?: VerticalDiagnosticProject[] } | null };
-type Props = { connection: Connection; folderRuns: FolderRun[]; folders: ConfiguredFolder[]; unresolvedReferences: UnresolvedReference[]; verticalDiagnostics: VerticalDiagnostics | null; verticalDiagnosticsError: string | null; repairRuns: RepairRun[]; importConflicts: ImportConflict[]; importConflictCount: number; importConflictError: string | null };
+type Props = {
+  connection: Connection;
+  folderRuns: FolderRun[];
+  folders: ConfiguredFolder[];
+  unresolvedReferences: UnresolvedReference[];
+  verticalDiagnostics: VerticalDiagnostics | null;
+  verticalDiagnosticsError: string | null;
+  repairRuns: RepairRun[];
+  importConflicts: ImportConflict[];
+  importConflictCount: number;
+  importConflictError: string | null;
+  historicalBatches: HistoricalImportBatch[];
+  historicalRows: HistoricalImportRow[];
+  historicalIssues: HistoricalImportIssue[];
+  historicalMappings: HistoricalColumnMapping[];
+};
 
-export function AdminPanel({ connection, folderRuns, folders, unresolvedReferences, verticalDiagnostics, verticalDiagnosticsError, repairRuns, importConflicts, importConflictCount, importConflictError }: Props) {
+export function AdminPanel({ connection, folderRuns, folders, unresolvedReferences, verticalDiagnostics, verticalDiagnosticsError, repairRuns, importConflicts, importConflictCount, importConflictError, historicalBatches, historicalRows, historicalIssues, historicalMappings }: Props) {
   const connected = connection?.status === "connected";
   const needsUserScope = connected && !connection?.oauth_scopes?.includes("amReadOnlyUser");
   const [message, setMessage] = useState("");
@@ -124,6 +146,9 @@ export function AdminPanel({ connection, folderRuns, folders, unresolvedReferenc
     <section className="admin-action-card"><div><p className="eyebrow">ASSOCIATED VERTICAL</p><h2>Diagnostics and explicit repair</h2><p>This administrator-only action rebuilds every eligible detail-verified project from stored Wrike values, verifies each normalized value after persistence, and refreshes reporting. It never changes source Wrike data.</p></div><div className="filter-bar"><button onClick={repairVerticals} disabled={!connected || importing}>{importing ? "Repair running…" : "Repair Vertical data"}</button></div>{verticalDiagnosticsError ? <p className="notice error">Vertical diagnostics require the latest database migration: {verticalDiagnosticsError}</p> : verticalDiagnostics ? <VerticalRepairDiagnostics diagnostics={verticalDiagnostics} /> : <p className="empty">No diagnostic result is available.</p>}</section>
       </div>
       <div className="admin-history-toolbar"><a className="button secondary" href="#data-history">View run history</a></div>
+    </AdminDisclosure>
+    <AdminDisclosure title="Historical survey imports" description="Stage, reconcile, and integrate legacy survey CSVs without granting imported identities application access." count={`${historicalBatches.length} batch${historicalBatches.length === 1 ? "" : "es"}`} defaultOpen={historicalIssues.length > 0}>
+      <HistoricalSurveyImports batches={historicalBatches} rows={historicalRows} issues={historicalIssues} mappings={historicalMappings} />
     </AdminDisclosure>
     <AdminDisclosure title="Connection & source folders" description="Manage the Wrike connection and review the folders included in synchronization.">
     <div className="admin-grid">
