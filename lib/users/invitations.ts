@@ -3,9 +3,10 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 
 export const applicationRoleSchema = z.enum(["admin", "id", "sme"]);
+export const operationalInvitationRoleSchema = z.enum(["id", "sme"]);
 export const invitationInputSchema = z.object({
   email: z.string().trim().email().max(320),
-  role: applicationRoleSchema,
+  role: operationalInvitationRoleSchema,
 });
 
 export function normalizeInvitationEmail(email: string) {

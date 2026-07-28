@@ -38,4 +38,19 @@ describe("additive SME access", () => {
     expect(source("components/sme-project-detail.tsx")).toContain("minor-change review period has passed");
     expect(source("app/@modal/(.)sme-dashboard/projects/[projectId]/page.tsx")).toContain("SmeProjectModal");
   });
+
+  it("assigns Admin as an additive app-management role instead of an invitation role", () => {
+    const accessPanel = source("components/additive-access-panel.tsx");
+    const userPanel = source("components/user-management-panel.tsx");
+    const invitations = source("lib/users/invitations.ts");
+    const compatibility = source("supabase/migrations/202607280003_additive_admin_compatibility.sql");
+    expect(accessPanel).toContain('{ role: "admin", enabled: event.target.checked }');
+    expect(accessPanel).toContain("canGrantAdmin");
+    expect(userPanel).not.toContain('<option value="admin">Admin</option>');
+    expect(invitations).toContain('operationalInvitationRoleSchema = z.enum(["id", "sme"])');
+    expect(compatibility).toContain("sync_additive_admin_legacy_role");
+    expect(compatibility).toContain("insert into public.application_user_operational_personas");
+    expect(compatibility).toContain("set role='admin'");
+    expect(compatibility).toContain("set role=fallback_role");
+  });
 });

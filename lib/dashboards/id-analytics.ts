@@ -48,7 +48,7 @@ export const EMPTY_ID_DASHBOARD_ANALYTICS: IdDashboardAnalytics = {
   timeDataSynchronized: false,
   developmentTimeByYear: [],
   categoryTime: {
-    denominatorDefinition: "Distinct ID-assigned projects on which the selected ID logged time in the selected period.",
+    denominatorDefinition: "Distinct ID-assigned projects on which the selected ID logged time, grouped by course reporting year.",
     allTime: EMPTY_PERIOD,
     years: [],
   },
@@ -127,7 +127,7 @@ function normalizeCategoryPeriod(value: unknown, fallbackYear: number | null): I
         averageMinutes: Number(category.averageMinutes ?? 0),
         totalMinutes: Number(category.totalMinutes ?? 0),
         percentage: Number(category.percentage ?? 0),
-      }))
+      })).filter((category) => category.totalMinutes > 0)
       : [],
   };
 }

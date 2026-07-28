@@ -55,8 +55,11 @@ describe("role-aware dashboard behavior", () => {
     expect(surveyBrowseFix).not.toContain("where id=auth.uid()");
   });
 
-  it("maps both ID and SME accounts without adding a role system", () => {
-    expect(source("components/user-management-panel.tsx")).toContain('member.role === "sme" || member.role === "id"');
+  it("maps combined ID and SME operational roles to one verified identity", () => {
+    const additiveAccess = source("components/additive-access-panel.tsx");
+    expect(additiveAccess).toContain('toggleRole("id"');
+    expect(additiveAccess).toContain('toggleRole("sme"');
+    expect(additiveAccess).toContain("member.accessWrikeUserId");
     expect(source("app/api/admin/users/[id]/wrike-identity/route.ts")).toContain('requireCapability("manage_users")');
     expect(migration).toContain("role in ('id','sme')");
   });

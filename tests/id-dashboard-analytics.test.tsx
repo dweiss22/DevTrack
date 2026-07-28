@@ -3,23 +3,33 @@ import path from "node:path";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { IdDashboardAnalyticsSection } from "@/components/id-dashboard-analytics";
+import {
+  CategoryTimeTooltip,
+  DevelopmentTimeTooltip,
+  IdDashboardAnalyticsSection,
+} from "@/components/id-dashboard-analytics";
 import {
   categoryPeriodForYear,
   loadIdDashboardAnalytics,
   normalizeIdDashboardAnalytics,
   type IdDashboardAnalytics,
 } from "@/lib/dashboards/id-analytics";
+import {
+  compactWorkflowCategoryLabel,
+  UNCATEGORIZED_WORKFLOW_COLOR,
+  workflowCategoryColor,
+  WORKFLOW_CATEGORY_PALETTE,
+} from "@/lib/reporting/workflow-category-colors";
 
 const root = process.cwd();
 const source = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
-const migration = source("supabase/migrations/202607270002_id_dashboard_analytics.sql");
+const migration = source("supabase/migrations/202607280004_id_dashboard_reporting_year_analytics.sql");
 
 const analytics: IdDashboardAnalytics = {
   timeDataSynchronized: true,
   developmentTimeByYear: [
     { year: 2023, projectCount: 2, averageMinutes: 180, totalMinutes: 360 },
-    { year: 2024, projectCount: 0, averageMinutes: null, totalMinutes: null },
+    { year: 2024, projectCount: 1, averageMinutes: 0, totalMinutes: 0 },
     { year: 2025, projectCount: 1, averageMinutes: 300, totalMinutes: 300 },
   ],
   categoryTime: {
@@ -45,45 +55,60 @@ const analytics: IdDashboardAnalytics = {
 };
 
 describe("ID Dashboard analytics", () => {
-  it("builds the annual series from the first qualifying assigned-project year through the current year", () => {
-    expect(migration).toContain("first_assignment_year");
-    expect(migration).toContain("generate_series(");
-    expect(migration).toContain("first_year.first_year,current_year");
-    expect(migration).toContain("extract(year from task.completed_at)");
-    expect(migration).toContain("status.dashboard_classification='completed'");
+  it("groups projects and time-entry periods by course reporting year instead of calendar dates", () => {
+    expect(migration).toContain("value.reporting_year");
+    expect(migration).toContain("field.normalized_key in ('reporting','reporting year')");
+    expect(migration).toContain("project.reporting_year");
+    expect(migration).toContain("entry.reporting_year::text");
+    expect(migration).not.toContain("extract(year from task.completed_at)");
+    expect(migration).not.toContain("extract(year from entry.entry_date)");
   });
 
-  it("averages one total logged-time value per completed assigned project and preserves empty years", () => {
+  it("divides the selected ID's total minutes by distinct qualifying projects and preserves zero averages", () => {
     expect(migration).toContain("development_minutes_by_project");
-    expect(migration).toContain("group by project.task_id,project.completion_year");
-    expect(migration).toContain("round(avg(project.total_minutes)::numeric,2)");
-    expect(migration).toContain("when count(project.task_id)=0 then null");
+    expect(migration).toContain("sum(project.total_minutes)::numeric/");
+    expect(migration).toContain("count(distinct project.task_id)");
+    expect(migration).toContain("coalesce(sum(entry.minutes)");
+    expect(migration).toContain("entry.user_id=selected_identity.id");
     expect(analytics.developmentTimeByYear[1]).toEqual({
-      year: 2024, projectCount: 0, averageMinutes: null, totalMinutes: null,
+      year: 2024, projectCount: 1, averageMinutes: 0, totalMinutes: 0,
     });
   });
 
-  it("uses a common distinct-project denominator for all-time and year category averages", () => {
+  it("uses a common distinct-project denominator for all-time and reporting-year category periods", () => {
     expect(migration).toContain("count(distinct entry.task_id)");
     expect(migration).toContain("category.total_minutes::numeric/");
     expect(migration).toContain("period.qualifying_project_count");
     expect(migration).toContain("'all'::text period_key");
-    expect(migration).toContain("extract(year from entry.entry_date)");
+    expect(migration).toContain("entry.reporting_year::text");
     expect(categoryPeriodForYear(analytics, "all").qualifyingProjectCount).toBe(2);
     expect(categoryPeriodForYear(analytics, 2025).categories[0].averageMinutes).toBe(240);
   });
 
-  it("returns only years with qualifying entries to the category selector and keeps uncategorized time", () => {
+  it("returns only reporting years with qualifying entries, keeps uncategorized time, and removes empty categories", () => {
     expect(analytics.categoryTime.years.map((period) => period.year)).toEqual([2024, 2025]);
     expect(categoryPeriodForYear(analytics, 2024).categories[0].name).toBe("Uncategorized");
     expect(migration).toContain("then 'Uncategorized'");
     expect(migration).toContain("category.id is null or category.is_unresolved");
+    expect(migration).toContain("having sum(entry.minutes)>0");
+    const normalized = normalizeIdDashboardAnalytics({
+      timeDataSynchronized: true,
+      categoryTime: {
+        allTime: { categories: [
+          { name: "Empty", totalMinutes: 0, averageMinutes: 0, percentage: 0 },
+          { name: "Development", totalMinutes: 60, averageMinutes: 60, percentage: 100 },
+        ] },
+        years: [],
+      },
+    });
+    expect(normalized.categoryTime.allTime.categories.map((category) => category.name)).toEqual(["Development"]);
   });
 
   it("scopes the RPC to the selected identity, assigned tasks, organization, and authorized roles", () => {
     expect(migration).toContain("public.current_effective_user_id()");
-    expect(migration).toContain("viewer.role not in ('super_admin','admin')");
-    expect(migration).toContain("target_wrike_user_id:=public.current_id_operational_identity()");
+    expect(migration).toContain("public.current_has_management_role('admin')");
+    expect(migration).toContain("public.current_has_management_role('super_admin')");
+    expect(migration).toContain("target_wrike_user_id:=public.current_operational_identity('id')");
     expect(migration).toContain("course_development_person_assignments_with_personas");
     expect(migration).toContain("task.organization_id=viewer.organization_id");
     expect(migration).toContain("entry.organization_id=viewer.organization_id");
@@ -107,15 +132,54 @@ describe("ID Dashboard analytics", () => {
     expect(source("components/id-dashboard-analytics.tsx")).not.toContain('.from("wrike_time_entries")');
   });
 
-  it("renders chart definitions, accessible data, year choices, and honest gap values", () => {
+  it("renders consistent chart definitions, reporting-year choices, zero values, and accessible data", () => {
     const html = renderToStaticMarkup(<IdDashboardAnalyticsSection analytics={analytics} />);
-    expect(html).toContain("Average Development Time by Year");
-    expect(html).toContain("Average Time by Time Entry Category");
+    expect(html).toContain("Average Development Time by Course Reporting Year");
+    expect(html).toContain("Time by Workflow Category");
+    expect(html).toContain("Average hours per project");
+    expect(html).toContain("Course reporting year");
     expect(html).toContain("All time");
     expect(html).toContain("2024");
-    expect(html).toContain("No qualifying projects");
+    expect(html).toContain("0.0");
     expect(html).toContain("Uncategorized");
+    expect(html).toContain("Workflow category legend");
     expect(html).toContain("View accessible data");
+  });
+
+  it("formats both custom tooltips with exact hours and percentages", () => {
+    const development = renderToStaticMarkup(<DevelopmentTimeTooltip active payload={[{
+      payload: analytics.developmentTimeByYear[0],
+    }]} />);
+    expect(development).toContain("Course reporting year 2023");
+    expect(development).toContain("3.0 hours per project");
+    const category = renderToStaticMarkup(<CategoryTimeTooltip active payload={[{
+      payload: analytics.categoryTime.allTime.categories[0],
+    }]} />);
+    expect(category).toContain("Development");
+    expect(category).toContain("Hours: 4.0");
+    expect(category).toContain("Percentage: 80.0%");
+  });
+
+  it("uses one stable workflow-category color mapping and compact legend labels everywhere", () => {
+    expect(workflowCategoryColor("Development")).toBe(workflowCategoryColor(" development "));
+    expect(WORKFLOW_CATEGORY_PALETTE).toContain(workflowCategoryColor("Development") as never);
+    expect(workflowCategoryColor("Uncategorized")).toBe(UNCATEGORIZED_WORKFLOW_COLOR);
+    expect(compactWorkflowCategoryLabel("A workflow category with an unusually long display name", 20)).toBe("A workflow category…");
+    for (const component of [
+      "components/id-dashboard-analytics.tsx",
+      "components/project-time-analytics.tsx",
+      "components/sme-project-category-chart.tsx",
+    ]) expect(source(component)).toContain("workflowCategoryColor");
+  });
+
+  it("keeps the legend beside wide charts, below narrow charts, and allows vertical growth", () => {
+    const css = source("app/globals.css");
+    expect(css).toContain(".id-dashboard-chart { display: flex;");
+    expect(css).toContain("overflow: visible");
+    expect(css).toContain("@container (min-width: 500px)");
+    expect(css).toContain(".id-category-visual { grid-template-columns:");
+    expect(css).toContain(".id-category-legend span { overflow: hidden;");
+    expect(source("components/id-dashboard-analytics.tsx")).not.toContain("<Legend");
   });
 
   it("renders concise empty and independent analytics-error states", () => {
@@ -125,7 +189,7 @@ describe("ID Dashboard analytics", () => {
       categoryTime: { allTime: {}, years: [] },
     });
     const html = renderToStaticMarkup(<IdDashboardAnalyticsSection analytics={empty} />);
-    expect(html).toContain("No completed, dated projects are available for this ID.");
+    expect(html).toContain("No assigned projects with a course reporting year are available for this ID.");
     expect(html).toContain("No qualifying time entries are available for this ID.");
 
     const error = renderToStaticMarkup(<IdDashboardAnalyticsSection analytics={null} error="Analytics failed." />);

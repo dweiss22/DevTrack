@@ -110,13 +110,22 @@ describe("administrator user provisioning", () => {
 
     const response = await POST(new NextRequest("https://devtrack.example/api/admin/users/invitations", {
       method: "POST",
-      body: JSON.stringify({ email: "learner@example.com", role: "admin" }),
+      body: JSON.stringify({ email: "learner@example.com", role: "id" }),
     }));
 
     expect(response.status).toBe(409);
     expect(mocks.createUser).not.toHaveBeenCalled();
     expect(mocks.membershipInsert).not.toHaveBeenCalled();
     expect(mocks.resetPasswordForEmail).not.toHaveBeenCalled();
+  });
+
+  it("requires Admin to be granted after an operational user is added", async () => {
+    const response = await POST(new NextRequest("https://devtrack.example/api/admin/users/invitations", {
+      method: "POST",
+      body: JSON.stringify({ email: "administrator@example.com", role: "admin" }),
+    }));
+    expect(response.status).toBe(400);
+    expect(mocks.createAdminClient).not.toHaveBeenCalled();
   });
 
   it("keeps access active and reports when automatic email delivery fails", async () => {
