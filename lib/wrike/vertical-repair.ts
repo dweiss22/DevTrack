@@ -62,14 +62,10 @@ export async function repairVerticalData(organizationId: string): Promise<Vertic
   }
 
   try {
-    const [{ data: taskData, error: taskError }, { data: fieldData, error: fieldError }] = await Promise.all([
-      db.from("wrike_tasks").select("id,wrike_id,title,raw_data,enriched_metadata,custom_fields_sync_state,custom_fields_sync_diagnostics,vertical_state").eq("organization_id", organizationId).eq("is_deleted", false),
-      db.from("wrike_custom_fields").select("id,wrike_id,title,field_type,raw_data,is_unresolved").eq("organization_id", organizationId)
+    const [tasks, fields] = await Promise.all([
+      loadAllRepairTasks(db, organizationId),
+      loadAllRepairFields(db, organizationId)
     ]);
-    if (taskError) throw new Error(`Supabase could not load tasks for repair: ${taskError.message}`);
-    if (fieldError) throw new Error(`Supabase could not load custom-field definitions for repair: ${fieldError.message}`);
-    const tasks = (taskData ?? []) as TaskRow[];
-    const fields = fieldData ?? [];
     const mappings = await loadCustomFieldManualMappings(db, organizationId);
     const definitions = new Map<string, WrikeCustomFieldDefinition>();
     for (const field of fields) if (!field.is_unresolved && field.raw_data && typeof field.raw_data === "object") definitions.set(field.wrike_id, field.raw_data as WrikeCustomFieldDefinition);
@@ -265,6 +261,7 @@ async function reconcileReadBack(
   let conflicting = 0;
   let failed = 0;
   const failedProjects: { projectTitle: string; wrikeTaskId: string; reason: string }[] = [];
+  const taskUpdates: Record<string, unknown>[] = [];
   for (const task of tasks) {
     const row = persisted.get(task.row.id) ?? null;
     const state = persistedVerticalState(row);
@@ -281,14 +278,58 @@ async function reconcileReadBack(
       });
       continue;
     }
-    await updateResolvedTask(db, organizationId, task, { vertical_state: state, vertical_repaired_at: repairedAt });
+    taskUpdates.push(repairedTaskUpdate(organizationId, task, { vertical_state: state, vertical_repaired_at: repairedAt }));
     const prior = initial.get(task.row.id) ?? null;
     const changed = verticalSnapshotChanged(task.row.vertical_state, prior, state, row);
     if (changed) repaired++; else unchanged++;
     if (state === "missing" || state === "unrecognized") unresolved++;
     if (row?.has_conflict) conflicting++;
   }
+  for (let offset = 0; offset < taskUpdates.length; offset += 500) {
+    const { error } = await db.from("wrike_tasks").upsert(taskUpdates.slice(offset, offset + 500), { onConflict: "id" });
+    if (error) throw new Error(`Supabase could not persist verified Vertical task states: ${error.message}`);
+  }
   return { repaired, unchanged, unresolved, conflicting, failed, failedProjects };
+}
+
+async function loadAllRepairTasks(db: ReturnType<typeof createAdminClient>, organizationId: string) {
+  const rows: TaskRow[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await db.from("wrike_tasks")
+      .select("id,wrike_id,title,raw_data,enriched_metadata,custom_fields_sync_state,custom_fields_sync_diagnostics,vertical_state")
+      .eq("organization_id", organizationId).eq("is_deleted", false)
+      .order("id").range(offset, offset + 999);
+    if (error) throw new Error(`Supabase could not load tasks for repair: ${error.message}`);
+    rows.push(...((data ?? []) as TaskRow[]));
+    if ((data?.length ?? 0) < 1000) return rows;
+  }
+}
+
+async function loadAllRepairFields(db: ReturnType<typeof createAdminClient>, organizationId: string) {
+  const rows: { id: string; wrike_id: string; title: string; field_type: string | null; raw_data: Record<string, unknown> | null; is_unresolved: boolean }[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await db.from("wrike_custom_fields")
+      .select("id,wrike_id,title,field_type,raw_data,is_unresolved")
+      .eq("organization_id", organizationId).order("id").range(offset, offset + 999);
+    if (error) throw new Error(`Supabase could not load custom-field definitions for repair: ${error.message}`);
+    rows.push(...((data ?? []) as typeof rows));
+    if ((data?.length ?? 0) < 1000) return rows;
+  }
+}
+
+function repairedTaskUpdate(
+  organizationId: string,
+  task: ReturnType<typeof resolveTask>,
+  updates: Record<string, unknown>
+) {
+  const enriched = task.row.enriched_metadata && typeof task.row.enriched_metadata === "object" ? task.row.enriched_metadata : {};
+  return {
+    id: task.row.id,
+    organization_id: organizationId,
+    ...updates,
+    enriched_metadata: { ...enriched, customFields: task.fields, customFieldsNormalized: task.normalized },
+    updated_at: new Date().toISOString()
+  };
 }
 
 function snakeCounts(result: VerticalRepairResult) {

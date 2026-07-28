@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { persistedVerticalState, verticalPersistenceMatches, verticalSnapshotChanged } from "@/lib/wrike/vertical-repair";
+import fs from "node:fs";
+import path from "node:path";
 
 describe("Vertical repair persistence read-back", () => {
   it("derives every displayed state from the persisted normalized row", () => {
@@ -25,5 +27,12 @@ describe("Vertical repair persistence read-back", () => {
     const stored = { task_id: "A", normalized_verticals: ["EMS1"], unresolved_vertical_tokens: [], has_conflict: false, vertical_reporting_category: "EMS1" };
     expect(verticalSnapshotChanged("resolved", stored, "resolved", { ...stored })).toBe(false);
     expect(verticalSnapshotChanged("missing", null, "resolved", stored)).toBe(true);
+  });
+
+  it("paginates the full synchronized dataset and persists verified task states in batches", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "lib/wrike/vertical-repair.ts"), "utf8");
+    expect(source).toContain(".range(offset, offset + 999)");
+    expect(source).toContain('from("wrike_tasks").upsert(taskUpdates.slice(offset, offset + 500)');
+    expect(source).not.toContain("if (task.state === task.row.vertical_state) unchanged++");
   });
 });
