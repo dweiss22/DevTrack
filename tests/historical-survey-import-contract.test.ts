@@ -6,6 +6,7 @@ const root = process.cwd();
 const source = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
 const migration = source("supabase/migrations/202607280010_historical_survey_imports.sql");
 const reportingMigration = source("supabase/migrations/202607280011_historical_survey_reporting.sql");
+const identifierFixMigration = source("supabase/migrations/202607280012_fix_historical_survey_version_identifiers.sql");
 const stage = source("lib/surveys/historical-import-server.ts");
 const dataPage = source("app/admin/page.tsx");
 const panel = source("components/historical-survey-imports.tsx");
@@ -48,6 +49,15 @@ describe("historical survey import security and persistence contract", () => {
     expect(migration).toContain("version_origin='historical_import'");
     expect(migration).toContain("not template.is_import_only");
     expect(migration).toContain("and not template.is_import_only");
+  });
+
+  it("uses unambiguous identifiers when creating an import-only survey version", () => {
+    expect(identifierFixMigration).toContain("target_template_id uuid");
+    expect(identifierFixMigration).toContain("target_version_id uuid");
+    expect(identifierFixMigration).toContain("next_version_number integer");
+    expect(identifierFixMigration).toContain("on conflict on constraint survey_template_drafts_pkey do nothing");
+    expect(identifierFixMigration).not.toMatch(/\n\s+template_id uuid;/);
+    expect(identifierFixMigration).not.toContain("on conflict(template_id)");
   });
 
   it("supports non-login historical principals without creating operational access", () => {
