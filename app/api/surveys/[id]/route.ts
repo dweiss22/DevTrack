@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireCapability } from "@/lib/auth";
+import { hasCapability } from "@/lib/auth/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   applyContextBindings,
@@ -20,8 +21,10 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const detail = await loadSurveyDetail(supabase, id);
   if (!detail) return NextResponse.json({ error: "Survey is unavailable." }, { status: 404 });
   const { data: canEdit } = await supabase.rpc("can_edit_survey", { target_submission_id: id });
-  if (profile.role !== "super_admin" && profile.role !== "admin") {
-    const visibleDetail = profile.role === "sme" ? surveyDetailForSme(detail) : detail;
+  if (!hasCapability(profile.access, "manage_surveys")) {
+    const visibleDetail = profile.access.operationalRoles.includes("sme")
+      && detail.submission.survey_type === "course_development_debrief"
+      ? surveyDetailForSme(detail) : detail;
     return NextResponse.json({ ...visibleDetail, viewer: { role: profile.role, canEdit: Boolean(canEdit), canManage: false } });
   }
   const [audit, revisions, revisers, actors] = await Promise.all([
@@ -58,7 +61,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { supabase } = await requireCapability("view_surveys");
+  const { profile, supabase } = await requireCapability("view_surveys");
   const parsed = z.object({
     submit: z.boolean().default(false),
     answers: z.record(z.unknown()),
@@ -106,6 +109,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
   if (hiddenDraftObjectKeys.length) {
     await createAdminClient().storage.from("survey-invoices").remove(hiddenDraftObjectKeys);
+  }
+  if (parsed.data.submit
+    && detail.submission.survey_type === "course_development_debrief"
+    && profile.access.operationalRoles.includes("sme")) {
+    const { data: receipt } = await createAdminClient().from("survey_submissions")
+      .select("latest_submitted_at")
+      .eq("id", id)
+      .eq("organization_id", profile.organization_id)
+      .eq("status", "submitted")
+      .maybeSingle();
+    return NextResponse.json({
+      ...(data && typeof data === "object" && !Array.isArray(data) ? data : {}),
+      submittedAt: receipt?.latest_submitted_at ?? null,
+    });
   }
   return NextResponse.json(data);
 }

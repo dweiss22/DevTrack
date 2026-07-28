@@ -27,7 +27,7 @@ export default async function SmeDashboardPage({ searchParams }: { searchParams:
   return <AppShell isAdmin={isAdministratorRole(profile.access)}>
     <header className="page-header"><div><p className="eyebrow">ASSIGNED COURSE DEVELOPMENT</p>
       <h1>SME Dashboard{selected ? ` — ${selected.display_name}` : ""}</h1>
-      <p>Trusted course assignments, timing, and debrief status for one SME identity.</p></div></header>
+      <p>Projects explicitly assigned through the Wrike SME custom field.</p></div></header>
     <SmeDashboard identities={identities} selected={selected} rows={visibleRows}
       canSelect={canSelect} canLaunchDebrief={profile.access.operationalRoles.includes("sme")
         && hasCapability(profile.access, "create_sme_debrief")}

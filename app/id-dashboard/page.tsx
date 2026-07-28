@@ -56,7 +56,7 @@ export default async function IdDashboardPage({ searchParams }: { searchParams: 
   return <AppShell isAdmin={isAdministratorRole(profile.access)}>
     <header className="page-header"><div><p className="eyebrow">INSTRUCTIONAL DESIGN ASSIGNMENTS</p>
       <h1>ID Dashboard{selected ? ` — ${selected.display_name}` : ""}</h1>
-      <p>Trusted Online Learning ID assignments, including courses whose SME identity still needs resolution.</p></div></header>
+      <p>Online Learning projects explicitly assigned through the Wrike ID Assigned custom field.</p></div></header>
     <IdDashboard identities={identities} selected={selected} rows={enrichedRows}
       canSelect={canSelect} canActAsAssignedId={ownOperationalView} mappingRequired={!canSelect && !selected}
       ownOperationalView={ownOperationalView} analytics={analyticsResult.data}

@@ -6,6 +6,7 @@ import { finalizedCourseDraftUrlSchema } from "@/lib/projects/finalized-draft";
 const root = process.cwd();
 const source = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
 const migration = source("supabase/migrations/202607230008_restricted_sme_projects_and_finalized_drafts.sql");
+const securityMigration = source("supabase/migrations/202607280005_strict_dashboard_assignments_and_sme_survey_lock.sql");
 const smeProject = source("components/sme-project-detail.tsx");
 const smeProjectPage = source("app/sme-dashboard/projects/[projectId]/page.tsx");
 const internalProject = source("app/projects/[id]/page.tsx");
@@ -29,8 +30,11 @@ describe("restricted SME projects and assigned-ID actions", () => {
     }
     expect(smeProject).toContain("Create SME Debrief");
     expect(smeProject).toContain("Resume SME Debrief");
-    expect(smeProject).toContain("View Submitted Debrief");
-    expect(smeProject).toContain("Revise SME Debrief");
+    expect(smeProject).toContain("SurveyReceived");
+    expect(smeProject).not.toContain("View Submitted Debrief");
+    expect(smeProject).not.toContain("Revise SME Debrief");
+    expect(securityMigration).toContain("result#>>'{debrief,status}'='submitted'");
+    expect(securityMigration).toContain("'latestSubmittedAt',submitted_at");
     expect(source("app/api/surveys/context/route.ts")).toContain("taskWrikeId: _taskWrikeId");
     expect(source("app/api/surveys/context/route.ts")).toContain("assignment.applicationUserId === user.id");
     expect(source("lib/surveys/server.ts")).toContain("surveyDetailForSme");

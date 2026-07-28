@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SurveyRenderer, type RenderedSurveyAttachment } from "@/components/survey-renderer";
+import { SurveyReceived } from "@/components/survey-received";
 import { SURVEY_VERTICALS, surveyTitle, type SurveyType } from "@/lib/surveys/domain";
 import {
   applyContextBindings,
@@ -52,6 +53,7 @@ export function SurveyDialog({
   const [baseline, setBaseline] = useState("{}");
   const [state, setState] = useState<"loading" | "ready" | "success" | "error">("loading");
   const [message, setMessage] = useState("");
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [critical, setCritical] = useState(false);
   const dirty = state === "ready" && JSON.stringify(answers) !== baseline;
@@ -129,7 +131,10 @@ export function SurveyDialog({
           [key, Array.isArray(value) ? String(value[0]) : String(value)])));
         throw new Error(data.error ?? "The survey could not be saved.");
       }
-      if (submit) setState("success");
+      if (submit) {
+        setSubmittedAt(typeof data.submittedAt === "string" ? data.submittedAt : new Date().toISOString());
+        setState("success");
+      }
       else {
         setMessage("Draft saved."); await loadDetail(detail.submission.id);
       }
@@ -185,8 +190,9 @@ export function SurveyDialog({
       </header>
       {state === "loading" && <div className="survey-state" role="status"><span className="loading-pulse" />Loading survey…</div>}
       {state === "error" && <div className="survey-state error" role="alert"><h2>Survey unavailable</h2><p>{message}</p><button onClick={close}>Return</button></div>}
-      {state === "success" && detail && <div className="survey-state notice" role="status"><h2>Survey submitted successfully</h2>
-        <p>{detail.definition.completionMessage}</p><button onClick={close}>{detail.definition.buttons.return}</button></div>}
+      {state === "success" && detail && <div className="survey-state notice">
+        <SurveyReceived submittedAt={submittedAt} />
+        <button onClick={close}>{detail.definition.buttons.return}</button></div>}
       {state === "ready" && detail && <>
         <div className="survey-status-row">
           <span className={`survey-status ${detail.submission.status}`}>{detail.submission.status}</span>

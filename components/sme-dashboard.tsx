@@ -1,8 +1,10 @@
 import Link from "next/link";
+import React from "react";
 import { SearchableFilterSelect } from "@/components/searchable-filter-select";
 import { SmeDashboardAnalytics } from "@/components/sme-dashboard-analytics";
+import { SurveyReceived } from "@/components/survey-received";
 import {
-  canonicalDashboardIdentities, dashboardIdentityLabel, submissionHref, surveyActionLabel,
+  canonicalDashboardIdentities, dashboardIdentityLabel, submissionHref,
   surveyHref, type DashboardIdentity, type SurveySummary,
 } from "@/lib/dashboards/domain";
 
@@ -55,8 +57,10 @@ export function SmeDashboard({ identities, selected, rows, canSelect, canLaunchD
             id: row.submission_id, status: row.survey_status, isLocked: Boolean(row.survey_is_locked),
             canEdit: Boolean(row.survey_can_edit), revisionNumber: 1,
           } : null;
-          const href = summary ? submissionHref(summary.id, returnTo)
-            : selected.wrike_user_id ? surveyHref(row.task_id, "course-development-debrief", selected.wrike_user_id, returnTo) : "";
+          const href = summary?.status === "draft" ? submissionHref(summary.id, returnTo)
+            : !summary && selected.wrike_user_id
+              ? surveyHref(row.task_id, "course-development-debrief", selected.wrike_user_id, returnTo)
+              : "";
           const ownsSelection = Boolean(currentUserId && currentUserId === selected.application_user_id);
           const allowed = row.is_recent && canLaunchDebrief && ownsSelection && Boolean(href);
           const projectHref = `/sme-dashboard/projects/${row.task_id}?sme=${encodeURIComponent(selected.wrike_user_id ?? "")}&scope=${scope}`;
@@ -66,11 +70,15 @@ export function SmeDashboard({ identities, selected, rows, canSelect, canLaunchD
               <span className="sme-status-dot" style={{ backgroundColor: row.status_color ?? statusColor(row.status_classification) }} aria-hidden="true" />
               <span className="sr-only">{row.status_name}</span>
             </span></td>
-            <td data-label="Survey">{allowed ? <Link className="button secondary" href={href}>{surveyActionLabel(summary, "survey")}</Link>
-              : row.is_recent && summary ? <span className="muted">{summary.status === "submitted" ? "Submitted" : "Draft"}</span>
-                : <span className="muted">—</span>}</td>
+            <td data-label="Survey">{summary?.status === "submitted"
+              ? <SurveyReceived submittedAt={row.submitted_at} compact />
+              : allowed
+                ? <Link className="button secondary" href={href}>{summary ? "Resume survey" : "Start survey"}</Link>
+                : row.is_recent && summary
+                  ? <span className="muted">Draft</span>
+                  : <span className="muted">—</span>}</td>
           </tr>;
-        })}</tbody></table></div> : <p className="card empty">No assigned projects match this period.</p>}
+        })}</tbody></table></div> : <p className="card empty">No projects in this period explicitly match this Wrike identity in the SME field.</p>}
       </>}
   </>;
 }

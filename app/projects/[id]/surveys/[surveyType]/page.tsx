@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { SurveyDialog } from "@/components/survey-dialog";
+import { SurveyReceived } from "@/components/survey-received";
 import { requirePageCapability } from "@/lib/auth";
 import { isAdministratorRole } from "@/lib/auth/roles";
 import { surveyTitle } from "@/lib/surveys/domain";
@@ -13,6 +14,19 @@ export default async function DirectSurvey({ params, searchParams }: { params: P
   const surveyType = surveyTypeFromSlug(slug);
   if (!surveyType) notFound();
   const { profile, supabase } = await requirePageCapability("view_personal_surveys");
+  if (surveyType === "course_development_debrief"
+    && profile.access.operationalRoles.includes("sme")) {
+    const { data: submittedAt } = await supabase.rpc("survey_sme_submission_receipt", {
+      target_task_id: id,
+    });
+    if (submittedAt) {
+      return <AppShell isAdmin={isAdministratorRole(profile.access)}>
+        <header className="page-header"><div><p className="eyebrow">PROJECT SURVEY</p>
+          <h1>Survey received</h1></div></header>
+        <section className="card"><SurveyReceived submittedAt={submittedAt} /></section>
+      </AppShell>;
+    }
+  }
   const { data: context, error } = await supabase.rpc("survey_context_for_task", { target_task_id: id, requested_type: surveyType });
   if (error || !context) notFound();
   return <>

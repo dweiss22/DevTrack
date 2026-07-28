@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { workflowCategoryColor } from "@/lib/reporting/workflow-category-colors";
 

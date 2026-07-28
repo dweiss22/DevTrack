@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
 
 type AnalyticsRow = {

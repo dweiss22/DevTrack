@@ -71,7 +71,7 @@ export function IdDashboard({ identities, selected, rows, canSelect, canActAsAss
         : <>
           <p className="card dashboard-identity-note"><strong>{ownOperationalView ? "My assigned ID projects" : "Administrative ID view"}</strong><br />
             Showing assignments for <strong>{selected.display_name}</strong>.
-            {" The ID/owner field is authoritative when present; mapped Wrike assignees are used only when that field is empty."}
+            {" Only exact name matches from the configured Wrike ID Assigned field are included."}
             {canSelect && !ownOperationalView ? " This selection is read-only and does not grant project actions or survey credit." : ""}</p>
           <IdDashboardAnalyticsSection key={selected.wrike_user_id} analytics={analytics} error={analyticsError} />
           {rows.length ? <div className="dashboard-table-wrap"><table className="dashboard-project-table id-dashboard-table"><thead><tr>
@@ -106,7 +106,7 @@ export function IdDashboard({ identities, selected, rows, canSelect, canActAsAss
                   : <span className="muted">{row.own_review ? surveyActionLabel(row.own_review, "review") : "No review by selected ID"}</span>}
               </div></td>
             </tr>;
-          })}</tbody></table></div> : <p className="card empty">No synchronized, undeleted Online Learning projects have a trusted ID/owner assignment for this identity.</p>}
+          })}</tbody></table></div> : <p className="card empty">No synchronized Online Learning projects explicitly match this Wrike identity in the ID Assigned field.</p>}
         </>}
   </>;
 }
