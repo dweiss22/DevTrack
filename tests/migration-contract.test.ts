@@ -33,6 +33,7 @@ const sortableProjectTablesMigration = fs.readFileSync(path.join(process.cwd(), 
 const courseTypeFilteringMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220004_course_type_filtering.sql"), "utf8");
 const verticalLegacyAliasesMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220005_vertical_legacy_aliases.sql"), "utf8");
 const superAdminDataAccessMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607230006_restore_superadmin_data_access.sql"), "utf8");
+const reliableVerticalRepairMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607280007_reliable_vertical_repair.sql"), "utf8");
 
 function sqlFunctionDefinition(sql: string, name: string) {
   const start = sql.indexOf(`create or replace function public.${name}`);
@@ -212,6 +213,19 @@ describe("reporting migration contract", () => {
     }
     expect(verticalLegacyAliasesMigration).toContain("cardinality(vertical.unresolved_vertical_tokens),0)=0");
     expect(verticalLegacyAliasesMigration).toContain("task.vertical_state='unrecognized'");
+  });
+  it("repairs every stored Vertical from authoritative values with read-back diagnostics", () => {
+    expect(reliableVerticalRepairMigration).toContain("parse_wrike_vertical_tokens");
+    expect(reliableVerticalRepairMigration).toContain("jsonb_array_elements_text(parsed)");
+    expect(reliableVerticalRepairMigration).toContain("source_values=value.source_values");
+    expect(reliableVerticalRepairMigration).toContain("vertical_repaired_at");
+    expect(reliableVerticalRepairMigration).toContain("unresolved_count");
+    expect(reliableVerticalRepairMigration).toContain("conflicting_count");
+    expect(reliableVerticalRepairMigration).toContain("failed_count");
+    expect(reliableVerticalRepairMigration).toContain("reporting_vertical_repair_diagnostics");
+    expect(reliableVerticalRepairMigration).toContain("public.current_has_capability('manage_data')");
+    expect(reliableVerticalRepairMigration).not.toContain("Gang Awareness");
+    expect(reliableVerticalRepairMigration).not.toContain("Head Injuries");
   });
   it("strictly parses Reporting course years and scopes dashboard work before time aggregation", () => {
     expect(reportingPerformanceMigration).toContain("Courses$','i'");

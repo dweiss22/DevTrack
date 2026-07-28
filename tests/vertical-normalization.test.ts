@@ -14,6 +14,20 @@ describe("controlled Vertical normalization", () => {
     expect(normalizeVerticalValue(input).normalizedVerticals).toEqual(expected);
   });
 
+  it.each([
+    ["Gang Awareness observed modern value", '["P1A"]', ["P1A"]],
+    ["Head Injuries observed legacy value", '["EMS1A"]', ["EMS1"]],
+    ["Head Injuries observed current value", '["EMS1"]', ["EMS1"]],
+    ["Social Media observed legacy value", '["P1A"]', ["P1A"]],
+    ["De-escalation observed modern value", '[\\"P1A\\"]', ["P1A"]]
+  ])("normalizes the %s format", (_name, input, expected) => {
+    expect(normalizeVerticalValue(input)).toMatchObject({ normalizedVerticals: expected, verticalState: "resolved", rejectedTokens: [] });
+  });
+
+  it.each([" p-1-a ", "P.1.A", "P_1_A"])("normalizes harmless punctuation in approved values: %j", (input) => {
+    expect(normalizeVerticalValue(input).normalizedVerticals).toEqual(["P1A"]);
+  });
+
   it("reports multiple approved values once as Cross Vertical", () => {
     expect(normalizeVerticalValue("Wellness; P1A")).toMatchObject({
       normalizedVerticals: ["P1A", "Wellness"], reportingCategory: "Cross Vertical", isCrossVertical: true, hasUnresolvedVertical: false
@@ -51,6 +65,14 @@ describe("controlled Vertical normalization", () => {
       { id: "V2", title: "Vertical (L)", type: "DropDown", rawValue: "All Verticals", displayValue: "All Verticals", resolved: true }
     ]);
     expect(vertical).toMatchObject({ conflict: false, displayValues: [...APPROVED_VERTICALS], verticalNormalization: { crossVerticalTokens: ["General", "All Verticals"] } });
+  });
+
+  it("detects genuinely conflicting source fields without fuzzy matching", () => {
+    const [vertical] = mergeNormalizedCustomFields([
+      { id: "MODERN", title: "Vertical (M)", type: "Multiple", rawValue: '["P1A"]', displayValue: ["P1A"], resolved: true },
+      { id: "LEGACY", title: "Vertical (L)", type: "Multiple", rawValue: '["EMS1"]', displayValue: ["EMS1"], resolved: true }
+    ]);
+    expect(vertical).toMatchObject({ conflict: true, conflictMetadata: { distinctValueSets: [{ values: ["P1A"] }, { values: ["EMS1"] }] } });
   });
 
   it("retains rejected tokens while reporting mixed input under its approved value", () => {

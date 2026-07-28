@@ -35,6 +35,13 @@ const VERTICAL_ALIASES: Readonly<Record<string, ApprovedVertical>> = {
 
 const CROSS_VERTICAL_ALIASES = new Set(["GENERAL", "CROSS VERTICAL", "CROSS-VERTICAL", "ALL VERTICALS"]);
 
+function aliasKey(value: string) {
+  return value.normalize("NFKC").toLocaleUpperCase().replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+const NORMALIZED_VERTICAL_ALIASES = new Map(Object.entries(VERTICAL_ALIASES).map(([key, value]) => [aliasKey(key), value]));
+const NORMALIZED_CROSS_VERTICAL_ALIASES = new Set([...CROSS_VERTICAL_ALIASES].map(aliasKey));
+
 function cleanToken(value: string) {
   let token = value.trim().replace(/\\(["'])/g, "$1");
   while (/^[\[\]"'\\]|[\[\]"'\\]$/.test(token)) token = token.replace(/^[\[\]"'\\]+|[\[\]"'\\]+$/g, "").trim();
@@ -70,13 +77,13 @@ export function normalizeVerticalValue(value: unknown): NormalizedVerticalResult
   for (const token of tokensFromValue(value)) {
     const cleaned = cleanToken(token);
     if (!cleaned) continue;
-    const aliasKey = cleaned.toLocaleUpperCase();
-    if (CROSS_VERTICAL_ALIASES.has(aliasKey)) {
+    const normalizedAliasKey = aliasKey(cleaned);
+    if (NORMALIZED_CROSS_VERTICAL_ALIASES.has(normalizedAliasKey)) {
       semanticCrossVertical = true;
-      if (!crossVerticalTokens.some((value) => value.toLocaleUpperCase() === aliasKey)) crossVerticalTokens.push(cleaned);
+      if (!crossVerticalTokens.some((value) => aliasKey(value) === normalizedAliasKey)) crossVerticalTokens.push(cleaned);
       continue;
     }
-    const normalized = VERTICAL_ALIASES[aliasKey];
+    const normalized = NORMALIZED_VERTICAL_ALIASES.get(normalizedAliasKey);
     if (normalized) approved.add(normalized);
     else {
       const key = cleaned.toLocaleLowerCase();

@@ -8,7 +8,8 @@ import {
   enrichTaskMetadata,
   isLctCustomField,
   parseCustomFieldsResponse,
-  parseFolderTreeResponse
+  parseFolderTreeResponse,
+  resolveCustomFieldDisplayValue
 } from "@/lib/wrike/metadata";
 import { actualCustomFieldsFixture, actualFolderTreeFixture } from "@/tests/fixtures/wrike-metadata";
 
@@ -44,6 +45,17 @@ describe("actual Wrike metadata structures", () => {
     expect(enriched.customFields[0]).toMatchObject({ id: "IEACHQK7JUAHNWFH", title: "LCT Reporting", type: "DropDown", rawValue: "2025 Report", displayValue: "2025 Report", resolved: true, resolutionSource: "database" });
     expect(enriched.customFields[1]).toMatchObject({ id: "UNKNOWN", title: "UNKNOWN", type: null, rawValue: ["A", "B"], displayValue: ["A", "B"], resolved: false, resolutionSource: "unresolved" });
     expect(enriched.customFieldsNormalized).toMatchObject([{ normalizedTitle: "LCT Reporting", displayValues: ["2025 Report"], sourceFieldIds: ["IEACHQK7JUAHNWFH"], conflict: false }]);
+  });
+
+  it("decodes serialized multi-values and resolves configured option IDs to display labels", () => {
+    const definition = {
+      id: "VERTICAL",
+      title: "[LCT] Vertical (M)",
+      type: "Multiple",
+      settings: { options: [{ id: "OPTION-P1A", value: "P1A" }, { id: "OPTION-EMS", value: "EMS1A" }] }
+    };
+    expect(resolveCustomFieldDisplayValue('["OPTION-P1A","OPTION-EMS"]', definition)).toEqual(["P1A", "EMS1A"]);
+    expect(resolveCustomFieldDisplayValue('[\\"P1A\\"]', definition)).toEqual(["P1A"]);
   });
 
   it("does not enrich tasks with configured out-of-scope ancestor folders", () => {

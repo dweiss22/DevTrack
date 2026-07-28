@@ -33,7 +33,10 @@ export type WrikeWorkflowStatus = { id: string; name: string; group?: string; st
 export type WrikeWorkflow = { id: string; name?: string; description?: string; hidden?: boolean; customStatuses?: WrikeWorkflowStatus[]; [key: string]: unknown };
 export type WrikeSpace = { id: string; title: string; archived?: boolean; accessType?: string; [key: string]: unknown };
 export interface WrikeCustomFieldOption {
+  id?: string;
   value: string;
+  title?: string;
+  label?: string;
   color?: string;
   [key: string]: unknown;
 }

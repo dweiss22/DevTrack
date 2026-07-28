@@ -31,7 +31,10 @@ export const wrikeFolderTreeResponseSchema = z.object({
 }).passthrough();
 
 const customFieldOptionSchema = z.object({
+  id: z.string().optional(),
   value: z.string(),
+  title: z.string().optional(),
+  label: z.string().optional(),
   color: z.string().optional()
 }).passthrough();
 
@@ -93,13 +96,35 @@ export function isLctCustomField(field: WrikeCustomFieldDefinition) {
 
 export function resolveCustomFieldDisplayValue(rawValue: unknown, definition?: WrikeCustomFieldDefinition): unknown {
   if (!definition || rawValue == null) return rawValue;
-  const configuredValues = new Set([
-    ...(definition.settings?.values ?? []),
-    ...(definition.settings?.options ?? []).map((option) => option.value)
-  ]);
-  if (typeof rawValue === "string") return configuredValues.has(rawValue) ? rawValue : rawValue;
-  if (Array.isArray(rawValue)) return rawValue.map((value) => typeof value === "string" && configuredValues.has(value) ? value : value);
-  return rawValue;
+  const optionLabels = new Map<string, string>();
+  for (const option of definition.settings?.options ?? []) {
+    const label = option.title ?? option.label ?? option.value;
+    for (const key of [option.id, option.value, option.title, option.label]) {
+      if (key?.trim()) optionLabels.set(key.trim().toLocaleLowerCase(), label);
+    }
+  }
+  for (const value of definition.settings?.values ?? []) optionLabels.set(value.trim().toLocaleLowerCase(), value);
+
+  const resolve = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.flatMap((item) => {
+      const resolved = resolve(item);
+      return Array.isArray(resolved) ? resolved : [resolved];
+    });
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    if (!trimmed) return trimmed;
+    const jsonCandidate = trimmed.replace(/\\"/g, '"').replace(/\\'/g, "'");
+    if (jsonCandidate.startsWith("[") && jsonCandidate.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(jsonCandidate);
+        if (Array.isArray(parsed)) return resolve(parsed);
+      } catch {
+        // Preserve malformed source text for deterministic diagnostics.
+      }
+    }
+    return optionLabels.get(trimmed.toLocaleLowerCase()) ?? trimmed;
+  };
+  return resolve(rawValue);
 }
 
 export type ResolvedFolder = { id: string; title: string; scope: string | null; resolved: boolean };

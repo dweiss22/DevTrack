@@ -19,7 +19,7 @@ describe("SME account classification and trusted debrief context", () => {
     expect(smeClassificationSchema.safeParse("external").success).toBe(true);
     expect(smeClassificationSchema.safeParse(null).success).toBe(false);
     expect(migration).toContain("classification text check (classification in ('internal','external'))");
-    expect(migration).toContain("select distinct member.id,member.organization_id,null,null");
+    expect(migration).toContain("select distinct member.id,member.organization_id,null::text,null::uuid");
     expect(migration).toContain("application_user_sme_profile_audit");
   });
 

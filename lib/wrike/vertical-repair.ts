@@ -14,8 +14,39 @@ type TaskRow = {
 };
 
 export type VerticalRepairResult = {
-  examined: number; repaired: number; unchanged: number; retained: number; stillIncomplete: number; hydrated: number; locallyReprocessed: number; hydrationRequests: number;
+  examined: number; repaired: number; unchanged: number; unresolved: number; conflicting: number; failed: number;
+  retained: number; stillIncomplete: number; hydrated: number; locallyReprocessed: number; hydrationRequests: number;
 };
+
+type PersistedVerticalRow = {
+  task_id: string;
+  normalized_verticals: string[] | null;
+  unresolved_vertical_tokens: string[] | null;
+  has_conflict: boolean | null;
+  vertical_reporting_category: string | null;
+};
+
+export function persistedVerticalState(row: PersistedVerticalRow | null, syncState: TaskRow["custom_fields_sync_state"] = "complete"): VerticalState {
+  if (syncState !== "complete") return "synchronization_incomplete";
+  if (row?.has_conflict || (row?.unresolved_vertical_tokens?.length ?? 0) > 0) return "unrecognized";
+  if (row?.vertical_reporting_category === "Cross Vertical") return "cross_vertical";
+  if ((row?.normalized_verticals?.length ?? 0) > 0) return "resolved";
+  return "missing";
+}
+
+export function verticalPersistenceMatches(expectedState: VerticalState, expectedVerticals: readonly string[], row: PersistedVerticalRow | null) {
+  const actual = row?.normalized_verticals ?? [];
+  return persistedVerticalState(row) === expectedState
+    && expectedVerticals.length === actual.length
+    && expectedVerticals.every((value, index) => value === actual[index]);
+}
+
+export function verticalSnapshotChanged(previousState: VerticalState | null, previous: PersistedVerticalRow | null, nextState: VerticalState, next: PersistedVerticalRow | null) {
+  return previousState !== nextState
+    || JSON.stringify(previous?.normalized_verticals ?? []) !== JSON.stringify(next?.normalized_verticals ?? [])
+    || JSON.stringify(previous?.unresolved_vertical_tokens ?? []) !== JSON.stringify(next?.unresolved_vertical_tokens ?? [])
+    || Boolean(previous?.has_conflict) !== Boolean(next?.has_conflict);
+}
 
 export async function repairVerticalData(organizationId: string): Promise<VerticalRepairResult> {
   const db = createAdminClient();
@@ -43,6 +74,8 @@ export async function repairVerticalData(organizationId: string): Promise<Vertic
     const definitions = new Map<string, WrikeCustomFieldDefinition>();
     for (const field of fields) if (!field.is_unresolved && field.raw_data && typeof field.raw_data === "object") definitions.set(field.wrike_id, field.raw_data as WrikeCustomFieldDefinition);
     const logicalIds = await persistNormalizedCustomFieldDefinitions(db, organizationId, fields.filter((field) => !field.is_unresolved || mappings.has(field.wrike_id)), startedAt);
+    const verticalFieldId = logicalIds.get("vertical");
+    const initialVerticals = await loadPersistedVerticals(db, tasks.map((task) => task.id), verticalFieldId);
 
     const completeTasks = tasks.filter((task) => task.custom_fields_sync_state === "complete"
       && task.raw_data
@@ -52,12 +85,9 @@ export async function repairVerticalData(organizationId: string): Promise<Vertic
     const completeResolved = completeTasks.map((task) => resolveTask(task, task.raw_data!, definitions, mappings));
     await persistNormalizedTaskCustomFields(db, logicalIds, completeResolved.map((task) => ({ taskId: task.row.id, taskWrikeId: task.row.wrike_id, fields: task.normalized })), startedAt);
 
-    let repaired = 0;
-    let unchanged = 0;
-    for (const task of completeResolved) {
-      if (task.state === task.row.vertical_state) unchanged++; else repaired++;
-      await updateResolvedTask(db, organizationId, task, { vertical_state: task.state });
-    }
+    const completeStats = await reconcileReadBack(db, organizationId, completeResolved, verticalFieldId, initialVerticals, startedAt);
+    let { repaired, unchanged, unresolved, conflicting, failed } = completeStats;
+    const failedProjects = [...completeStats.failedProjects];
 
     const incompleteTasks = tasks.filter((task) => !completeTaskIds.has(task.id));
     const hydratedById = new Map<string, WrikeTask>();
@@ -116,10 +146,15 @@ export async function repairVerticalData(organizationId: string): Promise<Vertic
           authoritativeFingerprint: customFieldsFingerprint(task.raw),
           customFieldCount: task.raw.customFields?.length ?? 0,
           customFieldIds: [...new Set((task.raw.customFields ?? []).map((field) => field.id))].sort()
-        },
-        vertical_state: task.state
+        }
       });
-      repaired += hydratedResolved.length;
+      const hydratedStats = await reconcileReadBack(db, organizationId, hydratedResolved, verticalFieldId, initialVerticals, startedAt);
+      repaired += hydratedStats.repaired;
+      unchanged += hydratedStats.unchanged;
+      unresolved += hydratedStats.unresolved;
+      conflicting += hydratedStats.conflicting;
+      failed += hydratedStats.failed;
+      failedProjects.push(...hydratedStats.failedProjects);
     }
 
     const stillIncomplete = incompleteTasks.length - hydratedResolved.length;
@@ -129,6 +164,7 @@ export async function repairVerticalData(organizationId: string): Promise<Vertic
       const { error } = await db.from("wrike_tasks").update({
         custom_fields_sync_state: "incomplete",
         vertical_state: "synchronization_incomplete",
+        vertical_repaired_at: startedAt,
         custom_fields_sync_diagnostics: {
           ...(task.custom_fields_sync_diagnostics ?? {}),
           repairRunId: run.id,
@@ -147,13 +183,19 @@ export async function repairVerticalData(organizationId: string): Promise<Vertic
       examined: tasks.length,
       repaired,
       unchanged,
+      unresolved: unresolved + stillIncomplete,
+      conflicting,
+      failed,
       retained,
       stillIncomplete,
       hydrated: hydratedResolved.length,
       locallyReprocessed: completeResolved.length,
       hydrationRequests: Math.ceil(incompleteTasks.length / 100)
     };
-    const { error: completionError } = await db.from("wrike_vertical_repair_runs").update({ status: "succeeded", completed_at: new Date().toISOString(), ...snakeCounts(result), diagnostics: { repairMode: "explicit_admin", detailBatchSize: 100, locallyReprocessed: result.locallyReprocessed, hydrated: result.hydrated } }).eq("id", run.id);
+    const { error: completionError } = await db.from("wrike_vertical_repair_runs").update({
+      status: "succeeded", completed_at: new Date().toISOString(), ...snakeCounts(result),
+      diagnostics: { repairMode: "explicit_admin", parserVersion: 2, detailBatchSize: 100, locallyReprocessed: result.locallyReprocessed, hydrated: result.hydrated, readBackVerified: true, failedProjects }
+    }).eq("id", run.id);
     if (completionError) throw new Error(`Supabase could not persist the Vertical repair result: ${completionError.message}`);
     return result;
   } catch (error) {
@@ -171,9 +213,11 @@ function resolveTask(row: TaskRow, raw: WrikeTask, definitions: Map<string, Wrik
     return { id: field.id, title: definition?.title ?? field.id, type: definition?.type ?? null, rawValue: field.value, displayValue: resolveCustomFieldDisplayValue(field.value, definition), resolved: Boolean(definition) || Boolean(mapping && mapping.action !== "ignore"), ignored: mapping?.action === "ignore", normalizedTitleOverride: mapping?.normalizedTitle ?? null, resolutionSource: mapping ? "manual_mapping" : definition ? "database" : "unresolved" };
   });
   const normalized = mergeNormalizedCustomFields(fields);
-  const vertical = normalized.find((field) => field.normalizedKey === "vertical")?.verticalNormalization;
-  const unresolvedDefinition = fields.some((field) => !field.resolved && !field.ignored);
-  const state = classifyVerticalState({ customFieldsSyncState: "complete", vertical, unresolvedCustomFieldDefinitions: unresolvedDefinition });
+  const verticalField = normalized.find((field) => field.normalizedKey === "vertical");
+  const vertical = verticalField?.verticalNormalization;
+  const state = verticalField?.conflict
+    ? "unrecognized"
+    : classifyVerticalState({ customFieldsSyncState: "complete", vertical, unresolvedCustomFieldDefinitions: false });
   return { row, raw, fields, normalized, state };
 }
 
@@ -185,4 +229,78 @@ async function updateResolvedTask(db: ReturnType<typeof createAdminClient>, orga
 
 function displayText(value: unknown) { return Array.isArray(value) ? value.map(String).join(", ") : value == null ? null : String(value); }
 function optionValues(field: ResolvedCustomField) { return Array.isArray(field.displayValue) ? field.displayValue.map(String) : field.displayValue == null ? [] : [String(field.displayValue)]; }
-function snakeCounts(result: VerticalRepairResult) { return { examined_count: result.examined, repaired_count: result.repaired, unchanged_count: result.unchanged, retained_count: result.retained, still_incomplete_count: result.stillIncomplete, hydration_request_count: result.hydrationRequests }; }
+
+async function loadPersistedVerticals(
+  db: ReturnType<typeof createAdminClient>,
+  taskIds: string[],
+  verticalFieldId?: string
+) {
+  const rows = new Map<string, PersistedVerticalRow>();
+  if (!verticalFieldId) return rows;
+  for (let offset = 0; offset < taskIds.length; offset += 250) {
+    const batch = taskIds.slice(offset, offset + 250);
+    if (!batch.length) continue;
+    const { data, error } = await db.from("wrike_task_normalized_custom_field_values")
+      .select("task_id,normalized_verticals,unresolved_vertical_tokens,has_conflict,vertical_reporting_category")
+      .eq("normalized_field_id", verticalFieldId)
+      .in("task_id", batch);
+    if (error) throw new Error(`Supabase could not verify stored Vertical values: ${error.message}`);
+    for (const row of data ?? []) rows.set(row.task_id, row as PersistedVerticalRow);
+  }
+  return rows;
+}
+
+async function reconcileReadBack(
+  db: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  tasks: ReturnType<typeof resolveTask>[],
+  verticalFieldId: string | undefined,
+  initial: Map<string, PersistedVerticalRow>,
+  repairedAt: string
+) {
+  const persisted = await loadPersistedVerticals(db, tasks.map((task) => task.row.id), verticalFieldId);
+  let repaired = 0;
+  let unchanged = 0;
+  let unresolved = 0;
+  let conflicting = 0;
+  let failed = 0;
+  const failedProjects: { projectTitle: string; wrikeTaskId: string; reason: string }[] = [];
+  for (const task of tasks) {
+    const row = persisted.get(task.row.id) ?? null;
+    const state = persistedVerticalState(row);
+    const expectedField = task.normalized.find((field) => field.normalizedKey === "vertical");
+    const expectedVerticals = expectedField?.conflict ? [] : expectedField?.verticalNormalization?.normalizedVerticals ?? [];
+    const actualVerticals = row?.normalized_verticals ?? [];
+    const persistenceMatches = verticalPersistenceMatches(task.state, expectedVerticals, row);
+    if (!persistenceMatches) {
+      failed++;
+      failedProjects.push({
+        projectTitle: task.row.title,
+        wrikeTaskId: task.row.wrike_id,
+        reason: `Read-back mismatch: expected ${task.state} [${expectedVerticals.join(", ")}], stored ${state} [${actualVerticals.join(", ")}].`
+      });
+      continue;
+    }
+    await updateResolvedTask(db, organizationId, task, { vertical_state: state, vertical_repaired_at: repairedAt });
+    const prior = initial.get(task.row.id) ?? null;
+    const changed = verticalSnapshotChanged(task.row.vertical_state, prior, state, row);
+    if (changed) repaired++; else unchanged++;
+    if (state === "missing" || state === "unrecognized") unresolved++;
+    if (row?.has_conflict) conflicting++;
+  }
+  return { repaired, unchanged, unresolved, conflicting, failed, failedProjects };
+}
+
+function snakeCounts(result: VerticalRepairResult) {
+  return {
+    examined_count: result.examined,
+    repaired_count: result.repaired,
+    unchanged_count: result.unchanged,
+    unresolved_count: result.unresolved,
+    conflicting_count: result.conflicting,
+    failed_count: result.failed,
+    retained_count: result.retained,
+    still_incomplete_count: result.stillIncomplete,
+    hydration_request_count: result.hydrationRequests
+  };
+}
