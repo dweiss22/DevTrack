@@ -138,9 +138,11 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
   if (!input.bytes.length || input.bytes.length > 10 * 1024 * 1024) throw new Error("Historical CSV files must be between 1 byte and 10 MB.");
   const fileChecksum = createHash("sha256").update(input.bytes).digest("hex");
   const { data: existingBatch, error: existingError } = await admin.from("survey_historical_import_batches")
-    .select("id,survey_type,summary").eq("organization_id", input.organizationId).eq("file_checksum", fileChecksum).maybeSingle();
+    .select("id,survey_type,status,summary,validated_at")
+    .eq("organization_id", input.organizationId).eq("file_checksum", fileChecksum).maybeSingle();
   if (existingError) throw new Error(existingError.message);
-  if (existingBatch) {
+  const resumableBatch = Boolean(existingBatch && existingBatch.status === "staged" && !existingBatch.validated_at);
+  if (existingBatch && !resumableBatch) {
     const { error } = await admin.from("survey_historical_import_upload_attempts").insert({
       organization_id: input.organizationId, batch_id: existingBatch.id, source_filename: input.filename,
       file_checksum: fileChecksum, duplicate_upload: true, uploaded_by: input.actorId,
@@ -165,19 +167,47 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
   const document = parseHistoricalCsv(source);
   if (document.rows.length > 10_000 || document.headers.length > 250) throw new Error("Historical CSV files may contain at most 10,000 rows and 250 columns.");
   const detection = detectHistoricalSurveyType(input.filename, document.headers);
-  const batchId = randomUUID();
+  const batchId = existingBatch?.id ?? randomUUID();
   const surveyType = detection.surveyType;
   const schemaChecksum = surveyType ? historicalSchemaChecksum(surveyType, document.headers) : null;
-  const { error: batchError } = await admin.from("survey_historical_import_batches").insert({
-    id: batchId, organization_id: input.organizationId, source_filename: input.filename,
-    file_checksum: fileChecksum, schema_checksum: schemaChecksum, survey_type: surveyType,
-    source_timezone: input.timezone, headers: document.headers, status: surveyType ? "staged" : "invalid",
-    imported_by: input.actorId,
-  });
-  if (batchError) throw new Error(batchError.message);
+
+  let versionId: string | null = null;
+  if (surveyType && !detection.conflict) {
+    const definition = historicalSurveyDefinition(surveyType);
+    const { data, error } = await input.supabase.rpc("ensure_historical_survey_version", {
+      requested_type: surveyType,
+      requested_schema_checksum: schemaChecksum,
+      requested_definition: definition,
+    });
+    if (error || !data) throw new Error(error?.message ?? "Historical survey version could not be created.");
+    versionId = data as string;
+  }
+
+  if (resumableBatch) {
+    const { error: issueCleanupError } = await admin.from("survey_historical_import_issues").delete().eq("batch_id", batchId);
+    if (issueCleanupError) throw new Error(issueCleanupError.message);
+    const { error: rowCleanupError } = await admin.from("survey_historical_import_rows").delete().eq("batch_id", batchId);
+    if (rowCleanupError) throw new Error(rowCleanupError.message);
+    const { error: mappingCleanupError } = await admin.from("survey_historical_import_column_mappings").delete().eq("batch_id", batchId);
+    if (mappingCleanupError) throw new Error(mappingCleanupError.message);
+    const { error: batchError } = await admin.from("survey_historical_import_batches").update({
+      source_filename: input.filename, schema_checksum: schemaChecksum, survey_type: surveyType,
+      source_timezone: input.timezone, headers: document.headers, status: surveyType ? "staged" : "invalid",
+      summary: {}, validated_at: null,
+    }).eq("id", batchId);
+    if (batchError) throw new Error(batchError.message);
+  } else {
+    const { error: batchError } = await admin.from("survey_historical_import_batches").insert({
+      id: batchId, organization_id: input.organizationId, source_filename: input.filename,
+      file_checksum: fileChecksum, schema_checksum: schemaChecksum, survey_type: surveyType,
+      source_timezone: input.timezone, headers: document.headers, status: surveyType ? "staged" : "invalid",
+      imported_by: input.actorId,
+    });
+    if (batchError) throw new Error(batchError.message);
+  }
   const { error: attemptError } = await admin.from("survey_historical_import_upload_attempts").insert({
     organization_id: input.organizationId, batch_id: batchId, source_filename: input.filename,
-    file_checksum: fileChecksum, duplicate_upload: false, uploaded_by: input.actorId,
+    file_checksum: fileChecksum, duplicate_upload: resumableBatch, uploaded_by: input.actorId,
   });
   if (attemptError) throw new Error(attemptError.message);
 
@@ -199,14 +229,6 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
     }).eq("id", batchId);
     return { batchId, duplicateUpload: false, surveyType, totalRows: document.rows.length, readyRows: 0, issueRows: document.rows.length, blockingIssues: 1, warningIssues: 0 };
   }
-
-  const definition = historicalSurveyDefinition(surveyType);
-  const { data: versionId, error: versionError } = await input.supabase.rpc("ensure_historical_survey_version", {
-    requested_type: surveyType,
-    requested_schema_checksum: schemaChecksum,
-    requested_definition: definition,
-  });
-  if (versionError || !versionId) throw new Error(versionError?.message ?? "Historical survey version could not be created.");
 
   const knownMappings = historicalColumnMappings(surveyType);
   const mappingsByHeader = new Map(knownMappings.map((item) => [normalizeHistoricalTitle(item.heading), item]));

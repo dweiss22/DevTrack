@@ -9,6 +9,7 @@ import {
   parseHistoricalRow,
   parseHistoricalTimestamp,
 } from "@/lib/surveys/historical-import";
+import { surveyDefinitionSchema } from "@/lib/surveys/definition";
 
 const answersFor = (type: "id_sme_review" | "course_development_debrief") =>
   Object.fromEntries(historicalColumnMappings(type).map((mapping) => [mapping.heading, ""]));
@@ -159,8 +160,12 @@ describe("historical survey value conversion", () => {
   });
 
   it("uses immutable legacy definitions without inventing absent historical questions or invoices", () => {
-    const idDefinition = JSON.stringify(historicalSurveyDefinition("id_sme_review"));
-    const debriefDefinition = JSON.stringify(historicalSurveyDefinition("course_development_debrief"));
+    const idSurveyDefinition = historicalSurveyDefinition("id_sme_review");
+    const debriefSurveyDefinition = historicalSurveyDefinition("course_development_debrief");
+    const idDefinition = JSON.stringify(idSurveyDefinition);
+    const debriefDefinition = JSON.stringify(debriefSurveyDefinition);
+    expect(surveyDefinitionSchema.safeParse(idSurveyDefinition).success).toBe(true);
+    expect(surveyDefinitionSchema.safeParse(debriefSurveyDefinition).success).toBe(true);
     expect(idDefinition).not.toContain("realWorldExamplesEffectiveness");
     expect(debriefDefinition).not.toContain("\"invoice\"");
     expect(debriefDefinition).toContain("legacyOriginalDueYear");

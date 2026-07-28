@@ -31,6 +31,14 @@ describe("historical survey import security and persistence contract", () => {
     expect(stage).toContain("fileChecksum");
   });
 
+  it("retries an interrupted upload in place instead of returning an empty duplicate batch", () => {
+    expect(stage).toContain('existingBatch.status === "staged" && !existingBatch.validated_at');
+    expect(stage).toContain("survey_historical_import_issues\").delete().eq(\"batch_id\", batchId)");
+    expect(stage).toContain("survey_historical_import_rows\").delete().eq(\"batch_id\", batchId)");
+    expect(stage).toContain("survey_historical_import_column_mappings\").delete().eq(\"batch_id\", batchId)");
+    expect(stage).toContain("duplicate_upload: resumableBatch");
+  });
+
   it("limits every workflow to manage_data and protects import-only legacy versions", () => {
     expect(dataPage).toContain('requirePageCapability("manage_data")');
     expect(source("app/api/admin/survey-imports/route.ts")).toContain('requireCapability("manage_data")');

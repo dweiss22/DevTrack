@@ -379,7 +379,7 @@ export function historicalSurveyDefinition(type: SurveyType): SurveyDefinition {
           { id: "providedRealWorldExamples", type: "yes_no", label: "Real-world examples provided", helpText: "", required: true, width: "full", validation: {} },
           { id: "recommendationScore", type: "rating_scale", label: "SME Promoter Score", helpText: "", required: true, width: "full", validation: {}, scale: { min: 0, max: 10, minLabel: "Not at all likely", maxLabel: "Extremely likely" } },
         ] },
-        { id: "comments", title: "Additional comments", description: "", pageBreakBefore: false, questions: [
+        { id: "comments-section", title: "Additional comments", description: "", pageBreakBefore: false, questions: [
           { id: "comments", type: "long_text", label: "Additional comments", helpText: "", required: false, width: "full", validation: { maxLength: 5_000 } },
         ] },
       ],
@@ -405,7 +405,7 @@ export function historicalSurveyDefinition(type: SurveyType): SurveyDefinition {
       { id: "ratings", title: "Collaboration ratings", description: "", pageBreakBefore: false, questions: [
         { id: "collaborationRatings", type: "rating_matrix", label: "Historical collaboration ratings", helpText: "", required: false, width: "full", validation: {}, rows: matrixRows(SME_DEBRIEF_STATEMENTS), scale: { min: 1, max: 5, minLabel: AGREEMENT_SCALE[0], maxLabel: AGREEMENT_SCALE[4], labels: [...AGREEMENT_SCALE] } },
       ] },
-      { id: "comments", title: "Additional comments", description: "", pageBreakBefore: false, questions: [
+      { id: "comments-section", title: "Additional comments", description: "", pageBreakBefore: false, questions: [
         { id: "comments", type: "long_text", label: "Additional Feedback or Suggestions", helpText: "", required: false, width: "full", validation: { maxLength: 5_000 } },
       ] },
     ],
