@@ -34,6 +34,7 @@ const courseTypeFilteringMigration = fs.readFileSync(path.join(process.cwd(), "s
 const verticalLegacyAliasesMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607220005_vertical_legacy_aliases.sql"), "utf8");
 const superAdminDataAccessMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607230006_restore_superadmin_data_access.sql"), "utf8");
 const reliableVerticalRepairMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607280007_reliable_vertical_repair.sql"), "utf8");
+const manageDataCapabilityMigration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/202607280008_manage_data_capability.sql"), "utf8");
 
 function sqlFunctionDefinition(sql: string, name: string) {
   const start = sql.indexOf(`create or replace function public.${name}`);
@@ -226,6 +227,12 @@ describe("reporting migration contract", () => {
     expect(reliableVerticalRepairMigration).toContain("public.current_has_capability('manage_data')");
     expect(reliableVerticalRepairMigration).not.toContain("Gang Awareness");
     expect(reliableVerticalRepairMigration).not.toContain("Head Injuries");
+  });
+  it("authorizes Data RPCs through the composed management-role capability matrix", () => {
+    const definition = sqlFunctionDefinition(manageDataCapabilityMigration, "current_has_capability");
+    expect(definition).toContain("when 'manage_data'");
+    expect(definition).toContain("current_has_management_role('admin')");
+    expect(definition).toContain("current_has_management_role('super_admin')");
   });
   it("strictly parses Reporting course years and scopes dashboard work before time aggregation", () => {
     expect(reportingPerformanceMigration).toContain("Courses$','i'");
