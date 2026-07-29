@@ -34,14 +34,16 @@ export function SmeProjectDetail({ detail, returnTo, canLaunchSurvey, management
     : !detail.debrief
       ? surveyHref(detail.taskId, "course-development-debrief", detail.selectedSmeWrikeUserId, returnTo)
       : null;
-  const actionLabel = detail.debrief?.status === "draft" ? "Resume SME Debrief" : "Create SME Debrief";
+  const actionLabel = detail.debrief?.status === "draft" ? "Resume SME Debrief Survey" : "Create SME Debrief Survey";
   return <div className="sme-project-detail">
-    <header className="sme-project-summary"><div><p className="eyebrow">ASSIGNED COURSE</p><h1>{detail.title}</h1>
+    <header className="sme-project-summary"><div className="sme-project-heading"><p className="eyebrow">ASSIGNED COURSE</p><h1>{detail.title}</h1>
       <p><StatusBadge name={detail.status} /></p></div><div className="project-header-actions">
         {detail.debrief?.status === "submitted"
           ? <SurveyReceived submittedAt={detail.debrief.latestSubmittedAt} compact />
           : canLaunchSurvey && detail.isRecent && surveyLink
-            ? <Link className="button" href={surveyLink}>{actionLabel}</Link> : null}
+            ? <Link className="button sme-debrief-action" href={surveyLink}>
+              <span>{actionLabel}</span><small>Share your course development feedback</small>
+            </Link> : null}
         {detail.finalizedDraft.available && detail.finalizedDraft.url ? <a className="button secondary"
           href={detail.finalizedDraft.url} target="_blank" rel="noopener noreferrer">Course Review</a>
           : <button className="secondary" disabled>Course Review Not Available</button>}
@@ -68,7 +70,7 @@ export function SmeProjectDetail({ detail, returnTo, canLaunchSurvey, management
         <Metadata label="Assigned ID">{detail.assignedIds.length ? detail.assignedIds.map((item) => item.name).join(", ") : "Not available"}</Metadata>
         <Metadata label="Vertical">{detail.vertical ?? "Not available"}</Metadata>
         <Metadata label="Course length">{courseLength(detail.courseLength)}</Metadata>
-        <Metadata label="Legal reviewer">{detail.legalReviewer ?? "Not available"}</Metadata>
+        {managementView ? <Metadata label="Legal reviewer">{detail.legalReviewer ?? "Not available"}</Metadata> : null}
         {managementView && detail.debrief?.response ? <>
           <Metadata label="Billable hours">{billingValue(detail.debrief, "hours")}</Metadata>
           <Metadata label="Invoiced amount">{billingValue(detail.debrief, "amount")}</Metadata>

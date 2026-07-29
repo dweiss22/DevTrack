@@ -163,6 +163,8 @@ describe("strict dashboard assignments and submitted SME survey lock", () => {
     expect(html).not.toContain("Agreement ratings");
     expect(html).not.toContain("Download invoice");
     expect(html).not.toContain("Comments");
+    expect(html).not.toContain("Legal reviewer");
+    expect(html).not.toContain("Legal Reviewer");
   });
 
   it("preserves full submitted-response rendering for an authorized Admin view", () => {
@@ -201,6 +203,8 @@ describe("strict dashboard assignments and submitted SME survey lock", () => {
     expect(html).toContain("Administrative response detail");
     expect(html).toContain("Billable hours");
     expect(html).toContain("Download invoice");
+    expect(html).toContain("Legal reviewer");
+    expect(html).toContain("Legal Reviewer");
   });
 
   it("denies SME retrieval after submission at RLS, route, API, attachment, and RPC boundaries", () => {
