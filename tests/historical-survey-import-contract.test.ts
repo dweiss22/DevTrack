@@ -7,6 +7,7 @@ const source = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
 const migration = source("supabase/migrations/202607280010_historical_survey_imports.sql");
 const reportingMigration = source("supabase/migrations/202607280011_historical_survey_reporting.sql");
 const identifierFixMigration = source("supabase/migrations/202607280012_fix_historical_survey_version_identifiers.sql");
+const canonicalMigration = source("supabase/migrations/202607290007_canonical_historical_survey_csv.sql");
 const stage = source("lib/surveys/historical-import-server.ts");
 const dataPage = source("app/admin/page.tsx");
 const panel = source("components/historical-survey-imports.tsx");
@@ -103,9 +104,11 @@ describe("historical survey import security and persistence contract", () => {
 
   it("provides the staged Admin workflow, correction audit, and Admin-only survey provenance", () => {
     expect(panel).toContain("Upload historical survey CSVs");
-    expect(panel).toContain("Survey Data Issues");
+    expect(panel).toContain("Reconciliation issues");
     expect(panel).toContain("Integrate ready rows");
     expect(panel).toContain("Corrected normalized answers");
+    expect(panel).toContain("CSV templates and data dictionary");
+    expect(panel).toContain("SearchableSelect");
     expect(panel).toContain("Confirm the historical assignment context");
     expect(rowRoute).toContain("survey_historical_import_resolution_audit");
     expect(columnRoute).toContain("column_mapping_confirmed");
@@ -113,6 +116,12 @@ describe("historical survey import security and persistence contract", () => {
     expect(dialog).toContain("Historical import provenance");
     expect(source("app/api/admin/surveys/export/route.ts")).toContain("survey_historical_import_integrations");
     expect(source("app/api/admin/surveys/export/route.ts")).toContain("billable_hours");
+  });
+
+  it("retains the exact published version and canonical conditional answer during integration", () => {
+    expect(canonicalMigration).toContain("version_origin in (''historical_import'',''published'')");
+    expect(canonicalMigration).toContain("realWorldExamplesEffectiveness");
+    expect(canonicalMigration).toContain("without changing survey ownership, privacy, or access");
   });
 
   it("uses exact project and person evidence and treats CourseKey only as suggestion context", () => {

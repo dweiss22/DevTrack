@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
+import type { CanonicalCsvContract } from "@/lib/surveys/csv-contract";
 
 export type HistoricalImportBatch = {
   id: string; source_filename: string; survey_type: string | null; source_timezone: string;
-  status: string; summary: Record<string, number>; created_at: string; integrated_at: string | null;
+  status: string; summary: Record<string, number | string | null>; created_at: string; integrated_at: string | null;
   rolled_back_at: string | null;
 };
 export type HistoricalImportRow = {
@@ -22,12 +23,27 @@ export type HistoricalColumnMapping = {
   id: string; batch_id: string; original_heading: string; canonical_question_id: string | null;
   mapping_target: string; normalized_conversion: string | null; mapping_source: string;
 };
+export type HistoricalResolutionAudit = {
+  id: number; batch_id: string; row_id: string | null; action: string;
+  previous_values: Record<string, unknown>; new_values: Record<string, unknown>; created_at: string;
+};
 
-export function HistoricalSurveyImports({ batches, rows, issues, mappings }: {
+export type HistoricalTemplate = CanonicalCsvContract & { id: string };
+export type HistoricalResolutionOption = { id: string; label: string; detail?: string | null };
+export type HistoricalResolutionOptions = {
+  projects: HistoricalResolutionOption[];
+  principals: HistoricalResolutionOption[];
+  wrikeUsers: HistoricalResolutionOption[];
+};
+
+export function HistoricalSurveyImports({ batches, rows, issues, mappings, templates, resolutionOptions, resolutionAudit }: {
   batches: HistoricalImportBatch[];
   rows: HistoricalImportRow[];
   issues: HistoricalImportIssue[];
   mappings: HistoricalColumnMapping[];
+  templates: HistoricalTemplate[];
+  resolutionOptions: HistoricalResolutionOptions;
+  resolutionAudit: HistoricalResolutionAudit[];
 }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState(false);
@@ -112,9 +128,35 @@ export function HistoricalSurveyImports({ batches, rows, issues, mappings }: {
 
   return <div className="admin-section-content historical-imports">
     {message && <p className={error ? "notice error" : "notice"} role={error ? "alert" : "status"}>{message}</p>}
+    <section className="card historical-template-library">
+      <div className="section-heading"><div><p className="eyebrow">START HERE</p><h3>CSV templates and data dictionary</h3>
+        <p>Templates are generated from each published survey definition. Use the version you intend to preserve in imported history.</p></div></div>
+      {templates.length ? <div className="historical-template-grid">{templates.map((template) => <article className="admin-action-card" key={template.id}>
+        <div><strong>{template.title}</strong><p className="muted">Version {template.surveyVersion} · published {new Date(template.publishedAt).toLocaleDateString()}</p></div>
+        <div className="filter-bar compact">
+          <a className="button" href={`/api/admin/survey-imports/templates/${template.id}?kind=blank`}>Blank template</a>
+          <a className="button secondary" href={`/api/admin/survey-imports/templates/${template.id}?kind=example`}>Example CSV</a>
+          <a className="button secondary" href={`/api/admin/survey-imports/templates/${template.id}?kind=dictionary`}>Data dictionary</a>
+        </div>
+        <details><summary>View {template.fields.length} columns and rules</summary>
+          <div className="admin-table-wrap"><table><thead><tr><th>CSV column</th><th>Required</th><th>Question / meaning</th><th>Accepted value</th></tr></thead>
+            <tbody>{template.fields.map((field) => <tr key={field.column}><td><code>{field.column}</code></td><td>{field.required ? "Yes" : "No"}</td><td>{field.label}<br /><span className="muted">{field.conditionalRequirement}</span></td><td>{field.acceptedFormat}<br /><span className="muted">{field.acceptedValues}</span></td></tr>)}</tbody>
+          </table></div>
+        </details>
+      </article>)}</div> : <p className="notice error">Publish a survey version before creating a canonical import template.</p>}
+      <details><summary>Legacy CSV compatibility</summary><p>Existing “ID Review of SME” and “Lexipol Course Development Debrief” exports remain supported. Legacy headings are normalized into the same staged response model, and legacy Internal or due-year values are treated as evidence—not authoritative context.</p></details>
+    </section>
+    <section className="historical-workflow" aria-labelledby="historical-workflow-title">
+      <h3 id="historical-workflow-title">Import workflow</h3>
+      <ol className="historical-workflow-steps">
+        {["Choose the published survey version", "Download a blank or example template", "Prepare UTF-8 CSV data", "Upload and confirm the source timezone", "Review the dry-run summary", "Resolve project matches", "Resolve identity and assignment evidence", "Correct answer or mapping issues", "Revalidate until rows are ready", "Confirm integration and verify history"].map((step, index) =>
+          <li key={step}><span>{index + 1}</span>{step}</li>)}
+      </ol>
+      <p className="muted">Upload never creates survey records or grants application access. Integration is always a separate confirmed action.</p>
+    </section>
     <div className="admin-action-grid">
       <section className="admin-action-card">
-        <div><p className="eyebrow">SAFE STAGING</p><h3>Upload historical survey CSVs</h3>
+        <div><p className="eyebrow">STEP 4 · SAFE STAGING</p><h3>Upload historical survey CSVs</h3>
           <p>Uploads create a dry run and issue records only. Ready rows require a separate integration action.</p></div>
         <form onSubmit={upload} className="historical-upload-form">
           <label>CSV files<input type="file" name="files" accept=".csv,text/csv" multiple required /></label>
@@ -147,7 +189,7 @@ export function HistoricalSurveyImports({ batches, rows, issues, mappings }: {
       </tr></thead><tbody>{batches.map((batch) => <tr key={batch.id}>
         <td>{new Date(batch.created_at).toLocaleString()}</td>
         <td><strong>{batch.source_filename}</strong><br /><span className="muted">{batch.survey_type?.replaceAll("_", " ") ?? "Unrecognized"} · {batch.source_timezone}</span></td>
-        <td>{batch.status}</td>
+        <td><span className="survey-status draft">{friendlyImportStatus(batch.status)}</span><br /><span className="muted">{batch.summary?.format === "canonical" ? `Canonical v${batch.summary.surveyVersion}` : "Legacy format"}</span></td>
         <td>{Number(batch.summary?.totalRows ?? 0)} total · {Number(batch.summary?.readyRows ?? 0)} ready<br />
           <span className="muted">{Number(batch.summary?.issueRows ?? 0)} issue rows · {Number(batch.summary?.integratedRows ?? 0)} integrated</span></td>
         <td><div className="filter-bar compact">
@@ -173,7 +215,7 @@ export function HistoricalSurveyImports({ batches, rows, issues, mappings }: {
         })}</tbody></table></div> : <p className="empty">No rows are ready for integration.</p>}
     </section>
     <section>
-      <div className="section-heading"><div><h3>Survey Data Issues</h3><p>Resolve or explicitly ignore every uncertain value. Candidate suggestions are never selected automatically.</p></div>
+      <div className="section-heading"><div><h3>Reconciliation issues</h3><p>Resolve uncertain projects, people, assignments, answers, and duplicate responses. Suggestions are never selected automatically.</p></div>
         <div className="filter-bar compact">
           <label>Batch<select value={batchFilter} onChange={(event) => setBatchFilter(event.target.value)}><option value="">All batches</option>
             {batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.source_filename}</option>)}</select></label>
@@ -181,7 +223,7 @@ export function HistoricalSurveyImports({ batches, rows, issues, mappings }: {
             {issueCodes.map((code) => <option key={code}>{code}</option>)}</select></label>
         </div></div>
       {visibleIssues.length ? <div className="historical-issue-list">{visibleIssues.map((item) =>
-        <HistoricalIssueCard key={item.id} issue={item} row={item.row_id ? rowById.get(item.row_id) ?? null : null} working={working} setWorking={setWorking} setError={setError} setMessage={setMessage} />
+        <HistoricalIssueCard key={item.id} issue={item} row={item.row_id ? rowById.get(item.row_id) ?? null : null} working={working} setWorking={setWorking} setError={setError} setMessage={setMessage} resolutionOptions={resolutionOptions} audit={resolutionAudit.filter((entry) => entry.row_id === item.row_id)} />
       )}</div> : <p className="empty">No open issues match these filters.</p>}
     </section>
     {mappings.some((item) => item.mapping_target === "unmapped") ? <section>
@@ -192,10 +234,14 @@ export function HistoricalSurveyImports({ batches, rows, issues, mappings }: {
   </div>;
 }
 
-function HistoricalIssueCard({ issue, row, working, setWorking, setError, setMessage }: {
+function HistoricalIssueCard({ issue, row, working, setWorking, setError, setMessage, resolutionOptions, audit }: {
   issue: HistoricalImportIssue; row: HistoricalImportRow | null; working: string;
   setWorking: (value: string) => void; setError: (value: boolean) => void; setMessage: (value: string) => void;
+  resolutionOptions: HistoricalResolutionOptions;
+  audit: HistoricalResolutionAudit[];
 }) {
+  const presentation = issuePresentation(issue.issue_code);
+  const courseName = row?.raw_row.courseName || row?.raw_row["Course Name"] || "Course not identified";
   async function resolve(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!row) return;
@@ -235,24 +281,85 @@ function HistoricalIssueCard({ issue, row, working, setWorking, setError, setMes
     }
   }
   return <details className="card historical-issue-card">
-    <summary><span><strong>Row {row?.row_number ?? "batch"}</strong> · {issue.issue_code.replaceAll("_", " ")}</span><span className={`survey-status ${issue.severity === "blocking" ? "unlocked" : "draft"}`}>{issue.severity}</span></summary>
-    <div><p>{issue.message}</p>{issue.source_field ? <p><strong>Source field:</strong> {issue.source_field}</p> : null}
-      <details><summary>Original row and candidates</summary><pre>{JSON.stringify({ rawRow: row?.raw_row, rawValue: issue.raw_value, candidates: issue.candidates }, null, 2)}</pre></details>
+    <summary><span><strong>Row {row?.row_number ?? "batch"} · {presentation.title}</strong><small>{presentation.category} · {courseName}</small></span><span className={`survey-status ${issue.severity === "blocking" ? "unlocked" : "draft"}`}>{issue.severity}</span></summary>
+    <div><p>{issue.message}</p><p className="muted">{presentation.explanation}</p>
+      <dl className="compact-stats">
+        <div><dt>Source</dt><dd>{issue.source_field ?? "Whole row"}</dd></div>
+        <div><dt>Original value</dt><dd>{typeof issue.raw_value === "string" ? issue.raw_value || "Blank" : "See evidence"}</dd></div>
+        <div><dt>Expected</dt><dd>{presentation.expected}</dd></div>
+        <div><dt>Current result</dt><dd>{row ? friendlyImportStatus(row.row_status) : "Blocked"}</dd></div>
+      </dl>
+      <details><summary>Source evidence and suggested matches</summary><pre>{JSON.stringify({ originalRow: row?.raw_row, originalValue: issue.raw_value, suggestedMatches: issue.candidates, normalizedAnswers: row?.normalized_answers, matchResult: row?.match_diagnostics }, null, 2)}</pre></details>
+      <details><summary>Resolution history ({audit.length})</summary>{audit.length ? <ol className="detail-list">{audit.map((entry) => <li key={entry.id}><strong>{entry.action.replaceAll("_", " ")}</strong> · {new Date(entry.created_at).toLocaleString()}<pre>{JSON.stringify({ before: entry.previous_values, after: entry.new_values }, null, 2)}</pre></li>)}</ol> : <p className="empty">No administrator resolution has been recorded for this row.</p>}</details>
       {row ? <form onSubmit={resolve} className="historical-resolution-form">
-        <label>Project UUID<input name="matchedTaskId" defaultValue={row.matched_task_id ?? ""} /></label>
-        <label>Respondent principal UUID<input name="respondentPrincipalId" defaultValue={row.respondent_principal_id ?? ""} /></label>
-        <label>Reviewed SME Wrike UUID<input name="reviewedWrikeUserId" defaultValue={row.reviewed_wrike_user_id ?? ""} /></label>
-        <label>Create historical principal from Wrike UUID<input name="historicalWrikeUserId" /></label>
+        <SearchableSelect label="Matched project" name="matchedTaskId" options={resolutionOptions.projects} defaultValue={row.matched_task_id ?? ""} />
+        <SearchableSelect label="Respondent identity" name="respondentPrincipalId" options={resolutionOptions.principals} defaultValue={row.respondent_principal_id ?? ""} />
+        <SearchableSelect label="Reviewed SME identity" name="reviewedWrikeUserId" options={resolutionOptions.wrikeUsers} defaultValue={row.reviewed_wrike_user_id ?? ""} />
+        <SearchableSelect label="Create retained historical principal from" name="historicalWrikeUserId" options={resolutionOptions.wrikeUsers} />
         <label>Historical role<select name="historicalRole" defaultValue={row.survey_type === "id_sme_review" ? "id" : "sme"}><option value="id">ID</option><option value="sme">SME</option></select></label>
         <label className="checkbox-row"><input type="checkbox" name="confirmAssignment" /> Confirm the historical assignment context.</label>
         <label>Repeat handling<select name="repeatResolution" defaultValue={row.repeat_resolution ?? ""}><option value="">Not selected</option><option value="retain">Retain this row</option><option value="revision">Integrate as a revision</option></select></label>
         <label>Revision order<input name="revisionOrder" type="number" min="1" defaultValue={row.revision_order ?? ""} /></label>
-        <label className="full">Corrected normalized answers (JSON)<textarea name="correctedAnswers" defaultValue={JSON.stringify(row.normalized_answers, null, 2)} rows={8} /></label>
+        <details className="full"><summary>Advanced answer correction</summary>
+          <p className="muted">Use only when the issue is an answer value. The published survey definition will be applied again during revalidation.</p>
+          <label>Corrected normalized answers (JSON)<textarea name="correctedAnswers" defaultValue={JSON.stringify(row.normalized_answers, null, 2)} rows={8} /></label>
+        </details>
         <label className="full">Ignore reason<input name="ignoreReason" minLength={3} /></label>
         <button disabled={working === row.id}>Save correction and revalidate</button>
       </form> : null}
     </div>
   </details>;
+}
+
+function SearchableSelect({ label, name, options, defaultValue = "" }: {
+  label: string; name: string; options: HistoricalResolutionOption[]; defaultValue?: string;
+}) {
+  const [query, setQuery] = useState("");
+  const visible = options.filter((option) =>
+    `${option.label} ${option.detail ?? ""}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())).slice(0, 100);
+  const selected = options.find((option) => option.id === defaultValue);
+  if (selected && !visible.some((option) => option.id === selected.id)) visible.unshift(selected);
+  return <label>{label}
+    <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${label.toLocaleLowerCase()}`} aria-label={`Search ${label}`} />
+    <select name={name} defaultValue={defaultValue}><option value="">Not selected</option>
+      {visible.map((option) => <option key={option.id} value={option.id}>{option.label}{option.detail ? ` — ${option.detail}` : ""}</option>)}
+    </select>
+  </label>;
+}
+
+function issuePresentation(code: string) {
+  const values: Record<string, { category: string; title: string; explanation: string; expected: string }> = {
+    missing_project: { category: "Project matching", title: "Project not found", explanation: "The source project could not be matched confidently to one synchronized Wrike task.", expected: "One exact Wrike task ID or course name" },
+    ambiguous_project: { category: "Project matching", title: "More than one project matches", explanation: "Multiple projects are plausible and an administrator must choose.", expected: "One authorized project" },
+    missing_respondent: { category: "Identity matching", title: "Respondent not found", explanation: "Import values are evidence only and cannot create application access.", expected: "One retained DevTrack principal" },
+    ambiguous_respondent: { category: "Identity matching", title: "Respondent is ambiguous", explanation: "More than one retained identity matches the supplied name or email.", expected: "One confirmed respondent" },
+    missing_reviewed_sme: { category: "Identity matching", title: "Reviewed SME not found", explanation: "The reviewed SME must resolve without silently creating or merging an identity.", expected: "One verified SME identity" },
+    ambiguous_reviewed_sme: { category: "Identity matching", title: "Reviewed SME is ambiguous", explanation: "An administrator must choose between the candidate SME identities.", expected: "One confirmed reviewed SME" },
+    missing_assignment: { category: "Assignment evidence", title: "Project assignment differs", explanation: "The imported person is not present in the synchronized assignment context.", expected: "Confirmed historical assignment" },
+    invalid_answer: { category: "Answer validation", title: "Answer needs correction", explanation: "The value does not satisfy the referenced survey version’s question rules.", expected: "A value accepted by the published definition" },
+    missing_timestamp: { category: "Timestamp", title: "Submission time is invalid", explanation: "Historical order and immutable submission time require a valid timestamp.", expected: "ISO timestamp, or a supported legacy timestamp" },
+    question_mapping_problem: { category: "Column mapping", title: "Column needs mapping", explanation: "This heading is not part of the detected canonical or legacy contract.", expected: "A canonical mapping or explicit ignore reason" },
+    duplicate_response: { category: "Duplicates", title: "Duplicate response", explanation: "The same response fingerprint already exists or appears more than once.", expected: "Explicit duplicate resolution" },
+    repeat_identity: { category: "Duplicates", title: "Possible response revision", explanation: "Distinct responses share the same project and participants.", expected: "Retain one or order them as revisions" },
+    canonical_collision: { category: "Existing history", title: "Survey history already exists", explanation: "A canonical survey already occupies this project and identity context.", expected: "Explicit reconciliation before integration" },
+  };
+  return values[code] ?? { category: "Integration", title: code.replaceAll("_", " "), explanation: "This row needs administrator review before integration.", expected: "A confirmed resolution" };
+}
+
+function friendlyImportStatus(status: string) {
+  const labels: Record<string, string> = {
+    invalid: "Blocked",
+    staged: "Needs review",
+    issues: "Needs review",
+    ready: "Ready",
+    resolved: "Resolved",
+    integrated: "Integrated",
+    completed: "Integrated",
+    partially_integrated: "Partially integrated",
+    rolled_back: "Rolled back",
+    duplicate: "Duplicate",
+  };
+  return labels[status] ?? status.replaceAll("_", " ");
 }
 
 function ColumnMappingForm({ mapping }: { mapping: HistoricalColumnMapping }) {

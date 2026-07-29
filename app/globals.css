@@ -236,6 +236,16 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
 .historical-imports { display: grid; gap: 26px; }
 .historical-imports > section + section { padding-top: 22px; border-top: 1px solid var(--line); }
 .historical-imports h3 { margin-bottom: 8px; }
+.historical-template-library { display: grid; gap: 18px; }
+.historical-template-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(320px,1fr)); gap: 16px; }
+.historical-workflow { display: grid; gap: 12px; }
+.historical-workflow-steps { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 10px; padding: 0; list-style: none; counter-reset: none; }
+.historical-workflow-steps li { display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: start; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: .86rem; }
+.historical-workflow-steps li span { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.historical-issue-card summary span:first-child { display: grid; gap: 3px; }
+.historical-issue-card summary small { color: var(--muted); font-weight: 400; }
+@media (max-width: 1100px) { .historical-workflow-steps { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 620px) { .historical-workflow-steps { grid-template-columns: 1fr; } }
 .historical-upload-form { display: grid; gap: 12px; }
 .historical-upload-form input[type="file"] { width: 100%; background: #fff; }
 .historical-upload-form button { justify-self: start; }

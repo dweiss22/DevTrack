@@ -6,7 +6,8 @@ import {
   SME_DEBRIEF_STATEMENTS,
   type SurveyType,
 } from "@/lib/surveys/domain";
-import type { SurveyDefinition } from "@/lib/surveys/definition";
+import { orderedQuestions, validateSurveyAnswers, type SurveyDefinition, type SurveyQuestion } from "@/lib/surveys/definition";
+import { canonicalCsvContract } from "@/lib/surveys/csv-contract";
 import { normalizeVerticalValue } from "@/lib/wrike/vertical-normalization";
 
 export type HistoricalImportIssue = {
@@ -35,9 +36,12 @@ export type ParsedHistoricalRow = {
   respondentName: string;
   respondentEmail: string | null;
   reviewedSmeName: string;
+  reviewedSmeEmail: string | null;
   vertical: string | null;
   issues: HistoricalImportIssue[];
 };
+
+export type HistoricalCsvFormat = "canonical" | "legacy";
 
 export type ParsedCsv = {
   headers: string[];
@@ -140,24 +144,42 @@ function filenameSurveyType(filename: string): SurveyType | null {
   return null;
 }
 
-export function detectHistoricalSurveyType(filename: string, headers: string[]) {
+export function detectHistoricalSurveyType(filename: string, headers: string[], rows: Record<string, string>[] = []) {
   const keys = new Set(headers.map(normalizedHeader));
+  const hasCommonCanonicalHeaders = ["surveyType", "surveyVersion", "submittedAt", "courseName"]
+    .every((header) => keys.has(normalizedHeader(header)));
+  const canonicalType: SurveyType | null = hasCommonCanonicalHeaders
+    ? keys.has(normalizedHeader("reviewerName")) && keys.has(normalizedHeader("reviewedSmeName"))
+      ? "id_sme_review"
+      : keys.has(normalizedHeader("smeName"))
+        ? "course_development_debrief"
+        : null
+    : null;
   const contains = (expected: readonly string[]) => expected.every((header) => keys.has(normalizedHeader(header)));
-  const contentType: SurveyType | null = contains(ID_HEADERS)
+  const legacyType: SurveyType | null = contains(ID_HEADERS)
     ? "id_sme_review"
     : contains(DEBRIEF_HEADERS)
       ? "course_development_debrief"
       : null;
+  const contentType = canonicalType ?? legacyType;
+  const format: HistoricalCsvFormat = canonicalType ? "canonical" : "legacy";
   const filenameType = filenameSurveyType(filename);
-  const unknownHeaders = contentType
+  const canonicalRowTypes = canonicalType
+    ? [...new Set(rows.map((row) => row.surveyType?.trim()).filter(Boolean))]
+    : [];
+  const rowTypeConflict = canonicalType
+    ? canonicalRowTypes.some((value) => value !== canonicalType)
+    : false;
+  const unknownHeaders = legacyType && !canonicalType
     ? headers.filter((header) => !(contentType === "id_sme_review" ? ID_HEADERS : DEBRIEF_HEADERS)
       .some((expected) => normalizedHeader(expected) === normalizedHeader(header))
       && !OPTIONAL_SOURCE_HEADERS.some((expected) => normalizedHeader(expected) === normalizedHeader(header)))
-    : headers;
+    : canonicalType ? [] : headers;
   return {
     surveyType: contentType,
+    format,
     filenameType,
-    conflict: Boolean(contentType && filenameType && contentType !== filenameType),
+    conflict: Boolean(rowTypeConflict || (contentType && filenameType && contentType !== filenameType)),
     unknownHeaders,
   };
 }
@@ -166,7 +188,25 @@ function mapping(heading: string, canonicalId: string, conversion: string, targe
   return { heading, canonicalId, conversion, target };
 }
 
-export function historicalColumnMappings(type: SurveyType): HistoricalColumnMapping[] {
+export function historicalColumnMappings(
+  type: SurveyType,
+  format: HistoricalCsvFormat = "legacy",
+  definition?: SurveyDefinition,
+  version = 1,
+  publishedAt = "",
+): HistoricalColumnMapping[] {
+  if (format === "canonical") {
+    if (!definition) throw new Error("A published survey definition is required for canonical CSV mappings.");
+    return canonicalCsvContract(definition, version, publishedAt).fields.map((field) => mapping(
+      field.column,
+      field.canonicalId,
+      field.acceptedFormat,
+      field.role === "timestamp" ? "timestamp"
+        : field.role === "identity" ? "identity"
+          : field.role === "answer" || field.role === "trusted_context" ? "answer"
+            : "context",
+    ));
+  }
   const sourceIdentityMappings = [
     mapping("Wrike Task ID", "wrikeTaskId", "validated exact Wrike task ID", "context"),
     mapping("Response ID", "sourceResponseId", "trimmed stable source response ID", "context"),
@@ -274,7 +314,143 @@ function setPresent(target: Record<string, unknown>, key: string, value: unknown
   if (value !== null && value !== "") target[key] = value;
 }
 
-export function parseHistoricalRow(type: SurveyType, row: Record<string, string>, timezone: string): ParsedHistoricalRow {
+function validIsoDate(raw: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return false;
+  const parsed = new Date(`${raw}T00:00:00Z`);
+  return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === raw;
+}
+
+function canonicalTimestamp(raw: string, timezone: string) {
+  const trimmed = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/i.test(trimmed)) {
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.valueOf()) ? null : parsed.toISOString();
+  }
+  const local = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!local) return null;
+  const [, year, month, day, hour, minute, second = "0"] = local;
+  const wallClock = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+  let instant = new Date(wallClock);
+  for (let attempt = 0; attempt < 2; attempt += 1) instant = new Date(wallClock - timezoneOffset(instant, timezone));
+  return Number.isNaN(instant.valueOf()) ? null : instant.toISOString();
+}
+
+function canonicalQuestionValue(question: SurveyQuestion, row: Record<string, string>, issues: HistoricalImportIssue[]) {
+  if (question.type === "rating_matrix") {
+    const ratings: Record<string, number> = {};
+    for (const matrixRow of question.rows ?? []) {
+      const column = `${question.id}.${matrixRow.id}`;
+      const raw = row[column] ?? "";
+      const value = parseBoundedNumber(raw, column, question.scale?.min ?? 1, question.scale?.max ?? 5, issues, question.required);
+      if (value != null && Number.isInteger(value)) ratings[matrixRow.id] = value;
+      else if (value != null) issues.push({ code: "invalid_answer", field: column, message: `${column} must be a whole number.`, rawValue: raw, severity: "blocking" });
+    }
+    return ratings;
+  }
+  const raw = row[question.id] ?? "";
+  if (!raw.trim()) return null;
+  if (question.type === "date") {
+    if (validIsoDate(raw.trim())) return raw.trim();
+    issues.push({ code: "invalid_answer", field: question.id, message: `${question.label} must be a valid ISO date (YYYY-MM-DD).`, rawValue: raw, severity: "blocking" });
+    return null;
+  }
+  if (question.type === "number" || question.type === "currency" || question.type === "rating_scale") {
+    const value = parseBoundedNumber(
+      raw, question.id,
+      question.type === "rating_scale" ? question.scale?.min ?? 0 : question.validation.min ?? Number.MIN_SAFE_INTEGER,
+      question.type === "rating_scale" ? question.scale?.max ?? 10 : question.validation.max ?? Number.MAX_SAFE_INTEGER,
+      issues,
+    );
+    if (value != null && (question.validation.step === 1 || question.type === "rating_scale") && !Number.isInteger(value)) {
+      issues.push({ code: "invalid_answer", field: question.id, message: `${question.label} must be a whole number.`, rawValue: raw, severity: "blocking" });
+      return null;
+    }
+    return value;
+  }
+  if (question.type === "yes_no") return parseYesNo(raw, question.id, issues);
+  if (question.type === "single_choice") {
+    const option = question.options?.find((candidate) =>
+      normalizeText(candidate.id) === normalizeText(raw) || normalizeText(candidate.label) === normalizeText(raw));
+    if (option) return option.id;
+    issues.push({ code: "invalid_answer", field: question.id, message: `${question.label} must match one of the published choices.`, rawValue: raw, severity: "blocking" });
+    return null;
+  }
+  if (question.type === "multiple_choice") {
+    const values = raw.split(/[|;]/).map((value) => value.trim()).filter(Boolean);
+    const resolved = values.map((value) => question.options?.find((option) =>
+      normalizeText(option.id) === normalizeText(value) || normalizeText(option.label) === normalizeText(value))?.id);
+    if (resolved.some((value) => !value)) {
+      issues.push({ code: "invalid_answer", field: question.id, message: `${question.label} contains an unavailable choice.`, rawValue: raw, severity: "blocking" });
+      return null;
+    }
+    return resolved;
+  }
+  return raw.trim();
+}
+
+function parseCanonicalRow(
+  type: SurveyType,
+  row: Record<string, string>,
+  timezone: string,
+  definition: SurveyDefinition,
+  expectedVersion?: number,
+): ParsedHistoricalRow {
+  const issues: HistoricalImportIssue[] = [];
+  const answers: Record<string, unknown> = {};
+  if (row.surveyType?.trim() !== type) {
+    issues.push({ code: "question_mapping_problem", field: "surveyType", message: `surveyType must be ${type}.`, rawValue: row.surveyType, severity: "blocking" });
+  }
+  const version = Number(row.surveyVersion);
+  if (!Number.isInteger(version) || version < 1 || (expectedVersion != null && version !== expectedVersion)) {
+    issues.push({ code: "question_mapping_problem", field: "surveyVersion", message: `surveyVersion must match published version ${expectedVersion ?? ""}.`.trim(), rawValue: row.surveyVersion, severity: "blocking" });
+  }
+  const submittedAt = canonicalTimestamp(row.submittedAt ?? "", timezone);
+  if (!submittedAt) issues.push({ code: "missing_timestamp", field: "submittedAt", message: "submittedAt must be a valid ISO timestamp. Offset-free values use the confirmed source timezone.", rawValue: row.submittedAt, severity: "blocking" });
+  for (const question of orderedQuestions(definition)) {
+    if (question.type === "file_upload") continue;
+    const value = canonicalQuestionValue(question, row, issues);
+    setPresent(answers, question.id, value);
+  }
+  const validated = validateSurveyAnswers(definition, answers);
+  for (const [field, message] of Object.entries(validated.errors)) {
+    if (!issues.some((item) => item.field === field)) {
+      issues.push({ code: "invalid_answer", field, message, rawValue: row[field], severity: "blocking" });
+    }
+  }
+  return {
+    answers,
+    submittedAt,
+    issues,
+    projectTitle: row.courseName?.trim() ?? "",
+    projectKey: "",
+    wrikeTaskId: row.wrikeTaskId?.trim() || null,
+    sourceResponseId: row.sourceResponseId?.trim() || null,
+    respondentName: (type === "id_sme_review" ? row.reviewerName : row.smeName)?.trim() ?? "",
+    respondentEmail: (type === "id_sme_review" ? row.reviewerEmail : row.smeEmail)?.trim() || null,
+    reviewedSmeName: (type === "id_sme_review" ? row.reviewedSmeName : row.smeName)?.trim() ?? "",
+    reviewedSmeEmail: (type === "id_sme_review" ? row.reviewedSmeEmail : row.smeEmail)?.trim() || null,
+    vertical: typeof answers.vertical === "string" ? answers.vertical : null,
+    sourceContext: {
+      sourceSurveyVersion: version,
+      sourceFormat: "canonical",
+      sourceVertical: row.vertical,
+      sourcePublicationYear: row.publicationYear,
+    },
+  };
+}
+
+export function parseHistoricalRow(
+  type: SurveyType,
+  row: Record<string, string>,
+  timezone: string,
+  format: HistoricalCsvFormat = "legacy",
+  definition?: SurveyDefinition,
+  expectedVersion?: number,
+): ParsedHistoricalRow {
+  if (format === "canonical") {
+    if (!definition) throw new Error("A published survey definition is required to parse canonical CSV rows.");
+    return parseCanonicalRow(type, row, timezone, definition, expectedVersion);
+  }
   const issues: HistoricalImportIssue[] = [];
   const answers: Record<string, unknown> = {};
   const ratings: Record<string, number> = {};
@@ -310,6 +486,7 @@ export function parseHistoricalRow(type: SurveyType, row: Record<string, string>
       respondentName: row.Name?.trim() ?? "",
       respondentEmail: null,
       reviewedSmeName: row.SME?.trim() ?? "",
+      reviewedSmeEmail: null,
       vertical: typeof answers.vertical === "string" ? answers.vertical : null,
       sourceContext: { sourceProjectKey: row.CourseKey?.trim() ?? "", sourceVertical: row.Vertical, sourceYear: row.Year },
     };
@@ -349,6 +526,7 @@ export function parseHistoricalRow(type: SurveyType, row: Record<string, string>
     respondentName: row["SME Name"]?.trim() ?? "",
     respondentEmail: row.Email?.trim() || null,
     reviewedSmeName: row["SME Name"]?.trim() ?? "",
+    reviewedSmeEmail: row.Email?.trim() || null,
     vertical: null,
     sourceContext: {
       sourceProjectKey: row.CourseKey?.trim() ?? "",

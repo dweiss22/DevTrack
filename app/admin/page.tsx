@@ -5,11 +5,16 @@ import type {
   HistoricalImportBatch,
   HistoricalImportIssue,
   HistoricalImportRow,
+  HistoricalTemplate,
+  HistoricalResolutionOptions,
+  HistoricalResolutionAudit,
 } from "@/components/historical-survey-imports";
 import type { ImportConflict } from "@/components/import-conflict-review";
 import { requirePageCapability } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SELECTED_WRIKE_FOLDERS } from "@/lib/wrike/selected-folders";
+import { canonicalCsvContract } from "@/lib/surveys/csv-contract";
+import { surveyDefinitionSchema } from "@/lib/surveys/definition";
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ connected?: string; error?: string }> }) {
   const { supabase, profile } = await requirePageCapability("manage_data");
@@ -27,6 +32,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     { data: historicalRows },
     { data: historicalIssues },
     { data: historicalMappings },
+    { data: publishedSurveyVersions },
+    { data: historicalProjectOptions },
+    { data: historicalPrincipalOptions },
+    { data: historicalWrikeUserOptions },
+    { data: historicalResolutionAudit },
   ] = await Promise.all([
     admin.from("wrike_connections").select("status,account_name,api_host,oauth_scopes,token_expires_at,updated_at").eq("organization_id", profile.organization_id).maybeSingle(),
     admin.from("wrike_folder_task_import_runs").select("id,status,folder_counts,timelog_folder_counts,task_count,unique_timelog_count,task_request_count,timelog_request_count,failed_folder_request_count,folder_failures,duration_ms,folder_definition_count,custom_field_definition_count,metadata_diagnostics,timelog_descendant_strategy,timelog_descendant_diagnostics,reference_data_diagnostics,reference_warning_count,custom_field_conflict_count,custom_field_normalization_diagnostics,task_custom_field_diagnostics,unresolved_reference_count,reference_resolution_diagnostics,error_summary,created_at").eq("organization_id", profile.organization_id).order("created_at", { ascending: false }).limit(10),
@@ -53,7 +63,27 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     admin.from("survey_historical_import_column_mappings")
       .select("id,batch_id,original_heading,canonical_question_id,mapping_target,normalized_conversion,mapping_source")
       .eq("organization_id", profile.organization_id).order("column_ordinal", { ascending: true }).limit(2000),
+    admin.from("survey_template_versions")
+      .select("id,survey_type,version_number,definition,published_at")
+      .eq("organization_id", profile.organization_id)
+      .eq("version_origin", "published")
+      .order("survey_type", { ascending: true })
+      .order("version_number", { ascending: false }),
+    admin.from("wrike_tasks").select("id,title,wrike_id").eq("organization_id", profile.organization_id).eq("is_deleted", false).order("title"),
+    admin.from("application_user_principals").select("id,display_name,state").eq("organization_id", profile.organization_id).order("display_name"),
+    admin.from("wrike_users").select("id,display_name,email").eq("organization_id", profile.organization_id).eq("is_unresolved", false).order("display_name"),
+    admin.from("survey_historical_import_resolution_audit")
+      .select("id,batch_id,row_id,action,previous_values,new_values,created_at")
+      .eq("organization_id", profile.organization_id)
+      .order("created_at", { ascending: false })
+      .limit(5000),
   ]);
+  const historicalTemplates = (publishedSurveyVersions ?? []).flatMap((version) => {
+    const definition = surveyDefinitionSchema.safeParse(version.definition);
+    return definition.success
+      ? [{ id: version.id, ...canonicalCsvContract(definition.data, version.version_number, version.published_at) }]
+      : [];
+  }) as HistoricalTemplate[];
 
   return <AppShell isAdmin>
     <header className="page-header"><div><p className="eyebrow">ADMINISTRATIVE FUNCTIONS</p><h1>Data</h1><p>Manage synchronized Wrike data, historical survey imports, source folders, unresolved references, and run history.</p></div></header>
@@ -74,6 +104,13 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       historicalRows={(historicalRows ?? []) as HistoricalImportRow[]}
       historicalIssues={(historicalIssues ?? []) as HistoricalImportIssue[]}
       historicalMappings={(historicalMappings ?? []) as HistoricalColumnMapping[]}
+      historicalTemplates={historicalTemplates}
+      historicalResolutionOptions={{
+        projects: (historicalProjectOptions ?? []).map((item) => ({ id: item.id, label: item.title, detail: item.wrike_id })),
+        principals: (historicalPrincipalOptions ?? []).map((item) => ({ id: item.id, label: item.display_name ?? "Unnamed retained principal", detail: item.state })),
+        wrikeUsers: (historicalWrikeUserOptions ?? []).map((item) => ({ id: item.id, label: item.display_name, detail: item.email })),
+      } satisfies HistoricalResolutionOptions}
+      historicalResolutionAudit={(historicalResolutionAudit ?? []) as HistoricalResolutionAudit[]}
     />
   </AppShell>;
 }

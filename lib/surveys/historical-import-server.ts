@@ -14,6 +14,7 @@ import {
   type HistoricalImportIssue,
 } from "@/lib/surveys/historical-import";
 import type { SurveyType } from "@/lib/surveys/domain";
+import { surveyDefinitionSchema, type SurveyDefinition } from "@/lib/surveys/definition";
 
 type StageInput = {
   organizationId: string;
@@ -166,21 +167,48 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
   }
   const document = parseHistoricalCsv(source);
   if (document.rows.length > 10_000 || document.headers.length > 250) throw new Error("Historical CSV files may contain at most 10,000 rows and 250 columns.");
-  const detection = detectHistoricalSurveyType(input.filename, document.headers);
+  const detection = detectHistoricalSurveyType(input.filename, document.headers, document.rows);
   const batchId = existingBatch?.id ?? randomUUID();
   const surveyType = detection.surveyType;
   const schemaChecksum = surveyType ? historicalSchemaChecksum(surveyType, document.headers) : null;
+  const canonicalVersions = detection.format === "canonical"
+    ? [...new Set(document.rows.map((row) => Number(row.surveyVersion)).filter((value) => Number.isInteger(value) && value > 0))]
+    : [];
+  const canonicalVersionConflict = detection.format === "canonical" && canonicalVersions.length !== 1;
 
   let versionId: string | null = null;
-  if (surveyType && !detection.conflict) {
-    const definition = historicalSurveyDefinition(surveyType);
-    const { data, error } = await input.supabase.rpc("ensure_historical_survey_version", {
-      requested_type: surveyType,
-      requested_schema_checksum: schemaChecksum,
-      requested_definition: definition,
-    });
-    if (error || !data) throw new Error(error?.message ?? "Historical survey version could not be created.");
-    versionId = data as string;
+  let definition: SurveyDefinition | null = null;
+  let publishedAt = "";
+  let canonicalVersionError: string | null = null;
+  if (surveyType && !detection.conflict && !canonicalVersionConflict) {
+    if (detection.format === "canonical") {
+      const { data, error } = await admin.from("survey_template_versions")
+        .select("id,definition,published_at")
+        .eq("organization_id", input.organizationId)
+        .eq("survey_type", surveyType)
+        .eq("version_number", canonicalVersions[0])
+        .eq("version_origin", "published")
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) {
+        canonicalVersionError = `Published ${surveyType.replaceAll("_", " ")} version ${canonicalVersions[0]} was not found. Download a current template and verify surveyVersion.`;
+      } else {
+        const parsedDefinition = surveyDefinitionSchema.safeParse(data.definition);
+        if (!parsedDefinition.success) throw new Error("The referenced published survey definition is invalid.");
+        definition = parsedDefinition.data;
+        versionId = data.id;
+        publishedAt = data.published_at;
+      }
+    } else {
+      definition = historicalSurveyDefinition(surveyType);
+      const { data, error } = await input.supabase.rpc("ensure_historical_survey_version", {
+        requested_type: surveyType,
+        requested_schema_checksum: schemaChecksum,
+        requested_definition: definition,
+      });
+      if (error || !data) throw new Error(error?.message ?? "Historical survey version could not be created.");
+      versionId = data as string;
+    }
   }
 
   if (resumableBatch) {
@@ -192,7 +220,7 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
     if (mappingCleanupError) throw new Error(mappingCleanupError.message);
     const { error: batchError } = await admin.from("survey_historical_import_batches").update({
       source_filename: input.filename, schema_checksum: schemaChecksum, survey_type: surveyType,
-      source_timezone: input.timezone, headers: document.headers, status: surveyType ? "staged" : "invalid",
+      source_timezone: input.timezone, headers: document.headers, status: surveyType && !canonicalVersionConflict && !canonicalVersionError ? "staged" : "invalid",
       summary: {}, validated_at: null,
     }).eq("id", batchId);
     if (batchError) throw new Error(batchError.message);
@@ -200,7 +228,7 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
     const { error: batchError } = await admin.from("survey_historical_import_batches").insert({
       id: batchId, organization_id: input.organizationId, source_filename: input.filename,
       file_checksum: fileChecksum, schema_checksum: schemaChecksum, survey_type: surveyType,
-      source_timezone: input.timezone, headers: document.headers, status: surveyType ? "staged" : "invalid",
+      source_timezone: input.timezone, headers: document.headers, status: surveyType && !canonicalVersionConflict && !canonicalVersionError ? "staged" : "invalid",
       imported_by: input.actorId,
     });
     if (batchError) throw new Error(batchError.message);
@@ -211,13 +239,17 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
   });
   if (attemptError) throw new Error(attemptError.message);
 
-  if (!surveyType || detection.conflict) {
+  if (!surveyType || detection.conflict || canonicalVersionConflict || canonicalVersionError) {
     const { error: issueError } = await admin.from("survey_historical_import_issues").insert({
       organization_id: input.organizationId, batch_id: batchId, row_id: null,
       issue_code: detection.conflict ? "survey_type_conflict" : "question_mapping_problem",
       severity: "blocking",
       message: detection.conflict
         ? "The filename and CSV headers identify different survey types."
+        : canonicalVersionConflict
+          ? "Canonical CSV rows must all reference one positive published surveyVersion."
+        : canonicalVersionError
+          ? canonicalVersionError
         : "The CSV headers do not match a supported historical survey.",
       raw_value: { filename: input.filename, headers: document.headers },
       candidates: [],
@@ -225,13 +257,17 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
     if (issueError) throw new Error(issueError.message);
     await admin.from("survey_historical_import_batches").update({
       status: "invalid",
-      summary: { totalRows: document.rows.length, readyRows: 0, issueRows: document.rows.length, blockingIssues: 1, warningIssues: 0 },
+      summary: { format: detection.format, totalRows: document.rows.length, readyRows: 0, issueRows: document.rows.length, blockingIssues: 1, warningIssues: 0 },
     }).eq("id", batchId);
     return { batchId, duplicateUpload: false, surveyType, totalRows: document.rows.length, readyRows: 0, issueRows: document.rows.length, blockingIssues: 1, warningIssues: 0 };
   }
 
-  const knownMappings = historicalColumnMappings(surveyType);
+  if (!definition) throw new Error("The survey definition could not be resolved.");
+  const knownMappings = historicalColumnMappings(
+    surveyType, detection.format, definition, canonicalVersions[0] ?? 1, publishedAt,
+  );
   const mappingsByHeader = new Map(knownMappings.map((item) => [normalizeHistoricalTitle(item.heading), item]));
+  const unmappedHeaders = document.headers.filter((heading) => !mappingsByHeader.has(normalizeHistoricalTitle(heading)));
   const { error: mappingError } = await admin.from("survey_historical_import_column_mappings").insert(document.headers.map((heading, index) => {
     const found = mappingsByHeader.get(normalizeHistoricalTitle(heading));
     return {
@@ -243,7 +279,7 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
   }));
   if (mappingError) throw new Error(mappingError.message);
 
-  const [tasks, users, personas, principals, applicationUsers, existingSurveys, existingIntegrations, idAssignmentsResult, smeAssignmentsResult, reportingValues] = await Promise.all([
+  const [tasks, users, personas, principals, applicationUsers, existingSurveys, existingIntegrations, idAssignmentsResult, smeAssignmentsResult, reportingValues, smeProfiles] = await Promise.all([
     loadAll<TaskRow>((from, to) => admin.from("wrike_tasks").select("id,wrike_id,title,status,custom_status_id")
       .eq("organization_id", input.organizationId).eq("is_deleted", false).range(from, to) as never),
     loadAll<WrikeUserRow>((from, to) => admin.from("wrike_users").select("id,display_name,email,identity_verified,is_unresolved,is_active")
@@ -266,6 +302,8 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
     loadAll<{ task_id: string; reporting_year: number | null }>((from, to) => admin.from("wrike_task_normalized_custom_field_values")
       .select("task_id,reporting_year,task:wrike_tasks!inner(organization_id)")
       .eq("task.organization_id", input.organizationId).not("reporting_year", "is", null).range(from, to) as never),
+    loadAll<{ application_user_id: string; classification: "internal" | "external" | null }>((from, to) => admin.from("application_user_sme_profiles")
+      .select("application_user_id,classification").eq("organization_id", input.organizationId).range(from, to) as never),
   ]);
   if (idAssignmentsResult.error || smeAssignmentsResult.error) throw new Error(idAssignmentsResult.error?.message ?? smeAssignmentsResult.error?.message ?? "Project assignments could not be loaded.");
 
@@ -282,6 +320,7 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
   const idAssignments = new Set((idAssignmentsResult.data ?? []).map((row: { task_id: string; wrike_user_id: string }) => `${row.task_id}:${row.wrike_user_id}`));
   const smeAssignments = new Set((smeAssignmentsResult.data ?? []).map((row: { task_id: string; wrike_user_id: string }) => `${row.task_id}:${row.wrike_user_id}`));
   const reportingByTask = new Map(reportingValues.map((row) => [row.task_id, row.reporting_year]));
+  const classificationByPrincipal = new Map(smeProfiles.map((row) => [row.application_user_id, row.classification]));
   const integratedFingerprints = new Set(existingIntegrations.map((row) => row.fingerprint));
   const rowsToInsert: Record<string, unknown>[] = [];
   const issuesToInsert: StagedIssue[] = [];
@@ -289,10 +328,12 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
 
   for (const [index, rawRow] of document.rows.entries()) {
     const rowId = randomUUID();
-    const parsed = parseHistoricalRow(surveyType, rawRow, input.timezone);
+    const parsed = parseHistoricalRow(
+      surveyType, rawRow, input.timezone, detection.format, definition, canonicalVersions[0],
+    );
     const stagedIssues: StagedIssue[] = [];
     parsed.issues.forEach((item) => parserIssue(stagedIssues, item));
-    for (const heading of detection.unknownHeaders) issue(stagedIssues, "question_mapping_problem", `Map or explicitly ignore the unfamiliar column "${heading}".`, { source_field: heading, raw_value: rawRow[heading] });
+    for (const heading of unmappedHeaders) issue(stagedIssues, "question_mapping_problem", `Map or explicitly ignore the unfamiliar column "${heading}".`, { source_field: heading, raw_value: rawRow[heading] });
 
     const exactTasks = parsed.wrikeTaskId
       ? tasks.filter((task) => task.wrike_id === parsed.wrikeTaskId)
@@ -311,7 +352,7 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
     });
 
     const respondentCandidates = candidateUsers(parsed.respondentName, parsed.respondentEmail, users);
-    const reviewedCandidates = candidateUsers(parsed.reviewedSmeName, parsed.respondentEmail && surveyType === "course_development_debrief" ? parsed.respondentEmail : null, users);
+    const reviewedCandidates = candidateUsers(parsed.reviewedSmeName, parsed.reviewedSmeEmail, users);
     const respondentWrike = respondentCandidates.length === 1 ? respondentCandidates[0] : null;
     const reviewedWrike = reviewedCandidates.length === 1 ? reviewedCandidates[0] : null;
     let respondentPrincipalId = respondentWrike ? principalByWrike.get(respondentWrike.id) ?? null : null;
@@ -322,6 +363,24 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
     if (!respondentPrincipalId) {
       const matches = principalByName.get(normalizedName(parsed.respondentName)) ?? [];
       if (matches.length === 1) respondentPrincipalId = matches[0];
+    }
+    const trustedClassification = surveyType === "course_development_debrief" && respondentPrincipalId
+      ? classificationByPrincipal.get(respondentPrincipalId) ?? null
+      : null;
+    const historicalClassification = parsed.sourceContext.historicalClassification;
+    if (trustedClassification && historicalClassification && trustedClassification !== historicalClassification) {
+      issue(stagedIssues, "invalid_answer", "The legacy Internal value conflicts with the trusted SME classification. DevTrack will retain the trusted classification.", {
+        source_field: "Internal",
+        raw_value: { source: historicalClassification, trusted: trustedClassification },
+        severity: "warning",
+      });
+    }
+    if (surveyType === "course_development_debrief" && trustedClassification === "internal") {
+      delete parsed.answers.billableHours;
+      delete parsed.answers.amountBilled;
+    }
+    if (surveyType === "course_development_debrief" && trustedClassification) {
+      parsed.answers.legacyInternalEmployee = trustedClassification === "internal";
     }
     if (respondentCandidates.length > 1) issue(stagedIssues, "ambiguous_respondent", "More than one verified Wrike identity matches the respondent.", {
       source_field: surveyType === "id_sme_review" ? "Name" : "Email",
@@ -338,11 +397,11 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
 
     if (!reviewedCandidates.length) issue(stagedIssues, "missing_reviewed_sme", "The reviewed SME could not be matched to one verified Wrike identity.", {
       source_field: surveyType === "id_sme_review" ? "SME" : "SME Name",
-      raw_value: { name: parsed.reviewedSmeName, email: parsed.respondentEmail },
+      raw_value: { name: parsed.reviewedSmeName, email: parsed.reviewedSmeEmail },
     });
     else if (reviewedCandidates.length > 1) issue(stagedIssues, "ambiguous_reviewed_sme", "More than one verified Wrike identity matches the reviewed SME.", {
       source_field: surveyType === "id_sme_review" ? "SME" : "SME Name",
-      raw_value: { name: parsed.reviewedSmeName, email: parsed.respondentEmail },
+      raw_value: { name: parsed.reviewedSmeName, email: parsed.reviewedSmeEmail },
       candidates: reviewedCandidates.map((candidate) => ({ id: candidate.id, name: candidate.display_name, email: candidate.email })),
     });
 
@@ -389,10 +448,10 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
       publicationYear: surveyType === "id_sme_review" ? parsed.answers.publicationYear ?? null : null,
       vertical: surveyType === "id_sme_review" ? parsed.answers.vertical ?? null : null,
       smeClassification: surveyType === "course_development_debrief"
-        ? parsed.sourceContext.historicalClassification ?? null : null,
+        ? trustedClassification ?? historicalClassification ?? null : null,
       subject: {
         applicationUserId: respondentPrincipalId, wrikeUserId: reviewedWrike?.id ?? null,
-        name: parsed.reviewedSmeName, email: parsed.respondentEmail,
+        name: parsed.reviewedSmeName, email: parsed.reviewedSmeEmail,
       },
     };
     const blocking = stagedIssues.some((item) => item.severity === "blocking");
@@ -405,7 +464,7 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
         projectTitle: parsed.projectTitle, projectKey: parsed.projectKey,
         wrikeTaskId: parsed.wrikeTaskId, sourceResponseId: parsed.sourceResponseId,
         respondentName: parsed.respondentName, respondentEmail: parsed.respondentEmail,
-        reviewedSmeName: parsed.reviewedSmeName,
+        reviewedSmeName: parsed.reviewedSmeName, reviewedSmeEmail: parsed.reviewedSmeEmail,
       },
       source_submitted_at: parsed.submittedAt, matched_task_id: matchedTask?.id ?? null,
       respondent_principal_id: respondentPrincipalId,
@@ -445,7 +504,7 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
   const issueRows = rowsToInsert.length - readyRows;
   const blockingIssues = issuesToInsert.filter((item) => item.severity === "blocking").length;
   const warningIssues = issuesToInsert.filter((item) => item.severity === "warning").length;
-  const summary = { totalRows: rowsToInsert.length, readyRows, issueRows, blockingIssues, warningIssues, integratedRows: 0 };
+  const summary = { format: detection.format, surveyVersion: canonicalVersions[0] ?? null, totalRows: rowsToInsert.length, readyRows, issueRows, blockingIssues, warningIssues, integratedRows: 0 };
   const { error: summaryError } = await admin.from("survey_historical_import_batches").update({
     status: readyRows ? "ready" : "staged", summary, validated_at: new Date().toISOString(),
   }).eq("id", batchId);

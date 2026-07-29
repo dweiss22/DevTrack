@@ -6,6 +6,9 @@ import {
   type HistoricalImportBatch,
   type HistoricalImportIssue,
   type HistoricalImportRow,
+  type HistoricalTemplate,
+  type HistoricalResolutionOptions,
+  type HistoricalResolutionAudit,
 } from "@/components/historical-survey-imports";
 import { ImportConflictReview, type ImportConflict } from "@/components/import-conflict-review";
 import { UnresolvedReferenceLabel } from "@/components/wrike-reference";
@@ -52,9 +55,12 @@ type Props = {
   historicalRows: HistoricalImportRow[];
   historicalIssues: HistoricalImportIssue[];
   historicalMappings: HistoricalColumnMapping[];
+  historicalTemplates: HistoricalTemplate[];
+  historicalResolutionOptions: HistoricalResolutionOptions;
+  historicalResolutionAudit: HistoricalResolutionAudit[];
 };
 
-export function AdminPanel({ connection, folderRuns, folders, unresolvedReferences, verticalDiagnostics, verticalDiagnosticsError, repairRuns, importConflicts, importConflictCount, importConflictError, historicalBatches, historicalRows, historicalIssues, historicalMappings }: Props) {
+export function AdminPanel({ connection, folderRuns, folders, unresolvedReferences, verticalDiagnostics, verticalDiagnosticsError, repairRuns, importConflicts, importConflictCount, importConflictError, historicalBatches, historicalRows, historicalIssues, historicalMappings, historicalTemplates, historicalResolutionOptions, historicalResolutionAudit }: Props) {
   const connected = connection?.status === "connected";
   const needsUserScope = connected && !connection?.oauth_scopes?.includes("amReadOnlyUser");
   const [message, setMessage] = useState("");
@@ -148,7 +154,7 @@ export function AdminPanel({ connection, folderRuns, folders, unresolvedReferenc
       <div className="admin-history-toolbar"><a className="button secondary" href="#data-history">View run history</a></div>
     </AdminDisclosure>
     <AdminDisclosure title="Historical survey imports" description="Stage, reconcile, and integrate legacy survey CSVs without granting imported identities application access." count={`${historicalBatches.length} batch${historicalBatches.length === 1 ? "" : "es"}`} defaultOpen={historicalIssues.length > 0}>
-      <HistoricalSurveyImports batches={historicalBatches} rows={historicalRows} issues={historicalIssues} mappings={historicalMappings} />
+      <HistoricalSurveyImports batches={historicalBatches} rows={historicalRows} issues={historicalIssues} mappings={historicalMappings} templates={historicalTemplates} resolutionOptions={historicalResolutionOptions} resolutionAudit={historicalResolutionAudit} />
     </AdminDisclosure>
     <AdminDisclosure title="Connection & source folders" description="Manage the Wrike connection and review the folders included in synchronization.">
     <div className="admin-grid">
