@@ -56,7 +56,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const total = projects[0]?.total_count ?? 0;
   const percentileResult = await loadProjectLengthPercentilesResult(supabase, projects.map((project) => project.task_id));
   const percentileByTask = percentileResult.data;
-  const percentileFailure = percentileResult.error ? reportingFailure(percentileResult.error, "Development percentile query", "202607210005_projects_percentile_performance.sql") : null;
+  const percentileFailure = percentileResult.error ? reportingFailure(percentileResult.error, "Development percentile query", "202607290004_completed_style_percentiles.sql") : null;
   const customFieldsFailure = customFieldsResult.error ? reportingFailure(customFieldsResult.error, "Custom-field filter options") : null;
 
   return <AppShell isAdmin={isAdministrator}>

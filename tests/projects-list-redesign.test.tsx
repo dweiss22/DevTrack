@@ -57,18 +57,30 @@ describe("Projects list redesign", () => {
   });
 
   it("renders an accessible compact percentile ring and an honest empty state", () => {
-    const ring = renderToStaticMarkup(<ProjectPercentileRing benchmark={{ lengthMinutes: 90, targetMinutes: 120, cohortAverageMinutes: 100, cohortSize: 10, percentile: 62 }} />);
+    const ring = renderToStaticMarkup(<ProjectPercentileRing benchmark={{
+      lengthMinutes: 90, courseStyle: "Single Video", targetMinutes: 120,
+      cohortAverageMinutes: 100, cohortMedianMinutes: 95, cohortSize: 10,
+      percentile: 62, unavailableReason: null
+    }} />);
     expect(ring).toContain('role="meter"');
     expect(ring).toContain('aria-valuenow="62"');
     expect(ring).toContain("62nd");
-    expect(ring).toContain("among 10 visible courses");
-    const empty = renderToStaticMarkup(<ProjectPercentileRing benchmark={null} />);
+    expect(ring).toContain("among 10 completed 90-minute Single Video courses");
+    const empty = renderToStaticMarkup(<ProjectPercentileRing benchmark={{
+      lengthMinutes: 60, courseStyle: "Single Video", targetMinutes: 100,
+      cohortAverageMinutes: 100, cohortMedianMinutes: 100, cohortSize: 1,
+      percentile: null, unavailableReason: "not_enough_completed_comparable_courses"
+    }} />);
     expect(empty).not.toContain("aria-valuenow");
-    expect(empty).toContain("Not enough comparable data");
+    expect(empty).toContain("Not enough completed comparable courses");
   });
 
   it("loads percentiles for 100 displayed projects with one batch RPC", async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: [{ task_id: "T1", length_minutes: 90, target_minutes: 120, cohort_average_minutes: 100, cohort_size: 5, lower_count: 3, tie_count: 1 }], error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: [{
+      task_id: "T1", length_minutes: 90, course_style: "Single Video",
+      target_minutes: 120, cohort_average_minutes: 100, cohort_median_minutes: 95,
+      cohort_size: 5, lower_count: 3, tie_count: 1, unavailable_reason: null
+    }], error: null });
     const ids = Array.from({ length: 100 }, (_, index) => `T${index + 1}`);
     const result = await loadProjectLengthPercentiles({ rpc } as never, ids);
     expect(rpc).toHaveBeenCalledTimes(1);
@@ -89,10 +101,10 @@ describe("Projects list redesign", () => {
     const result = await loadProjectLengthPercentilesResult({ rpc: vi.fn().mockResolvedValue({ data: null, error: databaseError }) } as never, ["T1"]);
     expect(result.data.size).toBe(0);
     expect(result.error).toEqual(databaseError);
-    const failure = reportingFailure(result.error, "Development percentile query", "202607210005_projects_percentile_performance.sql");
+    const failure = reportingFailure(result.error, "Development percentile query", "202607290004_completed_style_percentiles.sql");
     const markup = renderToStaticMarkup(<ProjectsLoadFailure failure={failure} isAdmin nonfatal />);
     expect(markup).toContain("requires a database migration");
-    expect(markup).toContain("202607210005_projects_percentile_performance.sql");
+    expect(markup).toContain("202607290004_completed_style_percentiles.sql");
     expect(markup).toContain("Project rows remain available");
     expect(markup).toContain("PGRST202");
   });

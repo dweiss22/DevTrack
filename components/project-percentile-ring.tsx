@@ -1,18 +1,25 @@
 import React from "react";
-import { formatOrdinal, type ProjectLengthBenchmark } from "@/lib/reporting/project-overview";
+import {
+  formatOrdinal,
+  projectBenchmarkUnavailableMessage,
+  type ProjectLengthBenchmark
+} from "@/lib/reporting/project-overview";
 
 export function ProjectPercentileRing({ benchmark }: { benchmark: ProjectLengthBenchmark | null }) {
   const percentile = benchmark?.percentile ?? null;
-  if (!benchmark || percentile == null) return <div className="project-percentile-ring-cell">
-    <div className="project-percentile-ring empty" role="meter" aria-label="Development percentile. Not enough comparable data." aria-valuemin={0} aria-valuemax={100} title="Not enough comparable data">
-      <RingSvg value={0} />
-      <span>—</span>
-    </div>
-  </div>;
+  if (!benchmark || percentile == null || benchmark.lengthMinutes == null || !benchmark.courseStyle) {
+    const message = projectBenchmarkUnavailableMessage(benchmark?.unavailableReason);
+    return <div className="project-percentile-ring-cell">
+      <div className="project-percentile-ring empty" role="meter" aria-label={`Development percentile. ${message}`} aria-valuemin={0} aria-valuemax={100} title={message}>
+        <RingSvg value={0} />
+        <span>—</span>
+      </div>
+    </div>;
+  }
 
   const rounded = Math.round(percentile);
   const ordinal = formatOrdinal(percentile);
-  const description = `${ordinal} percentile among ${benchmark.cohortSize} visible courses with the same normalized length`;
+  const description = `${ordinal} percentile of logged development time among ${benchmark.cohortSize} completed ${benchmark.lengthMinutes}-minute ${benchmark.courseStyle} courses`;
   return <div className="project-percentile-ring-cell">
     <div className="project-percentile-ring" role="meter" aria-label="Development percentile" aria-valuemin={0} aria-valuemax={100} aria-valuenow={rounded} aria-valuetext={description} title={description}>
       <RingSvg value={percentile} />

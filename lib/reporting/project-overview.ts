@@ -21,9 +21,7 @@ function parseCourseLengthString(source: string) {
   const minutes = value.match(/^(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|m)$/);
   if (minutes) return positiveMinutes(Number(minutes[1]));
 
-  // A bare decimal is an observed Wrike representation for decimal hours.
-  // Bare integers remain deliberately ambiguous and are not interpreted.
-  if (/^\d+\.\d+$/.test(value)) return positiveMinutes(Number(value) * 60);
+  // Unitless integers and decimals remain deliberately ambiguous.
   return null;
 }
 
@@ -36,7 +34,7 @@ export function parseCourseLengthMinutes(source: unknown): number | null {
     const distinct = new Set(parsed as number[]);
     return distinct.size === 1 ? [...distinct][0] : null;
   }
-  if (typeof source === "number") return Number.isInteger(source) ? null : positiveMinutes(source * 60);
+  if (typeof source === "number") return null;
   if (typeof source !== "string") return null;
   return parseCourseLengthString(source);
 }
@@ -74,29 +72,81 @@ export function formatOrdinal(value: number) {
 }
 
 export type ProjectLengthBenchmarkRow = {
-  length_minutes: number | string;
-  target_minutes: number | string;
-  cohort_average_minutes: number | string;
-  cohort_size: number | string;
-  lower_count: number | string;
-  tie_count: number | string;
+  length_minutes: number | string | null;
+  course_style: string | null;
+  target_minutes: number | string | null;
+  cohort_average_minutes: number | string | null;
+  cohort_median_minutes: number | string | null;
+  cohort_size: number | string | null;
+  lower_count: number | string | null;
+  tie_count: number | string | null;
+  unavailable_reason: string | null;
 };
 
 export type ProjectLengthBenchmark = {
-  lengthMinutes: number;
-  targetMinutes: number;
-  cohortAverageMinutes: number;
+  lengthMinutes: number | null;
+  courseStyle: string | null;
+  targetMinutes: number | null;
+  cohortAverageMinutes: number | null;
+  cohortMedianMinutes: number | null;
   cohortSize: number;
   percentile: number | null;
+  unavailableReason: string | null;
 };
 
 export function projectLengthBenchmark(row: ProjectLengthBenchmarkRow | null): ProjectLengthBenchmark | null {
   if (!row) return null;
-  const lengthMinutes = Number(row.length_minutes);
-  const targetMinutes = Number(row.target_minutes);
-  const cohortAverageMinutes = Number(row.cohort_average_minutes);
-  const cohortSize = Number(row.cohort_size);
-  const percentile = percentileRankFromCounts(Number(row.lower_count), Number(row.tie_count), cohortSize);
-  if (![lengthMinutes, targetMinutes, cohortAverageMinutes, cohortSize].every(Number.isFinite) || lengthMinutes <= 0) return null;
-  return { lengthMinutes, targetMinutes, cohortAverageMinutes, cohortSize, percentile };
+  const lengthMinutes = nullableFiniteNumber(row.length_minutes);
+  const targetMinutes = nullableFiniteNumber(row.target_minutes);
+  const cohortAverageMinutes = nullableFiniteNumber(row.cohort_average_minutes);
+  const cohortMedianMinutes = nullableFiniteNumber(row.cohort_median_minutes);
+  const cohortSize = nullableFiniteNumber(row.cohort_size) ?? 0;
+  const lowerCount = nullableFiniteNumber(row.lower_count);
+  const tieCount = nullableFiniteNumber(row.tie_count);
+  const unavailableReason = row.unavailable_reason
+    ?? (!row.course_style || cohortMedianMinutes == null ? "benchmark_definition_outdated" : null);
+  const percentile = unavailableReason == null && lowerCount != null && tieCount != null
+    ? percentileRankFromCounts(lowerCount, tieCount, cohortSize)
+    : null;
+  return {
+    lengthMinutes,
+    courseStyle: row.course_style,
+    targetMinutes,
+    cohortAverageMinutes,
+    cohortMedianMinutes,
+    cohortSize,
+    percentile,
+    unavailableReason: percentile == null && unavailableReason == null
+      ? "not_enough_completed_comparable_courses"
+      : unavailableReason
+  };
+}
+
+function nullableFiniteNumber(value: number | string | null) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+const BENCHMARK_UNAVAILABLE_MESSAGES: Record<string, string> = {
+  project_deleted: "Project is deleted.",
+  completion_status_unresolved: "Project completion status is unresolved.",
+  wrong_workflow: "Project is outside the Online Learning workflow.",
+  project_not_completed: "Project is not completed.",
+  custom_fields_incomplete: "Course details are not fully synchronized.",
+  course_length_missing: "Course Length is missing.",
+  course_length_invalid: "Course Length is invalid.",
+  course_length_ambiguous: "Course Length is ambiguous.",
+  course_style_missing: "Course Style is missing.",
+  course_style_unrecognized: "Course Style is not recognized.",
+  course_style_ambiguous: "Course Style is ambiguous.",
+  time_entry_data_incomplete: "Time-entry data is incomplete.",
+  not_enough_completed_comparable_courses: "Not enough completed comparable courses.",
+  benchmark_definition_outdated: "Benchmark data is temporarily unavailable."
+};
+
+export function projectBenchmarkUnavailableMessage(reason: string | null | undefined) {
+  return reason
+    ? BENCHMARK_UNAVAILABLE_MESSAGES[reason] ?? "Benchmark data is unavailable."
+    : "Benchmark data is unavailable.";
 }

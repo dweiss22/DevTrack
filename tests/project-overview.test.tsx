@@ -19,9 +19,12 @@ import { resolveResponsibleUsers } from "@/lib/wrike/reference-data";
 
 describe("project Overview metadata", () => {
   it("normalizes supported course-length representations without guessing integers", () => {
-    for (const value of ["1.5 hours", "1.5", "01:30", "1 hour 30 minutes", "90 minutes", "90 min"]) expect(parseCourseLengthMinutes(value)).toBe(90);
+    for (const value of ["1.5 hours", "01:30", "1 hour 30 minutes", "90 minutes", "90 min"]) expect(parseCourseLengthMinutes(value)).toBe(90);
     expect(parseCourseLengthMinutes(["1.5 hours", "90 minutes"])).toBe(90);
+    for (const value of ["1 hour", "1.0 hours", "01:00", "60 minutes"]) expect(parseCourseLengthMinutes(value)).toBe(60);
+    for (const value of ["2 hours", "2.0 hours", "02:00", "120 minutes"]) expect(parseCourseLengthMinutes(value)).toBe(120);
     expect(parseCourseLengthMinutes("60")).toBeNull();
+    expect(parseCourseLengthMinutes("1.5")).toBeNull();
     expect(parseCourseLengthMinutes("1,5 hours")).toBeNull();
     expect(parseCourseLengthMinutes(["60 minutes", "2 hours"])).toBeNull();
     expect(formatCourseLength(60)).toBe("01:00 hours");
@@ -38,24 +41,45 @@ describe("project Overview metadata", () => {
   });
 
   it("converts the scoped aggregate counts into a display benchmark", () => {
-    expect(projectLengthBenchmark({ length_minutes: 90, target_minutes: 120, cohort_average_minutes: "100.5", cohort_size: 5, lower_count: 3, tie_count: 1 })).toEqual({
-      lengthMinutes: 90, targetMinutes: 120, cohortAverageMinutes: 100.5, cohortSize: 5, percentile: 70
+    expect(projectLengthBenchmark({
+      length_minutes: 90, course_style: "Single Video", target_minutes: 120,
+      cohort_average_minutes: "100.5", cohort_median_minutes: "96", cohort_size: 5,
+      lower_count: 3, tie_count: 1, unavailable_reason: null
+    })).toEqual({
+      lengthMinutes: 90, courseStyle: "Single Video", targetMinutes: 120,
+      cohortAverageMinutes: 100.5, cohortMedianMinutes: 96, cohortSize: 5,
+      percentile: 70, unavailableReason: null
     });
+    expect(projectLengthBenchmark({
+      length_minutes: 120, course_style: "Full Length", target_minutes: 2640,
+      cohort_average_minutes: null, cohort_median_minutes: null, cohort_size: 0,
+      lower_count: null, tie_count: null, unavailable_reason: "project_not_completed"
+    })?.unavailableReason).toBe("project_not_completed");
     expect(projectLengthBenchmark(null)).toBeNull();
   });
 
   it("renders an accessible neutral gauge and a restrained insufficient-data state", () => {
-    const gauge = renderToStaticMarkup(<ProjectPercentileGauge benchmark={{ lengthMinutes: 90, targetMinutes: 2070, cohortAverageMinutes: 1752, cohortSize: 10, percentile: 62 }} />);
+    const gauge = renderToStaticMarkup(<ProjectPercentileGauge benchmark={{
+      lengthMinutes: 90, courseStyle: "Single Video", targetMinutes: 2070,
+      cohortAverageMinutes: 1752, cohortMedianMinutes: 1680, cohortSize: 10,
+      percentile: 62, unavailableReason: null
+    }} />);
     expect(gauge).toContain('role="meter"');
     expect(gauge).toContain('aria-label="Logged-time percentile"');
     expect(gauge).toContain('aria-valuenow="62"');
     expect(gauge).toContain("62nd percentile");
+    expect(gauge).toContain("10 completed 90-minute Single Video courses");
     expect(gauge).toContain("34.5 h logged");
     expect(gauge).toContain("29.2 h cohort average");
-    const empty = renderToStaticMarkup(<ProjectPercentileGauge benchmark={null} />);
+    expect(gauge).toContain("28.0 h cohort median");
+    const empty = renderToStaticMarkup(<ProjectPercentileGauge benchmark={{
+      lengthMinutes: 120, courseStyle: "Full Length", targetMinutes: 2640,
+      cohortAverageMinutes: null, cohortMedianMinutes: null, cohortSize: 0,
+      percentile: null, unavailableReason: "project_not_completed"
+    }} />);
     expect(empty).toContain('role="meter"');
     expect(empty).not.toContain("aria-valuenow");
-    expect(empty).toContain("Not enough comparable data.");
+    expect(empty).toContain("Project is not completed.");
   });
 
   it("preserves status color and resolves custom-field and Wrike people independently", () => {
