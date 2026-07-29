@@ -1,16 +1,21 @@
 import React from "react";
 import { buildProjectTimeline, type ProjectTimelineInput } from "@/lib/projects/timeline";
 
-export function ProjectTimeline({ input, headingId, className = "" }: {
+export function ProjectTimeline({ input, headingId, className = "", embedded = false }: {
   input: ProjectTimelineInput;
   headingId: string;
   className?: string;
+  embedded?: boolean;
 }) {
   const milestones = buildProjectTimeline(input);
   if (!milestones.length) return null;
-  return <section className={`card project-timeline ${className}`.trim()} aria-labelledby={headingId}>
+  const maxLane = Math.max(...milestones.map((milestone) => milestone.lane));
+  const sectionClassName = `${embedded ? "project-timeline-embedded" : "card"} project-timeline ${className}`.trim();
+  return <section className={sectionClassName} aria-labelledby={headingId}>
     <div className="project-timeline-heading">
-      <div><p className="eyebrow">KEY DATES</p><h2 id={headingId}>Project timeline</h2></div>
+      <div><p className="eyebrow">KEY DATES</p>{embedded
+        ? <h3 id={headingId}>Project timeline</h3>
+        : <h2 id={headingId}>Project timeline</h2>}</div>
       <ul className="project-timeline-legend" aria-label="Milestone types">
         {[
           ["actual", "Project date"],
@@ -20,7 +25,9 @@ export function ProjectTimeline({ input, headingId, className = "" }: {
         ].map(([kind, label]) => <li key={kind} className={`kind-${kind}`}><span aria-hidden="true" />{label}</li>)}
       </ul>
     </div>
-    <div className="project-timeline-visual">
+    <div className="project-timeline-visual" style={{
+      "--timeline-lane-count": maxLane + 1,
+    } as React.CSSProperties}>
       <div className="project-timeline-rail" aria-hidden="true" />
       <ol>
         {milestones.map((milestone) => <li

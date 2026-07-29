@@ -84,12 +84,31 @@ describe("shared project timeline", () => {
     expect(renderToStaticMarkup(<ProjectTimeline headingId="empty" input={{}} />)).toBe("");
   });
 
+  it("renders without a nested card when incorporated into course details", () => {
+    const html = renderToStaticMarkup(<ProjectTimeline embedded headingId="embedded" input={{
+      projectEndDate: "2026-02-01",
+    }} />);
+    expect(html).toContain('class="project-timeline-embedded project-timeline"');
+    expect(html).toContain('<h3 id="embedded">Project timeline</h3>');
+    expect(html).not.toContain('class="card project-timeline');
+  });
+
   it("uses the shared component in both project detail experiences", () => {
     const root = process.cwd();
     const sme = fs.readFileSync(path.join(root, "components/sme-project-detail.tsx"), "utf8");
     const general = fs.readFileSync(path.join(root, "app/projects/[id]/page.tsx"), "utf8");
     expect(sme).toContain("<ProjectTimeline");
     expect(general).toContain("<ProjectTimeline");
+    expect(sme.indexOf("sme-course-information")).toBeLessThan(sme.indexOf("<ProjectTimeline"));
+    expect(general.indexOf("<ProjectTimeline")).toBeGreaterThan(general.indexOf("project-overview-card"));
+    expect(general).toContain('headingId="project-detail-timeline" embedded');
     expect(sme).not.toContain("completedAt");
+  });
+
+  it("sizes the desktop visual from the number of collision lanes", () => {
+    const styles = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
+    expect(styles).toContain("height: calc(92px + var(--timeline-lane-count) * 34px)");
+    expect(styles).toContain("var(--milestone-lane) * 34px");
+    expect(styles).toContain(".project-timeline-visual { height: auto;");
   });
 });

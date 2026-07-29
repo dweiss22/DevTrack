@@ -18,7 +18,7 @@ export default async function SmeManagementPage() {
   const failure = error
     ? reportingFailure(error, "SME Management", "202607280001_additive_management_roles.sql and 202607280002_sme_management_experience.sql")
     : null;
-  return <AppShell><header className="page-header"><div><p className="eyebrow">SME MANAGEMENT</p><h1>SME Management</h1>
+  return <AppShell><div className="sme-management-page"><header className="page-header"><div><p className="eyebrow">SME MANAGEMENT</p><h1>SME Management</h1>
     <p>Organization-wide SME access, assignments, survey completion, and submitted billing.</p></div></header>
     {failure ? <section className="card dashboard-query-error" role="alert">
       <p className="eyebrow">SME MANAGEMENT DATA</p>
@@ -32,5 +32,5 @@ export default async function SmeManagementPage() {
       sme_classification_updated_at: profiles?.find((item) => item.application_user_id === row.application_user_id)?.updated_at ?? null,
     })) as SmeManagementRow[]} identities={(identities ?? []).map((identity) => ({
       id: identity.id, name: identity.display_name, email: identity.email,
-    }))} />}</AppShell>;
+    }))} />}</div></AppShell>;
 }

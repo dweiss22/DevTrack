@@ -55,17 +55,8 @@ export function SmeProjectDetail({ detail, returnTo, canLaunchSurvey, management
       </div></header>
     {detail.finalizedDraft.available && <p className="notice warning course-review-disclaimer">Feedback provided now may not be incorporated into this release because the minor-change review period has passed and the course is in development or complete. Your comments will be retained for consideration during the next course review.</p>}
 
-    <ProjectTimeline headingId="sme-project-timeline" className="sme-project-primary-timeline" input={{
-      startDate: detail.timeline.startDate,
-      originalDueDate: detail.timeline.originalDueDate,
-      currentDueDate: detail.timeline.dueDate,
-      projectEndDate: detail.timeline.projectEndDate,
-      publishedDate: detail.timeline.publishedDate,
-      lmsPublicationDate: detail.timeline.lmsPublicationDate,
-    }} />
-
     <section className="card sme-course-information" aria-labelledby="sme-project-information">
-      <div><p className="eyebrow">COURSE DETAILS</p><h2 id="sme-project-information">Course information</h2></div>
+      <div><p className="eyebrow">COURSE DETAILS</p><h2 id="sme-project-information">Course details</h2></div>
       <dl className="sme-course-information-grid">
         <Metadata label="Project status">{detail.status || "Not available"}</Metadata>
         <Metadata label="Reporting year">{detail.reportingYear ?? "Not available"}</Metadata>
@@ -78,6 +69,15 @@ export function SmeProjectDetail({ detail, returnTo, canLaunchSurvey, management
         </> : null}
       </dl>
     </section>
+
+    <ProjectTimeline headingId="sme-project-timeline" className="sme-project-primary-timeline" input={{
+      startDate: detail.timeline.startDate,
+      originalDueDate: detail.timeline.originalDueDate,
+      currentDueDate: detail.timeline.dueDate,
+      projectEndDate: detail.timeline.projectEndDate,
+      publishedDate: detail.timeline.publishedDate,
+      lmsPublicationDate: detail.timeline.lmsPublicationDate,
+    }} />
 
     <section className="card" aria-labelledby="sme-project-time"><div className="section-heading"><div>
       <p className="eyebrow">RECORDED EFFORT</p><h2 id="sme-project-time">Hours by category</h2></div>

@@ -154,10 +154,8 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
 
     {row.custom_fields_sync_state !== "complete" && <p className="notice project-sync-notice" role="status">Some custom-field data is not currently verified. Previously synchronized values are labeled below and have not been replaced with empty data.</p>}
 
-    <ProjectTimeline input={timelineInput} headingId="project-detail-timeline" />
-
     <section className="card project-overview-card" aria-labelledby="project-overview-heading">
-      <div className="section-heading project-overview-heading"><div><p className="eyebrow">OVERVIEW</p><h2 id="project-overview-heading">Project information</h2></div></div>
+      <div className="section-heading project-overview-heading"><div><p className="eyebrow">OVERVIEW</p><h2 id="project-overview-heading">Course details</h2></div></div>
       {row.description && <ProjectDescription description={row.description} />}
       <dl className="project-metadata-grid">
         <MetadataItem label="Status"><StatusBadge name={statusReference.name} id={row.custom_status_id} color={statusReference.color} resolved={statusReference.resolved} /></MetadataItem>
@@ -172,6 +170,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
         <MetadataItem label="SME">{contactFieldValue(fieldByRole.get("sme"), people)}</MetadataItem>
         <MetadataItem label="Legal Reviewer">{contactFieldValue(fieldByRole.get("legalReviewer"), people)}</MetadataItem>
       </dl>
+      <ProjectTimeline input={timelineInput} headingId="project-detail-timeline" embedded />
       <div className="project-time-summary-heading"><p className="eyebrow">TIME SUMMARY</p><h3>Recorded effort</h3></div>
       <section className="project-time-metrics" aria-label="Project time summary">
         <article className="project-summary-tile"><p>Total recorded time</p><strong>{hours(metrics.minutes)} h</strong></article>
