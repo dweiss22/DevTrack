@@ -19,7 +19,7 @@ export type SmeDashboardRow = {
   submitted_billable_hours: number | null; submitted_amount_billed: number | null; submitted_at: string | null;
 };
 
-export function SmeDashboard({ identities, selected, rows, canSelect, canLaunchDebrief, currentUserId, scope, administrativeView, mappingRequired }: {
+export function SmeDashboard({ identities, selected, rows, canSelect, canLaunchDebrief, currentUserId, scope, mappingRequired }: {
   identities: DashboardIdentity[]; selected: DashboardIdentity | null; rows: SmeDashboardRow[];
   canSelect: boolean; canLaunchDebrief: boolean; currentUserId: string | null; scope: "recent" | "all";
   administrativeView: boolean; mappingRequired: boolean;
@@ -46,8 +46,8 @@ export function SmeDashboard({ identities, selected, rows, canSelect, canLaunchD
       : !selected ? <p className="card empty">{selectableIdentities.length ? "Select an SME to view assigned work." : "No SME field identities are available."}</p>
       : !selected.selectable ? <p className="card notice warning">This SME name is ambiguous or comes from conflicting project data. An administrator must confirm its identity before its dashboard can be opened.</p>
       : <>
-        <div className="card dashboard-identity-note"><p>Showing assignments for <strong>{selected.display_name}</strong>
-          {selected.email ? <> ({selected.email})</> : null}. {administrativeView ? "This is a management view; you are not impersonating the SME." : ""}</p>
+        <div className="sme-dashboard-toolbar">
+          <span>Project period</span>
           <div className="scope-toggle" role="group" aria-label="Assignment period">
             <Link className={scope === "recent" ? "button" : "button secondary"} href={scopeHref("recent")}>Recent</Link>
             <Link className={scope === "all" ? "button" : "button secondary"} href={scopeHref("all")}>All Time</Link>

@@ -20,6 +20,7 @@ const selected: DashboardIdentity = {
 const unresolvedSmeRow: IdDashboardRow = {
   task_id: "task", title: "Visible ID course", status_name: "In Development",
   status_classification: "active", reviewed_wrike_user_id: null,
+  sme_identity_id: null,
   reviewed_sme_name: null, reviewed_sme_email: null,
   reviewed_sme_application_user_id: null, sme_mapping_status: null,
   sme_identity_status: "unresolved", sme_assignment_values: ["Example SME"],
@@ -57,9 +58,9 @@ describe("corrected ID Dashboard course resolution", () => {
     expect(html).toContain("Visible ID course");
     expect(html).toContain("Course Style");
     expect(html).toContain("Full Length");
-    expect(html).toContain("SME identity needs resolution");
-    expect(html).toContain("Wrike value: Example SME");
-    expect(html).toContain("Resolve the SME assignment before starting a review.");
+    expect(html).toContain("SME identity needs administrative resolution");
+    expect(html).toContain("SME field value: Example SME");
+    expect(html).toContain("SME identity needs administrative resolution before starting a review.");
     expect(html).not.toContain("Start review");
   });
 

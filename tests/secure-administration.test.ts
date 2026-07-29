@@ -93,7 +93,7 @@ describe("secure administrator identity workflows", () => {
     expect(personaMigration).toContain("public.can_act_as_assigned_id(target_task_id)");
     expect(personaMigration).toContain("operational_persona_assignee");
     expect(source("app/id-dashboard/page.tsx")).toContain("ownOperationalView");
-    expect(source("components/id-dashboard.tsx")).toContain("Administrative ID view");
+    expect(source("components/id-dashboard.tsx")).not.toContain("Administrative ID view");
   });
 
   it("records both authenticated actor and effective user for mutations", () => {

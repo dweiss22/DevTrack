@@ -75,9 +75,9 @@ export function dashboardReturnHref(value: string | string[] | undefined, fallba
   return allowed ? candidate : fallback;
 }
 
-export function surveyHref(taskId: string, type: "course-development-debrief" | "id-sme-review", wrikeUserId: string | null, returnTo: string) {
+export function surveyHref(taskId: string, type: "course-development-debrief" | "id-sme-review", smeIdentityId: string | null, returnTo: string) {
   const query = new URLSearchParams({ returnTo });
-  if (wrikeUserId) query.set("sme", wrikeUserId);
+  if (smeIdentityId) query.set("sme", smeIdentityId);
   return `/projects/${taskId}/surveys/${type}?${query}`;
 }
 
