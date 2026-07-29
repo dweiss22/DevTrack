@@ -9,6 +9,8 @@ type BrowseRow = {
   is_locked: boolean; revision_number: number; updated_at: string; task_id: string;
   project_title: string; sme_name: string; creator_id: string; creator_name: string;
   vertical: string | null; reporting_year: number | null; publication_year: number | null;
+  record_source: "native" | "historical_csv"; historical_course_name: string | null;
+  match_state: "matched" | "unmatched"; survey_version: string | null; source_response_id: string | null;
   is_historical_import?: boolean;
 };
 
@@ -29,7 +31,7 @@ export default async function AdminSurveysPage({ searchParams }: {
   if (!["true", "false"].includes(filters.lockState)) delete filters.lockState;
   const templateResult = view === "templates" ? await supabase.rpc("survey_admin_templates") : { data: [], error: null };
   const browseResult = view === "submissions"
-    ? await supabase.rpc("survey_browse", { filters, page_number: page, page_size: 50 })
+    ? await supabase.rpc("survey_browse_unified", { filters, page_number: page, page_size: 50 })
     : { data: [], error: null };
   const rows = (browseResult.data ?? []) as BrowseRow[];
   const submissionIds = rows.map((row) => row.id);
@@ -38,7 +40,7 @@ export default async function AdminSurveysPage({ searchParams }: {
       .in("submission_id", submissionIds).is("rolled_back_at", null)
     : { data: [], error: null };
   const importedSubmissionIds = new Set((importedResult.data ?? []).map((row) => row.submission_id));
-  for (const row of rows) row.is_historical_import = importedSubmissionIds.has(row.id);
+  for (const row of rows) row.is_historical_import = row.record_source === "historical_csv" || importedSubmissionIds.has(row.id);
   const total = Number(rows[0]?.total_count ?? 0);
   const pages = Math.max(1, Math.ceil(total / 50));
   const pageHref = (target: number) => {
@@ -79,8 +81,12 @@ export default async function AdminSurveysPage({ searchParams }: {
           : rows.length ? <div className="dashboard-table-wrap"><table className="survey-list dashboard-project-table"><thead><tr>
             <th>Survey</th><th>Course / SME</th><th>Creator</th><th>Context</th><th>Status</th><th>Updated</th>
           </tr></thead><tbody>{rows.map((row) => <tr key={row.id}>
-            <td data-label="Survey"><Link href={`/admin/surveys/submissions/${row.id}`}>{surveyTitle(row.survey_type)}</Link>{row.is_historical_import ? <><br /><span className="survey-status historical">Historical import</span></> : null}</td>
-            <td data-label="Course / SME"><strong>{row.project_title}</strong><br />{row.sme_name}</td>
+            <td data-label="Survey">{row.record_source === "historical_csv"
+              ? <Link href={`/admin/historical-surveys/${row.id}`}>{surveyTitle(row.survey_type)}</Link>
+              : <Link href={`/admin/surveys/submissions/${row.id}`}>{surveyTitle(row.survey_type)}</Link>}
+              {row.is_historical_import ? <><br /><span className="survey-status historical">Historical import</span></> : null}</td>
+            <td data-label="Course / SME"><strong>{row.project_title}</strong><br />{row.sme_name}
+              {row.match_state === "unmatched" ? <><br /><span className="survey-status unlocked">Unmatched project</span></> : null}</td>
             <td data-label="Creator">{row.creator_name}</td>
             <td data-label="Context">{row.vertical ?? "—"}<br />{row.publication_year ? `Publication ${row.publication_year}` : row.reporting_year ? `Reporting ${row.reporting_year}` : "Year unavailable"}</td>
             <td data-label="Status"><span className={`survey-status ${row.status}`}>{row.status}</span>{" "}

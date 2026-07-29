@@ -102,7 +102,7 @@ describe("historical survey import security and persistence contract", () => {
     expect(migration).toContain("historical_import_rolled_back");
   });
 
-  it("provides the staged Admin workflow, correction audit, and Admin-only survey provenance", () => {
+  it("preserves legacy audit provenance while retiring its mutation endpoints", () => {
     expect(panel).toContain("Upload historical survey CSVs");
     expect(panel).toContain("Reconciliation issues");
     expect(panel).toContain("Integrate ready rows");
@@ -110,8 +110,10 @@ describe("historical survey import security and persistence contract", () => {
     expect(panel).toContain("CSV templates and data dictionary");
     expect(panel).toContain("SearchableSelect");
     expect(panel).toContain("Confirm the historical assignment context");
-    expect(rowRoute).toContain("survey_historical_import_resolution_audit");
-    expect(columnRoute).toContain("column_mapping_confirmed");
+    expect(rowRoute).toContain("status: 410");
+    expect(rowRoute).toContain("Legacy historical row correction has been retired");
+    expect(columnRoute).toContain("status: 410");
+    expect(columnRoute).toContain("Legacy historical column mapping has been retired");
     expect(surveyRoute).toContain("historicalImport:");
     expect(dialog).toContain("Historical import provenance");
     expect(source("app/api/admin/surveys/export/route.ts")).toContain("survey_historical_import_integrations");

@@ -1,15 +1,5 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
-import {
-  HistoricalSurveyImports,
-  type HistoricalColumnMapping,
-  type HistoricalImportBatch,
-  type HistoricalImportIssue,
-  type HistoricalImportRow,
-  type HistoricalTemplate,
-  type HistoricalResolutionOptions,
-  type HistoricalResolutionAudit,
-} from "@/components/historical-survey-imports";
 import { ImportConflictReview, type ImportConflict } from "@/components/import-conflict-review";
 import { UnresolvedReferenceLabel } from "@/components/wrike-reference";
 
@@ -51,16 +41,9 @@ type Props = {
   importConflicts: ImportConflict[];
   importConflictCount: number;
   importConflictError: string | null;
-  historicalBatches: HistoricalImportBatch[];
-  historicalRows: HistoricalImportRow[];
-  historicalIssues: HistoricalImportIssue[];
-  historicalMappings: HistoricalColumnMapping[];
-  historicalTemplates: HistoricalTemplate[];
-  historicalResolutionOptions: HistoricalResolutionOptions;
-  historicalResolutionAudit: HistoricalResolutionAudit[];
 };
 
-export function AdminPanel({ connection, folderRuns, folders, unresolvedReferences, verticalDiagnostics, verticalDiagnosticsError, repairRuns, importConflicts, importConflictCount, importConflictError, historicalBatches, historicalRows, historicalIssues, historicalMappings, historicalTemplates, historicalResolutionOptions, historicalResolutionAudit }: Props) {
+export function AdminPanel({ connection, folderRuns, folders, unresolvedReferences, verticalDiagnostics, verticalDiagnosticsError, repairRuns, importConflicts, importConflictCount, importConflictError }: Props) {
   const connected = connection?.status === "connected";
   const needsUserScope = connected && !connection?.oauth_scopes?.includes("amReadOnlyUser");
   const [message, setMessage] = useState("");
@@ -152,9 +135,6 @@ export function AdminPanel({ connection, folderRuns, folders, unresolvedReferenc
     <section className="admin-action-card"><div><p className="eyebrow">ASSOCIATED VERTICAL</p><h2>Diagnostics and explicit repair</h2><p>This administrator-only action rebuilds every eligible detail-verified project from stored Wrike values, verifies each normalized value after persistence, and refreshes reporting. It never changes source Wrike data.</p></div><div className="filter-bar"><button onClick={repairVerticals} disabled={!connected || importing}>{importing ? "Repair running…" : "Repair Vertical data"}</button></div>{verticalDiagnosticsError ? <p className="notice error">Vertical diagnostics require the latest database migration: {verticalDiagnosticsError}</p> : verticalDiagnostics ? <VerticalRepairDiagnostics diagnostics={verticalDiagnostics} /> : <p className="empty">No diagnostic result is available.</p>}</section>
       </div>
       <div className="admin-history-toolbar"><a className="button secondary" href="#data-history">View run history</a></div>
-    </AdminDisclosure>
-    <AdminDisclosure title="Historical survey imports" description="Stage, reconcile, and integrate legacy survey CSVs without granting imported identities application access." count={`${historicalBatches.length} batch${historicalBatches.length === 1 ? "" : "es"}`} defaultOpen={historicalIssues.length > 0}>
-      <HistoricalSurveyImports batches={historicalBatches} rows={historicalRows} issues={historicalIssues} mappings={historicalMappings} templates={historicalTemplates} resolutionOptions={historicalResolutionOptions} resolutionAudit={historicalResolutionAudit} />
     </AdminDisclosure>
     <AdminDisclosure title="Connection & source folders" description="Manage the Wrike connection and review the folders included in synchronization.">
     <div className="admin-grid">

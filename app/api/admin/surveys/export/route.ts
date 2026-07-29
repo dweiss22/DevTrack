@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCapability } from "@/lib/auth";
+import { escapeCsvFormula } from "@/lib/surveys/finalized-historical-import";
 
 type BrowseRow = {
   id: string; survey_type: string; status: string; is_locked: boolean; revision_number: number;
@@ -9,7 +10,7 @@ type BrowseRow = {
 };
 
 const csvCell = (value: unknown) => {
-  const text = value == null ? "" : String(value);
+  const text = escapeCsvFormula(value == null ? "" : String(value));
   return /[",\r\n]/.test(text) ? `"${text.replaceAll("\"", "\"\"")}"` : text;
 };
 
@@ -49,6 +50,53 @@ export async function GET(request: NextRequest) {
         billable_hours: debrief?.billable_hours ?? null,
         amount_billed: debrief?.amount_billed ?? null,
         historical: imported.has(submission.id),
+      });
+    }
+  }
+  if (!filters.status || filters.status === "submitted") {
+    let historicalQuery = supabase.from("historical_survey_responses").select(
+      "id,internal_survey_type,matched_task_id,historical_course_name,respondent_name,reviewed_sme_name,submitted_at,updated_at"
+    );
+    if (filters.surveyType) historicalQuery = historicalQuery.eq("internal_survey_type", filters.surveyType);
+    if (filters.project) historicalQuery = historicalQuery.eq("matched_task_id", filters.project);
+    const { data: historical, error: historicalError } = await historicalQuery.limit(10_000);
+    if (historicalError) return NextResponse.json({ error: "Historical survey export could not be prepared." }, { status: 500 });
+    const historicalIds = (historical ?? []).map((row) => row.id);
+    const [debriefs, reviews] = historicalIds.length ? await Promise.all([
+      supabase.from("historical_sme_debrief_responses")
+        .select("response_id,billable_hours,amount_billed").in("response_id", historicalIds),
+      supabase.from("historical_id_sme_review_responses")
+        .select("response_id,vertical,publication_year").in("response_id", historicalIds),
+    ]) : [{ data: [] }, { data: [] }];
+    const debriefById = new Map((debriefs.data ?? []).map((row) => [row.response_id, row]));
+    const reviewById = new Map((reviews.data ?? []).map((row) => [row.response_id, row]));
+    for (const historicalRow of historical ?? []) {
+      const review = reviewById.get(historicalRow.id);
+      if (filters.vertical && review?.vertical !== filters.vertical) continue;
+      if (filters.publicationYear && String(review?.publication_year ?? "") !== filters.publicationYear) continue;
+      rows.push({
+        id: historicalRow.id,
+        survey_type: historicalRow.internal_survey_type,
+        status: "submitted",
+        is_locked: true,
+        revision_number: 1,
+        updated_at: historicalRow.updated_at,
+        task_id: historicalRow.matched_task_id ?? "",
+        project_title: historicalRow.historical_course_name,
+        sme_name: historicalRow.reviewed_sme_name,
+        creator_id: "",
+        creator_name: historicalRow.respondent_name || "Historical respondent",
+        vertical: review?.vertical ?? null,
+        reporting_year: null,
+        publication_year: review?.publication_year ?? null,
+      });
+      const debrief = debriefById.get(historicalRow.id);
+      details.set(historicalRow.id, {
+        original_submitted_at: historicalRow.submitted_at,
+        latest_submitted_at: historicalRow.submitted_at,
+        billable_hours: debrief?.billable_hours ?? null,
+        amount_billed: debrief?.amount_billed ?? null,
+        historical: true,
       });
     }
   }

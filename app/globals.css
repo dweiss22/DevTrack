@@ -935,3 +935,88 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
   .sme-course-information-grid { grid-template-columns: 1fr 1fr; }
   .sme-management-metrics { grid-template-columns: 1fr 1fr; }
 }
+.finalized-survey-import {
+  gap: 1rem;
+}
+
+.survey-import-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.survey-import-steps li {
+  border: 1px solid var(--line);
+  border-radius: .65rem;
+  background: var(--panel);
+  color: var(--muted);
+  padding: .75rem;
+  font-weight: 650;
+}
+
+.survey-import-steps li.active {
+  border-color: var(--blue);
+  color: var(--blue);
+  box-shadow: inset 0 0 0 1px var(--blue);
+}
+
+.survey-import-upload,
+.survey-import-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: .75rem;
+  align-items: end;
+}
+
+.survey-import-upload label,
+.survey-import-filters label,
+.survey-import-row-review label {
+  display: grid;
+  gap: .35rem;
+}
+
+.survey-import-grid {
+  min-width: 82rem;
+}
+
+.survey-import-grid td {
+  vertical-align: top;
+}
+
+.survey-import-grid ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.survey-import-row-review {
+  display: grid;
+  gap: .75rem;
+  min-width: min(34rem, 78vw);
+  padding: .75rem 0;
+}
+
+.survey-import-row-review pre {
+  max-width: 44rem;
+  max-height: 20rem;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.schema-guide {
+  margin-top: 1rem;
+}
+
+.schema-guide section {
+  border-top: 1px solid var(--line);
+  margin-top: .75rem;
+  padding-top: .75rem;
+}
+
+@media (max-width: 760px) {
+  .survey-import-steps {
+    grid-template-columns: 1fr 1fr;
+  }
+}

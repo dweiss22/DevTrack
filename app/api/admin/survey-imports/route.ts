@@ -1,12 +1,12 @@
 import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { requireCapability } from "@/lib/auth";
-import { stageHistoricalSurveyFile } from "@/lib/surveys/historical-import-server";
+import { stageFinalizedHistoricalSurveyFile } from "@/lib/surveys/finalized-historical-import-server";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  const { profile, user, supabase } = await requireCapability("manage_data");
+  const { profile, user } = await requireCapability("manage_data");
   try {
     const form = await request.formData();
     const timezone = String(form.get("timezone") ?? "");
@@ -15,27 +15,21 @@ export async function POST(request: NextRequest) {
     if (!confirmed || !timezone || !supportedTimezone) {
       return NextResponse.json({ error: "Confirm the timezone used by the historical timestamps." }, { status: 400 });
     }
-    const files = form.getAll("files").filter((value): value is File => value instanceof File);
-    if (!files.length || files.length > 10) {
-      return NextResponse.json({ error: "Select between one and ten CSV files." }, { status: 400 });
+    const fileValue = form.get("file") ?? form.get("files");
+    if (!(fileValue instanceof File)) {
+      return NextResponse.json({ error: "Select one finalized historical survey CSV file." }, { status: 400 });
     }
-    const results = [];
-    for (const file of files) {
-      if (!file.name.toLocaleLowerCase().endsWith(".csv")) {
-        return NextResponse.json({ error: `${file.name} is not a CSV file.` }, { status: 400 });
-      }
-      results.push(await stageHistoricalSurveyFile({
-        organizationId: profile.organization_id,
-        actorId: user.id,
-        filename: file.name,
-        bytes: new Uint8Array(await file.arrayBuffer()),
-        timezone,
-        supabase,
-      }));
-    }
+    const result = await stageFinalizedHistoricalSurveyFile({
+      organizationId: profile.organization_id,
+      actorId: user.id,
+      filename: fileValue.name,
+      bytes: new Uint8Array(await fileValue.arrayBuffer()),
+      timezone,
+    });
     revalidatePath("/admin");
+    revalidatePath("/admin/survey-imports");
     revalidatePath("/admin/surveys");
-    return NextResponse.json({ ok: true, batches: results });
+    return NextResponse.json({ ok: true, batch: result, batches: [result] });
   } catch (error) {
     console.error("historical_survey_import_stage_failed", {
       organizationId: profile.organization_id,
