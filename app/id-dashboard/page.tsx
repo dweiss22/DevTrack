@@ -35,7 +35,13 @@ export default async function IdDashboardPage({ searchParams }: { searchParams: 
       supabase.rpc("reporting_id_dashboard_course_styles", { target_wrike_user_id: selected.wrike_user_id }),
     ])
     : [{ data: [], error: null }, { data: null, error: null }, { data: [], error: null }];
-  if (rowsResult.error || courseStylesResult.error) throw new Error("The selected ID Dashboard could not be loaded.");
+  if (rowsResult.error || courseStylesResult.error) {
+    console.error("id_dashboard_data_failed", {
+      rowsCode: rowsResult.error?.code ?? null,
+      courseStylesCode: courseStylesResult.error?.code ?? null,
+    });
+    throw new Error("The selected ID Dashboard could not be loaded.");
+  }
   const dashboardRows = (rowsResult.data ?? []) as IdDashboardRow[];
   const { data: draftStatuses } = dashboardRows.length
     ? await supabase.rpc("project_finalized_draft_statuses", { target_task_ids: [...new Set(dashboardRows.map((row) => row.task_id))] })

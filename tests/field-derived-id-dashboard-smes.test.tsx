@@ -11,6 +11,8 @@ const root = process.cwd();
 const source = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
 const migration = source("supabase/migrations/202607290003_field_derived_id_dashboard_smes.sql");
 const identityMigration = source("supabase/migrations/202607290001_field_derived_sme_dashboard_identities.sql");
+const emailFixMigration = source("supabase/migrations/202607290005_fix_id_dashboard_sme_email.sql");
+const emailTypeFixMigration = source("supabase/migrations/202607290006_fix_id_dashboard_sme_email_type.sql");
 
 const selectedId: DashboardIdentity = {
   identity_key: "wrike:99999999-9999-4999-8999-999999999999",
@@ -114,6 +116,16 @@ describe("field-derived SME resolution on the ID Dashboard", () => {
     expect(migration).not.toContain("course_development_person_assignments_with_personas(\n    viewer.organization_id,'sme'");
     expect(identityMigration).toContain("from public.sme_dashboard_task_assignments assignment");
     expect(identityMigration).toContain("'smeIdentityId',identity.id");
+  });
+
+  it("resolves a linked application account email from auth.users", () => {
+    expect(emailFixMigration).toContain("left join auth.users sme_auth");
+    expect(emailFixMigration).toContain("coalesce(sme_auth.email,wrike_sme.email)");
+    expect(emailFixMigration).not.toContain("sme_member.email");
+    expect(emailFixMigration).toContain("sme_member.account_state='active'");
+    expect(emailTypeFixMigration).toContain("pg_get_functiondef");
+    expect(emailTypeFixMigration).toContain("coalesce(sme_auth.email,wrike_sme.email)::text");
+    expect(emailTypeFixMigration).toContain("corrected_definition=function_definition");
   });
 
   it("matches new reviews by identity and retains historical Wrike-only reviews", () => {
