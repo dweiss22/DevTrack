@@ -127,8 +127,8 @@ describe("project Overview metadata", () => {
     expect(source.indexOf("project-time-metrics")).toBeLessThan(source.indexOf("project-additional-data"));
     expect(source).toContain('<details className="card project-additional-data">');
     expect(source).not.toContain('<details className="card project-additional-data" open>');
-    expect(source).toContain("Project dates, Wrike folders, and other synchronized fields");
-    expect(source).toContain("{row.due_date && <>");
+    expect(source).toContain("Source timestamps, Wrike folders, and other synchronized fields");
+    expect(source).toContain("<ProjectTimeline input={timelineInput}");
     expect(styles).toContain(".project-time-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr))");
     expect(styles).toContain(".project-chart-card-wide { grid-column: 1 / -1; }");
     expect(charts).toContain('className="project-chart-card-wide"');

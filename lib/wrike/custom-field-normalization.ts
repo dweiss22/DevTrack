@@ -3,7 +3,8 @@ import { normalizeVerticalValue, type NormalizedVerticalResult } from "@/lib/wri
 export const CUSTOM_FIELD_TITLE_ALIASES = {
   "authoring tool used": "Authoring Tool",
   "course development type": "Course Type",
-  "primary product area": "Product Area"
+  "primary product area": "Product Area",
+  "lms publication date [lct]": "LMS Publication Date"
 } as const;
 
 export type CustomFieldSourceDesignation = "M" | "L" | null;

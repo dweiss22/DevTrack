@@ -7,6 +7,7 @@ const root = process.cwd();
 const source = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
 const migration = source("supabase/migrations/202607230008_restricted_sme_projects_and_finalized_drafts.sql");
 const securityMigration = source("supabase/migrations/202607280005_strict_dashboard_assignments_and_sme_survey_lock.sql");
+const timelineMigration = source("supabase/migrations/202607290002_shared_project_timeline.sql");
 const smeProject = source("components/sme-project-detail.tsx");
 const smeProjectPage = source("app/sme-dashboard/projects/[projectId]/page.tsx");
 const smeProjectModal = source("app/@modal/(.)sme-dashboard/projects/[projectId]/page.tsx");
@@ -29,9 +30,14 @@ describe("restricted SME projects and assigned-ID actions", () => {
 
   it("returns only the SME's own debrief and approved project fields", () => {
     expect(migration).toContain("survey.subject_application_user_id=viewer.id");
-    for (const field of ["'title'", "'status'", "'reportingYear'", "'assignedIds'", "'vertical'", "'courseLength'", "'legalReviewer'", "'debrief'", "'finalizedDraft'"]) {
+    for (const field of ["'title'", "'status'", "'reportingYear'", "'assignedIds'", "'vertical'", "'courseLength'", "'debrief'", "'finalizedDraft'"]) {
       expect(migration).toContain(field);
     }
+    expect(timelineMigration).toContain("result:=result-'legalReviewer'");
+    expect(timelineMigration).toContain("'projectEndDate'");
+    expect(timelineMigration).toContain("'publishedDate'");
+    expect(timelineMigration).toContain("'lmsPublicationDate'");
+    expect(smeProject).not.toContain("legalReviewer");
     expect(smeProject).toContain("Create SME Debrief");
     expect(smeProject).toContain("Resume SME Debrief");
     expect(smeProject).toContain("SurveyReceived");

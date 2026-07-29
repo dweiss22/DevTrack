@@ -1,0 +1,44 @@
+import React from "react";
+import { buildProjectTimeline, type ProjectTimelineInput } from "@/lib/projects/timeline";
+
+export function ProjectTimeline({ input, headingId, className = "" }: {
+  input: ProjectTimelineInput;
+  headingId: string;
+  className?: string;
+}) {
+  const milestones = buildProjectTimeline(input);
+  if (!milestones.length) return null;
+  return <section className={`card project-timeline ${className}`.trim()} aria-labelledby={headingId}>
+    <div className="project-timeline-heading">
+      <div><p className="eyebrow">KEY DATES</p><h2 id={headingId}>Project timeline</h2></div>
+      <ul className="project-timeline-legend" aria-label="Milestone types">
+        {[
+          ["actual", "Project date"],
+          ["planned", "Planned"],
+          ["completion", "Completion"],
+          ["publication", "Publication"],
+        ].map(([kind, label]) => <li key={kind} className={`kind-${kind}`}><span aria-hidden="true" />{label}</li>)}
+      </ul>
+    </div>
+    <div className="project-timeline-visual">
+      <div className="project-timeline-rail" aria-hidden="true" />
+      <ol>
+        {milestones.map((milestone) => <li
+          key={milestone.id}
+          className={`project-timeline-event kind-${milestone.kind}`}
+          style={{
+            "--milestone-position": `${milestone.position}%`,
+            "--milestone-lane": milestone.lane,
+          } as React.CSSProperties}
+        >
+          <span className="project-timeline-marker" aria-hidden="true" />
+          <div className="project-timeline-callout">
+            <span className="project-timeline-kind">{milestone.kindLabel}</span>
+            <strong>{milestone.label}</strong>
+            <time dateTime={milestone.date}>{milestone.formattedDate}</time>
+          </div>
+        </li>)}
+      </ol>
+    </div>
+  </section>;
+}

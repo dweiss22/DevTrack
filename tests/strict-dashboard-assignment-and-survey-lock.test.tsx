@@ -57,7 +57,6 @@ const submittedDetail: SmeProjectDetailData = {
   assignedIds: [{ wrikeUserId: "id-1", name: "Jordan Designer" }],
   vertical: "Public Safety",
   courseLength: "60",
-  legalReviewer: "Legal Reviewer",
   debrief: {
     status: "submitted",
     latestSubmittedAt: submittedRow.submitted_at,
@@ -67,7 +66,9 @@ const submittedDetail: SmeProjectDetailData = {
     startDate: submittedRow.start_date,
     originalDueDate: submittedRow.original_due_date,
     dueDate: submittedRow.due_date,
-    completedAt: submittedRow.completed_at,
+    projectEndDate: "2026-03-10",
+    publishedDate: "2026-03-20",
+    lmsPublicationDate: "2026-03-20",
   },
   categoryTime: [],
   isRecent: true,
@@ -203,8 +204,8 @@ describe("strict dashboard assignments and submitted SME survey lock", () => {
     expect(html).toContain("Administrative response detail");
     expect(html).toContain("Billable hours");
     expect(html).toContain("Download invoice");
-    expect(html).toContain("Legal reviewer");
-    expect(html).toContain("Legal Reviewer");
+    expect(html).not.toContain("Legal reviewer");
+    expect(html).not.toContain("Legal Reviewer");
   });
 
   it("denies SME retrieval after submission at RLS, route, API, attachment, and RPC boundaries", () => {

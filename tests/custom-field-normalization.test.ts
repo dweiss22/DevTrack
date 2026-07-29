@@ -22,6 +22,13 @@ describe("Wrike custom-field normalization", () => {
     expect(normalizeWrikeCustomFieldTitle("[LCT] Authoring Tool Used (L)").normalizedTitle).toBe("Authoring Tool");
     expect(normalizeWrikeCustomFieldTitle("Course Development Type").normalizedTitle).toBe("Course Type");
     expect(normalizeWrikeCustomFieldTitle("Primary Product Area").normalizedTitle).toBe("Product Area");
+    expect(normalizeWrikeCustomFieldTitle("LMS Publication Date [LCT]")).toEqual({
+      normalizedTitle: "LMS Publication Date",
+      normalizedKey: "lms publication date",
+      sourceDesignation: null,
+    });
+    expect(normalizeWrikeCustomFieldTitle("Project End Date").normalizedKey).toBe("project end date");
+    expect(normalizeWrikeCustomFieldTitle("Published Date").normalizedKey).toBe("published date");
     expect(normalizeWrikeCustomFieldTitle("Delivery Method").normalizedTitle).toBe("Delivery Method");
   });
 

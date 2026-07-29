@@ -6,6 +6,7 @@ import { FinalizedCourseDraftForm } from "@/components/finalized-course-draft-fo
 import { ProjectDescription } from "@/components/project-description";
 import { ProjectPercentileGauge } from "@/components/project-percentile-gauge";
 import { ProjectTimeAnalytics } from "@/components/project-time-analytics";
+import { ProjectTimeline } from "@/components/project-timeline";
 import { TaskCustomFieldList, TaskFolderList } from "@/components/task-metadata";
 import { StatusBadge, UnresolvedReferenceLabel } from "@/components/wrike-reference";
 import { requirePageCapability } from "@/lib/auth";
@@ -13,6 +14,7 @@ import { isAdministratorRole } from "@/lib/auth/roles";
 import { submissionHref, surveyActionLabel, surveyHref, type SurveySummary } from "@/lib/dashboards/domain";
 import { ONLINE_LEARNING_WORKFLOW_ID } from "@/lib/reporting/constants";
 import { hours } from "@/lib/metrics";
+import { PROJECT_TIMELINE_FIELD_KEYS, projectTimelineInputFromNormalizedFields } from "@/lib/projects/timeline";
 import { loadProjectLengthPercentilesResult } from "@/lib/reporting/data";
 import { safeProjectsReturnTo } from "@/lib/reporting/dashboard-navigation";
 import { formatCourseLength, formatVerticalMembership, parseCourseLengthMinutes } from "@/lib/reporting/project-overview";
@@ -26,7 +28,7 @@ import { normalizeVerticalValue, type VerticalState } from "@/lib/wrike/vertical
 type ProjectDetailRow = {
   wrike_id: string; title: string; status: string; workflow_id: string | null; custom_status_id: string | null; responsible_wrike_ids: string[];
   description: string | null; permalink: string | null; created_at_wrike: string | null; updated_at_wrike: string | null;
-  start_date: string | null; due_date: string | null; completed_at: string | null;
+  start_date: string | null; original_due_date: string | null; due_date: string | null; completed_at: string | null;
   planned_minutes: number | null; allocated_minutes: number | null; raw_data: unknown;
   vertical_state: VerticalState | null; custom_fields_sync_state: string | null; custom_fields_verified_at: string | null;
   enriched_metadata: { folders?: ResolvedFolder[]; customFields?: ResolvedCustomField[]; customFieldsNormalized?: NormalizedCustomFieldValue[] } | null;
@@ -94,7 +96,16 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const fieldByRole = new Map(customFields.map((field) => [projectFieldRole(field.normalizedKey), field]).filter((entry): entry is [NonNullable<ReturnType<typeof projectFieldRole>>, NormalizedCustomFieldValue] => entry[0] != null));
   const vertical = fieldByRole.get("vertical");
   const featuredFields = projectOverviewFieldKeys(customFields);
-  const otherFields = customFields.filter((field) => !featuredFields.has(field.normalizedKey));
+  const timelineFieldKeys = new Set<string>([
+    ...Object.values(PROJECT_TIMELINE_FIELD_KEYS),
+    "lms publication date [lct]",
+  ]);
+  const otherFields = customFields.filter((field) => !featuredFields.has(field.normalizedKey) && !timelineFieldKeys.has(field.normalizedKey));
+  const timelineInput = projectTimelineInputFromNormalizedFields({
+    startDate: row.start_date,
+    originalDueDate: row.original_due_date,
+    currentDueDate: row.due_date,
+  }, customFields);
   const timeEntries = row.wrike_time_entries.map((entry): ProjectTimeEntry => {
     const person = entry.user_wrike_id ? resolveResponsibleUsers([entry.user_wrike_id], users)[0] : null;
     const category = resolveTimelogCategory(entry.category, categories);
@@ -121,7 +132,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
     ? idControlsResult.data as AssignedIdControls : null;
   return <AppShell isAdmin={isAdministrator}>
     <nav className="breadcrumb" aria-label="Breadcrumb"><Link href={returnTo}>{returnLabel}</Link><span aria-hidden="true">/</span><span aria-current="page">Project detail</span></nav>
-    <header className="page-header project-detail-header"><div><p className="eyebrow">PROJECT DETAIL</p><h1>{row.title}</h1><p><StatusBadge name={statusReference.name} id={row.custom_status_id} color={statusReference.color} resolved={statusReference.resolved} />{row.due_date && <> <span aria-hidden="true">·</span> Due {formatDate(row.due_date)}</>}</p></div><div className="project-header-actions">
+    <header className="page-header project-detail-header"><div><p className="eyebrow">PROJECT DETAIL</p><h1>{row.title}</h1><p><StatusBadge name={statusReference.name} id={row.custom_status_id} color={statusReference.color} resolved={statusReference.resolved} /></p></div><div className="project-header-actions">
       {row.permalink && <a className="button secondary" href={row.permalink} target="_blank" rel="noreferrer">Open in Wrike</a>}
     </div></header>
 
@@ -142,6 +153,8 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
       : null}
 
     {row.custom_fields_sync_state !== "complete" && <p className="notice project-sync-notice" role="status">Some custom-field data is not currently verified. Previously synchronized values are labeled below and have not been replaced with empty data.</p>}
+
+    <ProjectTimeline input={timelineInput} headingId="project-detail-timeline" />
 
     <section className="card project-overview-card" aria-labelledby="project-overview-heading">
       <div className="section-heading project-overview-heading"><div><p className="eyebrow">OVERVIEW</p><h2 id="project-overview-heading">Project information</h2></div></div>
@@ -170,9 +183,9 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
     </section>
 
     <details className="card project-additional-data">
-      <summary><span><span className="eyebrow">ADDITIONAL DATA</span><strong>Additional project data</strong><small>Project dates, Wrike folders, and other synchronized fields</small></span></summary>
+      <summary><span><span className="eyebrow">ADDITIONAL DATA</span><strong>Additional project data</strong><small>Source timestamps, Wrike folders, and other synchronized fields</small></span></summary>
       <div className="project-additional-grid">
-        <section aria-labelledby="project-dates-heading"><h3 id="project-dates-heading">Project dates</h3><dl className="project-detail-list"><MetadataItem label="Created">{formatDate(row.created_at_wrike, true)}</MetadataItem><MetadataItem label="Start">{formatDate(row.start_date)}</MetadataItem><MetadataItem label="Due">{formatDate(row.due_date)}</MetadataItem><MetadataItem label="Completed">{formatDate(row.completed_at, true)}</MetadataItem><MetadataItem label="Last updated">{formatDate(row.updated_at_wrike, true)}</MetadataItem></dl></section>
+        <section aria-labelledby="project-dates-heading"><h3 id="project-dates-heading">Source timestamps</h3><dl className="project-detail-list"><MetadataItem label="Created">{formatDate(row.created_at_wrike, true)}</MetadataItem><MetadataItem label="Last updated">{formatDate(row.updated_at_wrike, true)}</MetadataItem></dl></section>
         <section aria-labelledby="project-folders-heading"><h3 id="project-folders-heading">Wrike folders</h3><TaskFolderList folders={folders} /></section>
         <section className="project-other-fields" aria-labelledby="project-other-fields-heading"><h3 id="project-other-fields-heading">Other synchronized fields</h3><TaskCustomFieldList fields={otherFields} unresolvedFields={unresolvedCustomFields} verticalState={row.vertical_state} showAdminDiagnostics={isAdministrator} /></section>
       </div>
