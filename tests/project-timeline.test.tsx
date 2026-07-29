@@ -79,6 +79,9 @@ describe("shared project timeline", () => {
     }} />);
     expect(html).toContain('dateTime="2026-01-01"');
     expect(html).toContain("Planned");
+    expect(html).toContain('tabindex="0"');
+    expect(html).toContain("Focus this milestone to bring its callout forward.");
+    expect(html).toContain('aria-hidden="true"');
     expect(html).toContain("Project completion");
     expect(html).toContain("Publication");
     expect(renderToStaticMarkup(<ProjectTimeline headingId="empty" input={{}} />)).toBe("");
@@ -110,5 +113,15 @@ describe("shared project timeline", () => {
     expect(styles).toContain("height: calc(92px + var(--timeline-lane-count) * 34px)");
     expect(styles).toContain("var(--milestone-lane) * 34px");
     expect(styles).toContain(".project-timeline-visual { height: auto;");
+  });
+
+  it("brings overlapping callouts forward on hover and keyboard focus", () => {
+    const styles = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
+    expect(styles).toContain(".project-timeline-event:is(:hover, :focus-visible, :focus-within) { z-index: 30;");
+    expect(styles).toContain("translate: -50% -6px; scale: 1.045;");
+    expect(styles).toContain("outline: 3px solid #7aadd1;");
+    expect(styles).toContain(":has(.project-timeline-event:is(:hover, :focus-visible, :focus-within))");
+    expect(styles).toContain("opacity: .58; filter: saturate(.72);");
+    expect(styles).toContain(".project-timeline-marker, .project-timeline-callout { transition: none; }");
   });
 });

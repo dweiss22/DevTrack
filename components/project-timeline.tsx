@@ -33,13 +33,15 @@ export function ProjectTimeline({ input, headingId, className = "", embedded = f
         {milestones.map((milestone) => <li
           key={milestone.id}
           className={`project-timeline-event kind-${milestone.kind}`}
+          tabIndex={0}
+          aria-label={`${milestone.kindLabel}: ${milestone.label}, ${milestone.formattedDate}. Focus this milestone to bring its callout forward.`}
           style={{
             "--milestone-position": `${milestone.position}%`,
             "--milestone-lane": milestone.lane,
           } as React.CSSProperties}
         >
           <span className="project-timeline-marker" aria-hidden="true" />
-          <div className="project-timeline-callout">
+          <div className="project-timeline-callout" aria-hidden="true">
             <span className="project-timeline-kind">{milestone.kindLabel}</span>
             <strong>{milestone.label}</strong>
             <time dateTime={milestone.date}>{milestone.formattedDate}</time>
