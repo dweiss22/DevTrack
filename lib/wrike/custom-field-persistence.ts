@@ -119,5 +119,14 @@ export async function persistNormalizedTaskCustomFields(
     const { error } = await db.from("wrike_task_normalized_custom_field_values").upsert(rows.slice(offset, offset + 500), { onConflict: "task_id,normalized_field_id" });
     if (error) throw new Error(`Supabase could not save normalized custom-field values: ${error.message}`);
   }
+  if (taskIds.length) {
+    const { data: taskOrganization, error: taskOrganizationError } = await db.from("wrike_tasks")
+      .select("organization_id").eq("id", taskIds[0]).single();
+    if (taskOrganizationError) throw new Error(`Supabase could not resolve the SME identity organization: ${taskOrganizationError.message}`);
+    const { error: identityRefreshError } = await db.rpc("refresh_sme_dashboard_identities", {
+      target_organization_id: taskOrganization.organization_id,
+    });
+    if (identityRefreshError) throw new Error(`Supabase could not refresh field-derived SME identities: ${identityRefreshError.message}`);
+  }
   return { valueCount: rows.length, conflictCount: conflicts.length, conflicts };
 }

@@ -43,15 +43,23 @@ describe("Wrike custom-field normalization", () => {
 
   it("persists and logs conflicts without failing reconciliation", async () => {
     const fields = mergeNormalizedCustomFields([field("M1", "[LCT] Authoring Tool (M)", "Storyline"), field("L1", "[LCT] Authoring Tool (L)", "Rise")]);
-    const from = vi.fn(() => ({
+    const from = vi.fn((table: string) => table === "wrike_tasks" ? ({
+      select: () => ({ eq: () => ({ single: async () => ({
+        data: { organization_id: "organization-1" }, error: null,
+      }) }) }),
+    }) : ({
       delete: () => ({ in: async () => ({ error: null }) }),
       upsert: async () => ({ error: null })
     }));
+    const rpc = vi.fn().mockResolvedValue({ error: null });
     const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const result = await persistNormalizedTaskCustomFields({ from } as never, new Map([["authoring tool", "F1"]]), [{ taskId: "T1", taskWrikeId: "WT1", fields }], "2026-07-17T00:00:00Z");
+    const result = await persistNormalizedTaskCustomFields({ from, rpc } as never, new Map([["authoring tool", "F1"]]), [{ taskId: "T1", taskWrikeId: "WT1", fields }], "2026-07-17T00:00:00Z");
     warning.mockRestore();
     expect(result).toMatchObject({ valueCount: 1, conflictCount: 1 });
     expect(from).toHaveBeenCalledWith("wrike_task_normalized_custom_field_values");
+    expect(rpc).toHaveBeenCalledWith("refresh_sme_dashboard_identities", {
+      target_organization_id: "organization-1",
+    });
   });
 
   it("builds dynamic filter choices only from observed reporting rows", async () => {

@@ -12,16 +12,24 @@ export type ManagedMember = {
   deletionJobId: string | null;
   smeClassification: SmeClassification | null;
   smeClassificationUpdatedAt: string | null;
+  smeIdentityId: string | null;
 };
 type IdentityOption = { id: string; name: string; email: string | null };
+type SmeIdentityOption = {
+  id: string; name: string; normalizedName: string;
+  resolutionStatus: "discovered" | "verified" | "ambiguous" | "resolved";
+  ambiguityReason: string | null; wrikeUserId: string | null;
+  applicationUserId: string | null;
+};
 type DeletionPreview = {
   targetUserId: string; displayName: string; email: string; role: ApplicationRole;
   delete: { conversations: number; reportingMemberships: number; invitations: number; draftSurveys: number; draftAttachments: number };
   retain: { submittedSurveys: number; surveyRevisions: number; surveyAuditEvents: number; historicalLabel: string };
 };
 
-export function UserManagementPanel({ members, identities, personaIdentities, managerId, managerRole, impersonating }: {
+export function UserManagementPanel({ members, identities, smeIdentities, personaIdentities, managerId, managerRole, impersonating }: {
   members: ManagedMember[]; identities: IdentityOption[];
+  smeIdentities: SmeIdentityOption[];
   personaIdentities: IdentityOption[];
   managerId: string; managerRole: ApplicationRole; impersonating: boolean;
 }) {
@@ -121,6 +129,23 @@ export function UserManagementPanel({ members, identities, personaIdentities, ma
     && member.role !== "super_admin" && (managerRole === "super_admin" || (managerRole === "admin" && member.role !== "admin"))
     && member.accountState === "active" && member.profileCompleted;
 
+  function linkSmeIdentity(member: ManagedMember, identityId: string) {
+    const identity = smeIdentities.find((option) => option.id === identityId);
+    if (!identity) return;
+    const replacing = Boolean(member.smeIdentityId && member.smeIdentityId !== identity.id)
+      || Boolean(identity.applicationUserId && identity.applicationUserId !== member.id)
+      || identity.resolutionStatus === "ambiguous";
+    const confirmed = !replacing || window.confirm(
+      `Confirm linking ${member.name} (${member.email}) to the field-derived SME identity “${identity.name}”. `
+      + "This replaces the existing linkage or resolves an ambiguous match; project and survey history will remain attached to the SME identity."
+    );
+    if (!confirmed) return;
+    void request(`/api/admin/users/${member.id}/sme-identity`, "PATCH", {
+      smeIdentityId: identity.id,
+      confirmReplacement: replacing,
+    }, `${member.name} is now linked to ${identity.name}.`);
+  }
+
   return <div className="admin-stack">
     {message && <p className={error ? "notice error" : "notice"} role={error ? "alert" : "status"}>{message}</p>}
     <section className="card" aria-labelledby="add-user-title">
@@ -143,7 +168,7 @@ export function UserManagementPanel({ members, identities, personaIdentities, ma
 
     <section className="user-members-section" aria-labelledby="organization-members-title">
       <div className="section-heading"><div><h2 id="organization-members-title">Organization members</h2></div><p>{members.length} active</p></div>
-      {members.length ? <div className="admin-table-wrap"><table><thead><tr><th>User</th><th>Email</th><th>Access profile</th><th>SME type</th><th>Wrike identity / persona</th><th>Added</th><th>Actions</th></tr></thead><tbody>{members.map((member) => {
+      {members.length ? <div className="admin-table-wrap"><table><thead><tr><th>User</th><th>Email</th><th>Access profile</th><th>SME type</th><th>Wrike identity / ID persona</th><th>Added</th><th>Actions</th></tr></thead><tbody>{members.map((member) => {
         const locked = member.role === "super_admin";
         const persona = locked && managerRole === "super_admin" && member.id === managerId;
         const identityOption = identities.find((identity) => identity.id === member.accessWrikeUserId);
@@ -174,6 +199,35 @@ export function UserManagementPanel({ members, identities, personaIdentities, ma
           <td><div className="table-actions">{member.accountState === "deletion_pending" && member.deletionJobId && !impersonating ? <button className="secondary danger" type="button" disabled={Boolean(submitting)} onClick={() => { setDeletionTarget(member); setDeletionStage("Resuming deletion…"); void advanceDeletion(member.deletionJobId!); }}>Retry deletion</button> : canManageTarget(member) ? <><button className="secondary" type="button" onClick={() => setImpersonationTarget(member)}>Log in as</button><button className="secondary danger" type="button" onClick={() => void openDeletion(member)}>Delete user</button></> : <span className="muted">Protected</span>}</div></td>
         </tr>;
       })}</tbody></table></div> : <p className="card empty">No application users are assigned to this organization.</p>}
+    </section>
+
+    <section className="card" aria-labelledby="sme-identity-links-title">
+      <div className="section-heading"><div><p className="eyebrow">FIELD-DERIVED IDENTITY</p>
+        <h2 id="sme-identity-links-title">SME account links</h2></div>
+        <p>Link an application account to the durable SME identity discovered from imported project fields. Historical projects and surveys stay with the identity.</p></div>
+      <div className="admin-table-wrap"><table><thead><tr>
+        <th>Application user</th><th>Field-derived SME identity</th><th>Normalized match</th><th>Linkage status</th>
+      </tr></thead><tbody>{members.filter((member) => member.operationalRoles.includes("sme")).map((member) => {
+        const linked = smeIdentities.find((identity) => identity.id === member.smeIdentityId);
+        return <tr key={`sme-link:${member.id}`}>
+          <td><strong>{member.name}</strong><br /><span className="muted">{member.email}</span></td>
+          <td><select aria-label={`Field-derived SME identity for ${member.name}`}
+            value={member.smeIdentityId ?? ""} disabled={Boolean(submitting) || impersonating}
+            onChange={(event) => linkSmeIdentity(member, event.target.value)}>
+            <option value="" disabled>Select discovered SME</option>
+            {smeIdentities.map((identity) => <option key={identity.id} value={identity.id}>
+              {identity.name}{identity.resolutionStatus === "ambiguous" ? " — confirmation required" : ""}
+            </option>)}
+          </select></td>
+          <td>{linked ? <><strong>{linked.name}</strong><br /><code>{linked.normalizedName}</code></>
+            : <span className="muted">Not linked</span>}</td>
+          <td>{linked ? <><span className="role-chip">Linked</span>{" "}
+            <span className="muted">{linked.resolutionStatus === "verified" ? "Verified Wrike match"
+              : linked.resolutionStatus === "resolved" ? "Admin-confirmed match"
+                : "Field-derived match"}</span></>
+            : <span className="notice compact warning">Link required</span>}</td>
+        </tr>;
+      })}</tbody></table></div>
     </section>
 
     {impersonationTarget && <div className="modal-backdrop"><section className="card management-dialog" role="dialog" aria-modal="true" aria-labelledby="impersonate-title"><h2 id="impersonate-title">Log in as {impersonationTarget.name}</h2><p>You will see DevTrack with this user’s permissions. All changes retain both identities in the audit history.</p><form onSubmit={startImpersonation}><label>Reason<textarea name="reason" required minLength={3} maxLength={1000} autoFocus /></label><div className="table-actions"><button disabled={Boolean(submitting)}>Start impersonation</button><button className="secondary" type="button" onClick={() => setImpersonationTarget(null)} disabled={Boolean(submitting)}>Cancel</button></div></form></section></div>}

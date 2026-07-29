@@ -20,7 +20,7 @@ describe("restricted SME projects and assigned-ID actions", () => {
     expect(smeDashboard).toContain("/sme-dashboard/projects/${row.task_id}");
     expect(smeProjectPage).toContain("loadSmeProjectDetail");
     expect(smeProjectModal).toContain("loadSmeProjectDetail");
-    expect(smeProjectLoader).toContain('rpc("sme_project_detail"');
+    expect(smeProjectLoader).toContain('rpc("sme_project_detail_by_identity"');
     expect(smeProject).not.toContain('from("wrike_tasks")');
     for (const prohibited of ["Open in Wrike", "raw_data", "wrike_time_entries", "ID review", "survey_audit_log"]) {
       expect(smeProject).not.toContain(prohibited);

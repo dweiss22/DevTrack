@@ -29,6 +29,12 @@ export default async function UserManagementPage() {
   if (personasError) throw new Error(`Operational personas could not be loaded: ${personasError.message}`);
   if (deletionJobsError) throw new Error(`User deletion status could not be loaded: ${deletionJobsError.message}`);
   if (smeProfilesError) throw new Error(`SME account types could not be loaded: ${smeProfilesError.message}`);
+  const { data: smeIdentities, error: smeIdentitiesError } = await admin
+    .from("sme_dashboard_identities")
+    .select("id,display_name,normalized_name,resolution_status,ambiguity_reason,wrike_user_id,application_user_id")
+    .eq("organization_id", profile.organization_id)
+    .order("display_name");
+  if (smeIdentitiesError) throw new Error(`Field-derived SME identities could not be loaded: ${smeIdentitiesError.message}`);
   const managementRolesFailure = managementRolesError
     ? reportingFailure(managementRolesError, "Additive role management", "202607280001_additive_management_roles.sql")
     : null;
@@ -46,6 +52,8 @@ export default async function UserManagementPage() {
   for (const grant of managementRoles ?? []) managementByUser.set(grant.application_user_id, [...(managementByUser.get(grant.application_user_id) ?? []), grant.management_role]);
   const deletionJobByUser = new Map((deletionJobs ?? []).map((job) => [job.target_user_id, job.id]));
   const smeProfileByUser = new Map((smeProfiles ?? []).map((row) => [row.application_user_id, row]));
+  const smeIdentityByUser = new Map((smeIdentities ?? []).filter((row) => row.application_user_id)
+    .map((row) => [row.application_user_id as string, row.id]));
   const members = (users ?? []).map((user) => {
     const authenticationUser = authenticationById.get(user.id);
     return {
@@ -63,6 +71,7 @@ export default async function UserManagementPage() {
       deletionJobId: deletionJobByUser.get(user.id) ?? null,
       smeClassification: smeProfileByUser.get(user.id)?.classification as "internal" | "external" | null ?? null,
       smeClassificationUpdatedAt: smeProfileByUser.get(user.id)?.updated_at ?? null,
+      smeIdentityId: smeIdentityByUser.get(user.id) ?? null,
     };
   });
   const identityOptions = (wrikeUsers ?? []).map((identity) => ({ id: identity.id, name: identity.display_name, email: identity.email }));
@@ -73,13 +82,19 @@ export default async function UserManagementPage() {
   const currentPersonaWrikeUserId = personasByUser.get(actor.id)?.find((persona) => persona.operational_role === "id")?.wrike_user_id ?? null;
   const personaIdentityOptions = identityOptions.filter((option) =>
     option.id === currentPersonaWrikeUserId || !occupiedIdWrikeUsers.has(option.id));
-  return <AppShell isAdmin><header className="page-header"><div><p className="eyebrow">ADMINISTRATIVE FUNCTIONS</p><h1>User Management</h1><p>Add users, manage organization roles, and map ID and SME accounts to verified Wrike identities.</p></div></header>
+  return <AppShell isAdmin><header className="page-header"><div><p className="eyebrow">ADMINISTRATIVE FUNCTIONS</p><h1>User Management</h1><p>Add users, manage organization roles, map IDs to Wrike identities, and link SMEs to identities discovered from project fields.</p></div></header>
     {managementRolesFailure ? <section className="notice warning" role="status">
       <strong>{managementRolesFailure.title}</strong>{" "}
       <span>{managementRolesFailure.message} Existing user administration remains available, but additive management-role controls are temporarily hidden.</span>
       {managementRolesFailure.diagnosticCode ? <p><strong>Database code:</strong> <code>{managementRolesFailure.diagnosticCode}</code></p> : null}
     </section> : null}
     <UserManagementPanel members={members} identities={identityOptions}
+      smeIdentities={(smeIdentities ?? []).map((identity) => ({
+        id: identity.id, name: identity.display_name, normalizedName: identity.normalized_name,
+        resolutionStatus: identity.resolution_status as "discovered" | "verified" | "ambiguous" | "resolved",
+        ambiguityReason: identity.ambiguity_reason, wrikeUserId: identity.wrike_user_id,
+        applicationUserId: identity.application_user_id,
+      }))}
       personaIdentities={personaIdentityOptions}
       managerId={actor.id} managerRole={profile.role} impersonating={identity.impersonating} />
     {!managementRolesFailure ? <AdditiveAccessPanel members={members.map((member) => ({

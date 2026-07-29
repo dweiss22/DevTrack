@@ -112,9 +112,9 @@ describe("one assignment-safe SME project loader", () => {
       canSelect: false,
     });
     expect(result?.ok).toBe(true);
-    expect(rpc).toHaveBeenCalledWith("sme_project_detail", {
+    expect(rpc).toHaveBeenCalledWith("sme_project_detail_by_identity", {
       target_task_id: "09dab4bc-7c60-48d1-88b5-312c610a5b51",
-      target_sme_wrike_user_id: null,
+      target_sme_identity_id: null,
     });
   });
 

@@ -24,7 +24,8 @@ export default async function SmeProjectPage({ params, searchParams }: {
   const fallback = `/sme-dashboard?scope=${scope}`;
   if (!result.ok) return <AppShell><SmeProjectAccessState state={result.state} returnTo={fallback} /></AppShell>;
   const detail = result.detail;
-  const returnTo = `/sme-dashboard?sme=${encodeURIComponent(detail.selectedSmeWrikeUserId)}&scope=${scope}`;
+  const selectedIdentity = detail.selectedSmeIdentityId ?? detail.selectedSmeWrikeUserId!;
+  const returnTo = `/sme-dashboard?sme=${encodeURIComponent(selectedIdentity)}&scope=${scope}`;
   return <AppShell><nav className="breadcrumb" aria-label="Breadcrumb"><Link href={returnTo}>SME Dashboard</Link>
     <span aria-hidden="true">/</span><span aria-current="page">Course detail</span></nav>
     <SmeProjectDetail detail={detail} returnTo={returnTo}

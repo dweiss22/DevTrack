@@ -10,6 +10,6 @@ export default async function InterceptedSurvey({ params, searchParams }: { para
   const surveyType = surveyTypeFromSlug(slug);
   if (!surveyType) notFound();
   const query = await searchParams;
-  return <SurveyDialog taskId={id} surveyType={surveyType} initialSmeWrikeId={query.sme}
+  return <SurveyDialog taskId={id} surveyType={surveyType} initialSmeIdentityId={query.sme}
     fallbackHref={dashboardReturnHref(query.returnTo, "/surveys")} />;
 }

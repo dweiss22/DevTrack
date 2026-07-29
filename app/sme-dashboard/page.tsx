@@ -14,10 +14,10 @@ export default async function SmeDashboardPage({ searchParams }: { searchParams:
   const identities = (identityRows ?? []) as DashboardIdentity[];
   const canSelect = hasCapability(profile.access, "select_sme_dashboard_user");
   const selected = canSelect
-    ? identities.find((identity) => identity.wrike_user_id === requested && identity.selectable) ?? null
+    ? identities.find((identity) => identity.sme_identity_id === requested) ?? null
     : identities[0] ?? null;
-  const { data: rows, error: rowsError } = selected?.wrike_user_id
-    ? await supabase.rpc("reporting_sme_dashboard_rows", { target_wrike_user_id: selected.wrike_user_id })
+  const { data: rows, error: rowsError } = selected?.sme_identity_id && selected.selectable
+    ? await supabase.rpc("reporting_sme_dashboard_rows_by_identity", { target_sme_identity_id: selected.sme_identity_id })
     : { data: [], error: null };
   if (rowsError) throw new Error("The selected SME Dashboard could not be loaded.");
   const dashboardRows = (rows ?? []) as SmeDashboardRow[];
@@ -27,7 +27,7 @@ export default async function SmeDashboardPage({ searchParams }: { searchParams:
   return <AppShell isAdmin={isAdministratorRole(profile.access)}>
     <header className="page-header"><div><p className="eyebrow">ASSIGNED COURSE DEVELOPMENT</p>
       <h1>SME Dashboard{selected ? ` — ${selected.display_name}` : ""}</h1>
-      <p>Projects explicitly assigned through the Wrike SME custom field.</p></div></header>
+      <p>Projects grouped by the SME names stored in the imported Wrike SME field.</p></div></header>
     <SmeDashboard identities={identities} selected={selected} rows={visibleRows}
       canSelect={canSelect} canLaunchDebrief={profile.access.operationalRoles.includes("sme")
         && hasCapability(profile.access, "create_sme_debrief")}

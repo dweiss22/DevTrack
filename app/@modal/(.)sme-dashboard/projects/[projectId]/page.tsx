@@ -25,7 +25,8 @@ export default async function SmeProjectInterceptedModal({ params, searchParams 
     <SmeProjectAccessState state={result.state} returnTo={fallback} />
   </SmeProjectModal>;
   const detail = result.detail;
-  const returnTo = `/sme-dashboard?sme=${encodeURIComponent(detail.selectedSmeWrikeUserId)}&scope=${scope}`;
+  const selectedIdentity = detail.selectedSmeIdentityId ?? detail.selectedSmeWrikeUserId!;
+  const returnTo = `/sme-dashboard?sme=${encodeURIComponent(selectedIdentity)}&scope=${scope}`;
   return <SmeProjectModal><SmeProjectDetail detail={detail} returnTo={returnTo}
     canLaunchSurvey={detail.subjectApplicationUserId === user.id}
     managementView={hasCapability(profile.access, "view_sme_survey_details")} /></SmeProjectModal>;

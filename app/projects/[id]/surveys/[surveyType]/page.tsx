@@ -54,7 +54,7 @@ export default async function DirectSurvey({ params, searchParams }: { params: P
         {profile.role !== "sme" ? <><br /><strong>Wrike task:</strong> {context.taskWrikeId}</> : null}
         <br /><strong>Reporting year:</strong> {context.reportingYear ?? "Unavailable"}</p></section>
     </AppShell>
-    <SurveyDialog taskId={id} surveyType={surveyType} initialSmeWrikeId={query.sme}
+    <SurveyDialog taskId={id} surveyType={surveyType} initialSmeIdentityId={query.sme}
       fallbackHref={dashboardReturnHref(query.returnTo, profile.role === "sme" ? "/sme-dashboard" : `/projects/${id}`)} />
   </>;
 }

@@ -47,7 +47,7 @@ export function SurveyDialog({
   surveyType,
   submissionId,
   fallbackHref,
-  initialSmeWrikeId,
+  initialSmeIdentityId,
   forceReadOnly = false,
   apiBase = "/api/surveys",
 }: {
@@ -55,7 +55,7 @@ export function SurveyDialog({
   surveyType?: SurveyType;
   submissionId?: string;
   fallbackHref: string;
-  initialSmeWrikeId?: string;
+  initialSmeIdentityId?: string;
   forceReadOnly?: boolean;
   apiBase?: string;
 }) {
@@ -100,7 +100,7 @@ export function SurveyDialog({
     setCritical(true);
     fetch("/api/surveys", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ taskId, surveyType, reviewedWrikeUserId: initialSmeWrikeId ?? null }),
+      body: JSON.stringify({ taskId, surveyType, reviewedSmeIdentityId: initialSmeIdentityId ?? null }),
     }).then(async (response) => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Survey context is unavailable.");
@@ -108,7 +108,7 @@ export function SurveyDialog({
     }).catch((reason) => {
       setMessage(reason instanceof Error ? reason.message : "Survey context is unavailable."); setState("error");
     }).finally(() => setCritical(false));
-  }, [initialSmeWrikeId, loadDetail, submissionId, surveyType, taskId]);
+  }, [initialSmeIdentityId, loadDetail, submissionId, surveyType, taskId]);
 
   useEffect(() => {
     if (!dirty) return;

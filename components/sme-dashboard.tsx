@@ -23,24 +23,26 @@ export function SmeDashboard({ identities, selected, rows, canSelect, canLaunchD
   canSelect: boolean; canLaunchDebrief: boolean; currentUserId: string | null; scope: "recent" | "all";
   administrativeView: boolean; mappingRequired: boolean;
 }) {
-  const returnTo = selected?.wrike_user_id
-    ? `/sme-dashboard?sme=${encodeURIComponent(selected.wrike_user_id)}&scope=${scope}` : `/sme-dashboard?scope=${scope}`;
+  const returnTo = selected?.sme_identity_id
+    ? `/sme-dashboard?sme=${encodeURIComponent(selected.sme_identity_id)}&scope=${scope}` : `/sme-dashboard?scope=${scope}`;
   const canonicalIdentities = canonicalDashboardIdentities(identities);
-  const selectableIdentities = canonicalIdentities.filter((identity) => identity.selectable && identity.wrike_user_id);
+  const selectableIdentities = canonicalIdentities.filter((identity) => identity.selectable);
   const unresolvedIdentities = canonicalIdentities.filter((identity) => !identity.selectable);
-  const scopeHref = (nextScope: "recent" | "all") => selected?.wrike_user_id
-    ? `/sme-dashboard?sme=${encodeURIComponent(selected.wrike_user_id)}&scope=${nextScope}`
+  const scopeHref = (nextScope: "recent" | "all") => selected?.sme_identity_id
+    ? `/sme-dashboard?sme=${encodeURIComponent(selected.sme_identity_id)}&scope=${nextScope}`
     : `/sme-dashboard?scope=${nextScope}`;
   return <>
     {canSelect && <section className="card sme-selector-card"><form method="get">
-      <SearchableFilterSelect label="SME" name="sme" defaultValue={selected?.wrike_user_id ?? ""}
-        allLabel="Select an SME" options={selectableIdentities.map((identity) => ({
-          value: identity.wrike_user_id ?? "", label: dashboardIdentityLabel(identity),
+      <SearchableFilterSelect label="SME" name="sme" defaultValue={selected?.sme_identity_id ?? ""}
+        allLabel="Select an SME" options={canonicalIdentities.map((identity) => ({
+          value: identity.sme_identity_id ?? identity.wrike_user_id ?? identity.identity_key,
+          label: dashboardIdentityLabel(identity),
         }))} />
       <input type="hidden" name="scope" value={scope} /><button>View dashboard</button>
     </form><IdentityResolutionWarnings identities={unresolvedIdentities} /></section>}
-    {mappingRequired ? <p className="card notice warning" role="status">Your DevTrack account is not mapped to a verified Wrike identity. Ask an administrator to configure the mapping.</p>
-      : !selected ? <p className="card empty">{selectableIdentities.length ? "Select a verified SME to view assigned work." : "No trusted SME assignments are available."}</p>
+    {mappingRequired ? <p className="card notice warning" role="status">Your DevTrack account is not linked to a project-field SME identity. Ask an administrator to configure the link in User Management.</p>
+      : !selected ? <p className="card empty">{selectableIdentities.length ? "Select an SME to view assigned work." : "No SME field identities are available."}</p>
+      : !selected.selectable ? <p className="card notice warning">This SME name is ambiguous or comes from conflicting project data. An administrator must confirm its identity before its dashboard can be opened.</p>
       : <>
         <div className="card dashboard-identity-note"><p>Showing assignments for <strong>{selected.display_name}</strong>
           {selected.email ? <> ({selected.email})</> : null}. {administrativeView ? "This is a management view; you are not impersonating the SME." : ""}</p>
@@ -58,12 +60,12 @@ export function SmeDashboard({ identities, selected, rows, canSelect, canLaunchD
             canEdit: Boolean(row.survey_can_edit), revisionNumber: 1,
           } : null;
           const href = summary?.status === "draft" ? submissionHref(summary.id, returnTo)
-            : !summary && selected.wrike_user_id
-              ? surveyHref(row.task_id, "course-development-debrief", selected.wrike_user_id, returnTo)
+            : !summary && selected.sme_identity_id
+              ? surveyHref(row.task_id, "course-development-debrief", selected.sme_identity_id, returnTo)
               : "";
           const ownsSelection = Boolean(currentUserId && currentUserId === selected.application_user_id);
           const allowed = row.is_recent && canLaunchDebrief && ownsSelection && Boolean(href);
-          const projectHref = `/sme-dashboard/projects/${row.task_id}?sme=${encodeURIComponent(selected.wrike_user_id ?? "")}&scope=${scope}`;
+          const projectHref = `/sme-dashboard/projects/${row.task_id}?sme=${encodeURIComponent(selected.sme_identity_id ?? "")}&scope=${scope}`;
           return <tr key={row.task_id}>
             <td data-label="Course"><Link href={projectHref}>{row.title}</Link></td>
             <td data-label="Status"><span className="sme-status-indicator" title={row.status_name}>
@@ -78,7 +80,7 @@ export function SmeDashboard({ identities, selected, rows, canSelect, canLaunchD
                   ? <span className="muted">Draft</span>
                   : <span className="muted">—</span>}</td>
           </tr>;
-        })}</tbody></table></div> : <p className="card empty">No projects in this period explicitly match this Wrike identity in the SME field.</p>}
+        })}</tbody></table></div> : <p className="card empty">No projects in this period match this SME field identity.</p>}
       </>}
   </>;
 }
@@ -93,6 +95,6 @@ function statusColor(classification: string) {
 function IdentityResolutionWarnings({ identities }: { identities: DashboardIdentity[] }) {
   if (!identities.length) return null;
   return <details className="dashboard-identity-warnings"><summary>{identities.length} assignment value{identities.length === 1 ? "" : "s"} need identity resolution</summary>
-    <p className="muted">These values are not selectable users. Correct the SME assignment identity in Wrike and re-import.</p>
+    <p className="muted">These names remain visible but cannot be opened until an administrator confirms an ambiguous match or the conflicting project field is corrected.</p>
     <ul>{identities.map((identity) => <li key={identity.identity_key}>{dashboardIdentityLabel(identity)}</li>)}</ul></details>;
 }

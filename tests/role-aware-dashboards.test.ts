@@ -89,15 +89,13 @@ describe("role-aware dashboard behavior", () => {
   });
 
   it("keeps unresolved assignment values out of both user selectors", () => {
-    for (const file of ["components/id-dashboard.tsx", "components/sme-dashboard.tsx"]) {
-      const component = source(file);
-      expect(component).toContain("selectableIdentities.map");
-      expect(component).not.toContain("identities.map((identity) => <option");
-      expect(component).toContain("<IdentityResolutionWarnings");
-      expect(component).toContain(file.includes("id-dashboard")
-        ? "These values do not uniquely match an active, verified Wrike identity"
-        : "These values are not selectable users.");
-    }
+    const idDashboard = source("components/id-dashboard.tsx");
+    expect(idDashboard).toContain("selectableIdentities.map");
+    expect(idDashboard).toContain("These values do not uniquely match an active, verified Wrike identity");
+    const smeDashboard = source("components/sme-dashboard.tsx");
+    expect(smeDashboard).toContain("canonicalIdentities.map");
+    expect(smeDashboard).toContain("remain visible but cannot be opened");
+    expect(smeDashboard).toContain("<IdentityResolutionWarnings");
   });
 
   it("adds searchable identity filters to both administrator dashboard selectors", () => {

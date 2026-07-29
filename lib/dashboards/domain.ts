@@ -1,21 +1,22 @@
 export type DashboardIdentity = {
   identity_key: string;
+  sme_identity_id?: string | null;
   wrike_user_id: string | null;
   application_user_id: string | null;
   display_name: string;
   email: string | null;
   mapping_status: "mapped" | "unmapped" | "missing";
-  identity_status: "verified" | "ambiguous" | "unverified";
+  identity_status: "discovered" | "verified" | "ambiguous" | "resolved" | "unverified";
   selectable: boolean;
 };
 
 export function canonicalDashboardIdentities(identities: readonly DashboardIdentity[]) {
   const canonical = new Map<string, DashboardIdentity>();
   for (const identity of identities) {
-    const key = identity.wrike_user_id
-      ? `wrike:${identity.wrike_user_id}`
-      : identity.application_user_id
-        ? `application:${identity.application_user_id}`
+    const key = identity.sme_identity_id
+      ? `sme:${identity.sme_identity_id}`
+      : identity.wrike_user_id
+        ? `wrike:${identity.wrike_user_id}`
         : identity.identity_key;
     const existing = canonical.get(key);
     if (!existing || identityPreference(identity) > identityPreference(existing)) canonical.set(key, identity);

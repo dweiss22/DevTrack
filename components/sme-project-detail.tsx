@@ -23,7 +23,7 @@ export type SmeProjectDetailData = {
   finalizedDraft: { available: boolean; url?: string | null; updatedAt?: string | null };
   timeline: { startDate: string | null; originalDueDate: string | null; dueDate: string | null; completedAt: string | null };
   categoryTime: Array<{ category: string; minutes: number }>; isRecent: boolean;
-  selectedSmeWrikeUserId: string; subjectApplicationUserId: string | null;
+  selectedSmeIdentityId?: string; selectedSmeWrikeUserId?: string; subjectApplicationUserId: string | null;
 };
 
 export function SmeProjectDetail({ detail, returnTo, canLaunchSurvey, managementView = false }: {
@@ -32,7 +32,8 @@ export function SmeProjectDetail({ detail, returnTo, canLaunchSurvey, management
   const surveyLink = detail.debrief?.status === "draft" && detail.debrief.id
     ? submissionHref(detail.debrief.id, returnTo)
     : !detail.debrief
-      ? surveyHref(detail.taskId, "course-development-debrief", detail.selectedSmeWrikeUserId, returnTo)
+      ? surveyHref(detail.taskId, "course-development-debrief",
+        detail.selectedSmeIdentityId ?? detail.selectedSmeWrikeUserId ?? null, returnTo)
       : null;
   const actionLabel = detail.debrief?.status === "draft" ? "Resume SME Debrief Survey" : "Create SME Debrief Survey";
   return <div className="sme-project-detail">

@@ -6,21 +6,27 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { user, profile } = await requireCapability("manage_users");
-  const parsed = z.object({ wrikeUserId: z.string().uuid().nullable() }).safeParse(await request.json().catch(() => null));
+  const parsed = z.object({
+    smeIdentityId: z.string().uuid(),
+    confirmReplacement: z.boolean().default(false),
+  }).safeParse(await request.json().catch(() => null));
   if (!z.string().uuid().safeParse(id).success || !parsed.success) {
-    return NextResponse.json({ error: "Select a valid SME and synchronized identity." }, { status: 400 });
+    return NextResponse.json({ error: "Select a valid SME and field-derived identity." }, { status: 400 });
   }
-  const { error } = await createAdminClient().rpc("set_application_user_sme_identity", {
+  const { error } = await createAdminClient().rpc("link_application_user_sme_identity", {
     target_organization_id: profile.organization_id,
-    target_user_id: id,
-    target_wrike_user_id: parsed.data.wrikeUserId,
+    target_application_user_id: id,
+    target_sme_identity_id: parsed.data.smeIdentityId,
     acting_user_id: user.id,
+    confirm_replacement: parsed.data.confirmReplacement,
   });
   if (error) {
-    const duplicate = error.code === "23505";
+    const confirmation = error.code === "P0001";
     return NextResponse.json({
-      error: duplicate ? "That synchronized identity is already assigned to another SME account." : "The SME identity mapping could not be updated."
-    }, { status: duplicate ? 409 : 400 });
+      error: confirmation
+        ? "Confirmation is required before replacing or resolving this SME identity linkage."
+        : "The SME identity linkage could not be updated."
+    }, { status: confirmation ? 409 : 400 });
   }
   return NextResponse.json({ ok: true });
 }

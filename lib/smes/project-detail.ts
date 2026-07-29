@@ -32,9 +32,9 @@ export async function loadSmeProjectDetail({
   const selectedSme = canSelect
     ? z.string().uuid().safeParse(requestedSme).success ? requestedSme : null
     : null;
-  const { data, error } = await supabase.rpc("sme_project_detail", {
+  const { data, error } = await supabase.rpc("sme_project_detail_by_identity", {
     target_task_id: projectId,
-    target_sme_wrike_user_id: selectedSme,
+    target_sme_identity_id: selectedSme,
   });
   if (error) {
     console.error("sme_project_detail_failed", {
