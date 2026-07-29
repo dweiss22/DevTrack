@@ -63,6 +63,23 @@ describe("corrected ID Dashboard course resolution", () => {
     expect(html).not.toContain("Start review");
   });
 
+  it("shows the requested seven-column ID Dashboard table", () => {
+    const html = renderToStaticMarkup(<IdDashboard identities={[selected]} selected={selected}
+      rows={[unresolvedSmeRow]} canSelect canActAsAssignedId mappingRequired={false}
+      ownOperationalView />);
+    const headings = [...html.matchAll(/<th>(.*?)<\/th>/g)].map((match) => match[1]);
+    expect(headings).toEqual([
+      "Course Name", "SME", "Status", "Vertical", "Course Style", "Finalized Draft", "Survey",
+    ]);
+    expect(html).toContain('data-label="Course Name"');
+    expect(html).toContain('data-label="SME"');
+    expect(html).toContain('data-label="Survey"');
+    expect(html).not.toContain("Review actions");
+    expect(html).not.toContain("Publication / reporting");
+    expect(html).not.toContain("Due / completed");
+    expect(html).not.toContain("Project / folder");
+  });
+
   it("preserves effective-user, persona, and principal-based security layers", () => {
     expect(migration).toContain("public.current_effective_user_id()");
     expect(migration).toContain("course_development_person_assignments_with_personas");

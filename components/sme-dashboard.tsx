@@ -7,6 +7,7 @@ import {
   canonicalDashboardIdentities, dashboardIdentityLabel, submissionHref,
   surveyHref, type DashboardIdentity, type SurveySummary,
 } from "@/lib/dashboards/domain";
+import { sortDashboardProjectsNewestFirst } from "@/lib/dashboards/project-order";
 
 export type SmeDashboardRow = {
   task_id: string; title: string; status_name: string; status_color: string | null;
@@ -28,6 +29,7 @@ export function SmeDashboard({ identities, selected, rows, canSelect, canLaunchD
   const canonicalIdentities = canonicalDashboardIdentities(identities);
   const selectableIdentities = canonicalIdentities.filter((identity) => identity.selectable);
   const unresolvedIdentities = canonicalIdentities.filter((identity) => !identity.selectable);
+  const orderedRows = sortDashboardProjectsNewestFirst(rows);
   const scopeHref = (nextScope: "recent" | "all") => selected?.sme_identity_id
     ? `/sme-dashboard?sme=${encodeURIComponent(selected.sme_identity_id)}&scope=${nextScope}`
     : `/sme-dashboard?scope=${nextScope}`;
@@ -52,9 +54,10 @@ export function SmeDashboard({ identities, selected, rows, canSelect, canLaunchD
           </div>
         </div>
         <SmeDashboardAnalytics rows={rows} />
-        {rows.length ? <div className="dashboard-table-wrap"><table className="dashboard-project-table sme-project-list"><thead><tr>
+        {orderedRows.length ? <div className="dashboard-table-wrap"><table className="dashboard-project-table sme-project-list">
+          <caption className="sr-only">Projects ordered from most recent to oldest</caption><thead><tr>
           <th>Course</th><th>Status</th><th>Survey</th>
-        </tr></thead><tbody>{rows.map((row) => {
+        </tr></thead><tbody>{orderedRows.map((row) => {
           const summary: SurveySummary | null = row.submission_id && row.survey_status ? {
             id: row.submission_id, status: row.survey_status, isLocked: Boolean(row.survey_is_locked),
             canEdit: Boolean(row.survey_can_edit), revisionNumber: 1,
