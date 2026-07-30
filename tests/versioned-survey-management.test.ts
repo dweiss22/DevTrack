@@ -36,17 +36,17 @@ describe("versioned survey management", () => {
     expect(surveyDefinitionSchema.safeParse(incompatible).success).toBe(false);
   });
 
-  it("evaluates conditions, clears hidden requirements, and validates matrix rows", () => {
+  it("evaluates external billing conditions and validates every individual rating", () => {
     const definition = INITIAL_SURVEY_DEFINITIONS.course_development_debrief;
     const invoice = definition.sections[1].questions[2];
     expect(questionIsVisible(invoice, { internalEmployee: true })).toBe(false);
     expect(questionIsVisible(invoice, { internalEmployee: false })).toBe(true);
     const result = validateSurveyAnswers(definition, {
-      originalDueYear: 2026, internalEmployee: true,
+      internalEmployee: true,
       workStartedOn: "2026-01-01", workFinishedOn: "2026-01-02",
-      collaborationRatings: { rating01: 5 },
+      rating01: 5,
     });
-    expect(result.errors.collaborationRatings).toContain("matrix");
+    expect(result.errors.rating02).toContain("required");
     expect(result.errors.invoice).toBeUndefined();
   });
 

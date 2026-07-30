@@ -7,8 +7,11 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("relock") }),
   z.object({ action: z.literal("correct_context"), corrections: z.object({
     originalDueYear: z.coerce.number().int().min(1000).max(9999).optional(),
+    reportingYear: z.coerce.number().int().min(1000).max(9999).optional(),
     publicationYear: z.coerce.number().int().min(1000).max(9999).optional(),
     vertical: z.string().max(50).optional(),
+  }).refine((value) => Object.values(value).some((item) => item !== undefined), {
+    message: "Provide at least one trusted context correction.",
   }) }),
 ]);
 

@@ -8,12 +8,12 @@ export const SME_DEBRIEF_STATEMENTS = [
   "The goals and objectives set by Lexipol for my contributions were clear.",
   "Lexipol staff were responsive to my inquiries, questions, and concerns related to course development.",
   "The tools and resources provided by Lexipol met my needs to complete assigned work.",
-  "The training and support provided by Lexipol met my needs to complete assigned work.",
+  "The training and support provided by Lexipol staff met my needs to complete assigned work.",
   "My expertise was utilized throughout course development.",
   "Lexipol was effective in incorporating my feedback.",
   "I had autonomy in designing the course content I was tasked with contributing.",
   "I felt valued and respected as an SME for Lexipol.",
-  "I would recommend my peers work with Lexipol for future SME opportunities.",
+  "I would recommend that my peers work with Lexipol for future SME opportunities.",
 ] as const;
 
 export const ID_REVIEW_STATEMENTS = [
@@ -28,7 +28,13 @@ export const ID_REVIEW_STATEMENTS = [
   "How effectively did the SME assist in making the course content accessible and engaging for learners?",
 ] as const;
 
-export const AGREEMENT_SCALE = ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] as const;
+export const AGREEMENT_SCALE = [
+  "Strongly Disagree",
+  "Disagree",
+  "Neither Agree nor Disagree",
+  "Agree",
+  "Strongly Agree",
+] as const;
 export const COLLABORATION_SCALE = ["Needs Improvement", "Below Expectations", "Meets Expectations", "Above Expectations", "Exceeds Expectations"] as const;
 export const EXAMPLE_EFFECTIVENESS_SCALE = [
   "Barely Lifted Off the Ground — The examples were included but did not meaningfully add value.",
@@ -106,6 +112,15 @@ export type SurveyContext = {
   vertical: string | null;
   publicationDate: string | null;
   publicationYear: number | null;
+  smeName?: string | null;
+  smeEmail?: string | null;
+  smeClassification?: "internal" | "external" | null;
+  respondentName?: string | null;
+  courseName?: string | null;
+  reviewedSmeName?: string | null;
+  completedOn?: string | null;
+  availableThrough?: string | null;
+  availabilityCode?: string | null;
   assignedSmes: AssignedSme[];
   viewer: { id: string; name: string | null; role: string };
 };
@@ -142,5 +157,5 @@ export function validateInvoiceFile(name: string, declaredMime: string, bytes: U
 }
 
 export function surveyTitle(type: SurveyType) {
-  return type === "course_development_debrief" ? "Course Development Debrief" : "Review of Subject Matter Expert";
+  return type === "course_development_debrief" ? "Lexipol Course Development Debrief" : "ID Review of SME";
 }

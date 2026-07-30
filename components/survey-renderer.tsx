@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   applyContextBindings,
   questionIsVisible,
+  trustedContextValue,
   validateSurveyAnswers,
   type SurveyAnswers,
   type SurveyDefinition,
@@ -88,7 +89,8 @@ export function SurveyRenderer({
             <Question key={question.id} question={question} value={boundAnswers[question.id]}
               onChange={(value) => onChange?.(question.id, value)}
               error={displayedErrors[question.id]} readOnly={readOnly}
-              contextBound={Boolean(question.contextBinding && context[question.contextBinding] != null)}
+              contextBound={Boolean(question.contextBinding
+                && trustedContextValue(question.contextBinding, context) != null)}
               attachments={attachments.filter((attachment) => attachment.question_id === question.id)}
               onUpload={onUpload} onRemove={onRemove} onDownload={onDownload} preview={preview} />)}
         </div>
@@ -171,7 +173,19 @@ function Question({
       {ratingValues(question).map((rating) => <Radio key={rating} name={question.id}
         label={ratingLabel(question, rating)} checked={Number(value) === rating} onChange={() => onChange(rating)} />)}
     </div>
-    <div className="rating-endpoints"><span>{question.scale?.minLabel}</span><span>{question.scale?.maxLabel}</span></div>
+    <div className="rating-endpoints">
+      {(question.scale?.displayOrder === "descending"
+        ? [
+          [question.scale?.maxLabel, question.scale?.maxDescription],
+          [question.scale?.minLabel, question.scale?.minDescription],
+        ]
+        : [
+          [question.scale?.minLabel, question.scale?.minDescription],
+          [question.scale?.maxLabel, question.scale?.maxDescription],
+        ]).map(([endpoint, endpointDescription], index) =>
+        <span key={index}>{endpoint}{endpointDescription
+          ? <small>{endpointDescription}</small> : null}</span>)}
+    </div>
   </fieldset>;
   if (question.type === "rating_matrix") return <fieldset className={`${className} dynamic-matrix-fieldset`}>
     <legend>{label}</legend>{description}
@@ -262,7 +276,11 @@ function Radio({ label, name, checked, onChange }: { label: string; name: string
 
 function ratingValues(question: SurveyQuestion) {
   if (!question.scale) return [];
-  return Array.from({ length: question.scale.max - question.scale.min + 1 }, (_, index) => question.scale!.min + index);
+  const values = Array.from(
+    { length: question.scale.max - question.scale.min + 1 },
+    (_, index) => question.scale!.min + index,
+  );
+  return question.scale.displayOrder === "descending" ? values.reverse() : values;
 }
 
 function ratingLabel(question: SurveyQuestion, rating: number) {

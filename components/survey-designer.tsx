@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { SurveyRenderer } from "@/components/survey-renderer";
 import {
   CONDITION_OPERATORS,
+  CONTEXT_BINDINGS,
   QUESTION_TYPES,
   QUESTION_WIDTHS,
   surveyDefinitionSchema,
@@ -13,6 +14,17 @@ import {
   type SurveyQuestion,
   type SurveyQuestionType,
 } from "@/lib/surveys/definition";
+import { SURVEY_VERTICALS } from "@/lib/surveys/domain";
+
+const trustedSmeEmploymentCondition: SurveyQuestion = {
+  id: "internalEmployee",
+  type: "yes_no",
+  label: "SME is an internal employee (trusted)",
+  helpText: "",
+  required: false,
+  width: "full",
+  validation: {},
+};
 
 export function SurveyDesigner({ templateId, initialDefinition, initialLockVersion }: {
   templateId: string;
@@ -28,8 +40,18 @@ export function SurveyDesigner({ templateId, initialDefinition, initialLockVersi
   const [working, setWorking] = useState(false);
   const [preview, setPreview] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
+  const [previewClassification, setPreviewClassification] = useState<"internal" | "external">("external");
   const [previewAnswers, setPreviewAnswers] = useState<SurveyAnswers>({});
   const dirty = JSON.stringify(definition) !== baseline;
+  const previewContext = useMemo(() => definition.surveyType === "course_development_debrief" ? {
+    smeName: "Preview SME", smeEmail: "preview.sme@example.com",
+    smeClassification: previewClassification, reportingYear: 2026,
+    taskTitle: "Preview course", courseName: "Preview course",
+  } : {
+    respondentName: "Preview Instructional Designer", taskTitle: "Preview course",
+    courseName: "Preview course", reviewedSmeName: "Preview SME",
+    vertical: "P1A", reportingYear: 2026,
+  }, [definition.surveyType, previewClassification]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -116,7 +138,15 @@ export function SurveyDesigner({ templateId, initialDefinition, initialLockVersi
     </section>
 
     <div className="designer-sections">{definition.sections.map((section, sectionIndex) => {
-      const priorQuestions = definition.sections.slice(0, sectionIndex).flatMap((item) => item.questions);
+      const earlierQuestions = definition.sections
+        .slice(0, sectionIndex)
+        .flatMap((item) => item.questions);
+      const priorQuestions = definition.surveyType === "course_development_debrief"
+        ? [
+          trustedSmeEmploymentCondition,
+          ...earlierQuestions.filter((question) => !question.contextBinding),
+        ]
+        : earlierQuestions;
       return <section className="card designer-section" key={section.id}>
         <div className="section-heading"><div><p className="eyebrow">SECTION {sectionIndex + 1}</p>
           <input aria-label={`Section ${sectionIndex + 1} title`} value={section.title} maxLength={200}
@@ -135,7 +165,12 @@ export function SurveyDesigner({ templateId, initialDefinition, initialLockVersi
         <div className="designer-questions">{section.questions.map((question, questionIndex) =>
           <QuestionEditor key={question.id} question={question} questionIndex={questionIndex}
             sectionIndex={sectionIndex} count={section.questions.length}
-            priorQuestions={[...priorQuestions, ...section.questions.slice(0, questionIndex)]}
+            priorQuestions={[
+              ...priorQuestions,
+              ...section.questions.slice(0, questionIndex).filter((candidate) =>
+                definition.surveyType !== "course_development_debrief"
+                || !candidate.contextBinding),
+            ]}
             mutate={mutate} />)}</div>
         <button type="button" className="secondary" onClick={() => mutate((draft) =>
           draft.sections[sectionIndex].questions.push(newQuestion("short_text")))}>Add question</button>
@@ -154,9 +189,16 @@ export function SurveyDesigner({ templateId, initialDefinition, initialLockVersi
         <header><div><p className="eyebrow">SAFE RENDERER PREVIEW</p><h2 id="preview-title">{definition.title}</h2></div>
           <div className="table-actions"><button type="button" className={previewDevice === "desktop" ? "" : "secondary"} onClick={() => setPreviewDevice("desktop")}>Desktop</button>
             <button type="button" className={previewDevice === "mobile" ? "" : "secondary"} onClick={() => setPreviewDevice("mobile")}>Mobile</button>
+            {definition.surveyType === "course_development_debrief" && <label>Preview SME type
+              <select value={previewClassification} onChange={(event) =>
+                setPreviewClassification(event.target.value as "internal" | "external")}>
+                <option value="external">External</option><option value="internal">Internal</option>
+              </select>
+            </label>}
             <button type="button" className="secondary" onClick={() => setPreview(false)}>Close preview</button></div></header>
         <div className={`designer-preview-frame ${previewDevice}`}>
           <SurveyRenderer definition={definition} answers={previewAnswers}
+            context={previewContext}
             onChange={(id, value) => setPreviewAnswers((current) => ({ ...current, [id]: value }))} preview />
         </div>
       </section>
@@ -199,12 +241,15 @@ function QuestionEditor({ question, questionIndex, sectionIndex, count, priorQue
         {QUESTION_WIDTHS.map((width) => <option key={width} value={width}>{width}</option>)}
       </select></label>
       <label className="designer-question-label">Label<input value={question.label} maxLength={1000} onChange={(event) => update((target) => { target.label = event.target.value; })} /></label>
-      <label className="checkbox-row"><input type="checkbox" checked={question.required} onChange={(event) => update((target) => { target.required = event.target.checked; })} />Required</label>
+      <label className="checkbox-row"><input type="checkbox" checked={question.required}
+        disabled={Boolean(question.contextBinding)}
+        onChange={(event) => update((target) => { target.required = event.target.checked; })} />
+        {question.contextBinding ? "Trusted context (read-only)" : "Required"}</label>
       <label className="designer-question-label">Help text<textarea rows={2} maxLength={1000} value={question.helpText} onChange={(event) => update((target) => { target.helpText = event.target.value; })} /></label>
       <label>Trusted context<select value={question.contextBinding ?? ""} onChange={(event) => update((target) => {
-        target.contextBinding = event.target.value ? event.target.value as SurveyQuestion["contextBinding"] : undefined;
-      })}><option value="">None</option><option value="originalDueYear">Original due year</option>
-        <option value="publicationYear">Publication year</option><option value="vertical">Vertical</option></select></label>
+        applyContextBinding(target, event.target.value as SurveyQuestion["contextBinding"] | "");
+      })}><option value="">None</option>{CONTEXT_BINDINGS.map((binding) =>
+        <option key={binding} value={binding}>{contextBindingLabel(binding)}</option>)}</select></label>
     </div>
     {(question.type === "short_text" || question.type === "long_text") && <div className="designer-inline-fields">
       <NumberSetting label="Minimum characters" value={validation.minLength} change={(value) => update((target) => { target.validation.minLength = value; })} />
@@ -235,6 +280,16 @@ function QuestionEditor({ question, questionIndex, sectionIndex, count, priorQue
       })} /></label>
       <label>Maximum endpoint<input value={question.scale?.maxLabel ?? ""} maxLength={200} onChange={(event) => update((target) => {
         target.scale = { ...(target.scale ?? { min: 1, max: 5, minLabel: "", maxLabel: "" }), maxLabel: event.target.value };
+      })} /></label>
+      <label>Display order<select value={question.scale?.displayOrder ?? "ascending"} onChange={(event) => update((target) => {
+        target.scale = { ...(target.scale ?? { min: 1, max: 5, minLabel: "", maxLabel: "" }),
+          displayOrder: event.target.value as "ascending" | "descending" };
+      })}><option value="ascending">Lowest to highest</option><option value="descending">Highest to lowest</option></select></label>
+      <label>Minimum description<input value={question.scale?.minDescription ?? ""} maxLength={1000} onChange={(event) => update((target) => {
+        target.scale = { ...(target.scale ?? { min: 1, max: 5, minLabel: "", maxLabel: "" }), minDescription: event.target.value };
+      })} /></label>
+      <label>Maximum description<input value={question.scale?.maxDescription ?? ""} maxLength={1000} onChange={(event) => update((target) => {
+        target.scale = { ...(target.scale ?? { min: 1, max: 5, minLabel: "", maxLabel: "" }), maxDescription: event.target.value };
       })} /></label>
     </div>}
     {question.type === "file_upload" && <label>Allowed file extensions<input value={(question.validation.allowedExtensions ?? []).join(", ")}
@@ -327,6 +382,45 @@ function parseConditionValue(value: string) {
   if (value === "false") return false;
   if (value.trim() !== "" && Number.isFinite(Number(value))) return Number(value);
   return value;
+}
+
+function applyContextBinding(
+  question: SurveyQuestion,
+  binding: SurveyQuestion["contextBinding"] | "",
+) {
+  question.contextBinding = binding || undefined;
+  if (!binding) return;
+  question.required = false;
+  if (["originalDueYear", "reportingYear", "publicationYear"].includes(binding)) {
+    resetQuestionType(question, "number");
+    question.validation = { min: 1000, max: 9999, step: 1 };
+    return;
+  }
+  if (binding === "vertical" || binding === "smeClassification") {
+    resetQuestionType(question, "single_choice");
+    question.options = binding === "vertical"
+      ? SURVEY_VERTICALS.map((label) => ({ id: label.replaceAll(" ", "_"), label }))
+      : [{ id: "internal", label: "Internal" }, { id: "external", label: "External" }];
+    return;
+  }
+  resetQuestionType(question, "short_text");
+  question.validation = { maxLength: binding === "smeEmail" ? 320 : binding === "courseName" ? 1_000 : 200 };
+}
+
+function contextBindingLabel(binding: typeof CONTEXT_BINDINGS[number]) {
+  const labels: Record<typeof CONTEXT_BINDINGS[number], string> = {
+    smeName: "SME name",
+    smeEmail: "SME email",
+    smeClassification: "SME classification",
+    respondentName: "Respondent / ID name",
+    courseName: "Course name",
+    reviewedSmeName: "Reviewed SME name",
+    originalDueYear: "Original due year",
+    reportingYear: "Reporting year",
+    publicationYear: "Publication year",
+    vertical: "Vertical",
+  };
+  return labels[binding];
 }
 
 function buttonLabel(key: string) {

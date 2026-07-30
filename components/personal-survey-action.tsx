@@ -3,8 +3,15 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function PersonalSurveyAction({ taskId, reviewedWrikeUserId, label, returnTo }: {
+export function PersonalSurveyAction({
+  taskId,
+  reviewedSmeIdentityId,
+  reviewedWrikeUserId,
+  label,
+  returnTo,
+}: {
   taskId: string;
+  reviewedSmeIdentityId: string | null;
   reviewedWrikeUserId: string | null;
   label: string;
   returnTo: string;
@@ -18,7 +25,11 @@ export function PersonalSurveyAction({ taskId, reviewedWrikeUserId, label, retur
     try {
       const response = await fetch("/api/surveys", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ taskId, reviewedWrikeUserId }),
+        body: JSON.stringify({
+          taskId,
+          reviewedSmeIdentityId,
+          reviewedWrikeUserId,
+        }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "Survey is unavailable.");

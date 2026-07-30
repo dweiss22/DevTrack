@@ -165,6 +165,13 @@ function conditionalRequirement(question: SurveyQuestion) {
 
 function answerFields(definition: SurveyDefinition): CanonicalCsvField[] {
   return orderedQuestions(definition).flatMap((question): CanonicalCsvField[] => {
+    if ([
+      "smeName",
+      "smeEmail",
+      "respondentName",
+      "courseName",
+      "reviewedSmeName",
+    ].includes(question.contextBinding ?? "")) return [];
     if (question.type === "file_upload") return [];
     if (question.type === "rating_matrix") {
       return (question.rows ?? []).map((row) => ({

@@ -2,7 +2,6 @@ import { z } from "zod";
 import {
   AGREEMENT_SCALE,
   COLLABORATION_SCALE,
-  EXAMPLE_EFFECTIVENESS_SCALE,
   ID_REVIEW_STATEMENTS,
   SME_DEBRIEF_STATEMENTS,
   SURVEY_TYPES,
@@ -26,7 +25,18 @@ export const QUESTION_TYPES = [
 export type SurveyQuestionType = typeof QUESTION_TYPES[number];
 
 export const QUESTION_WIDTHS = ["full", "half", "third"] as const;
-export const CONTEXT_BINDINGS = ["originalDueYear", "reportingYear", "publicationYear", "vertical"] as const;
+export const CONTEXT_BINDINGS = [
+  "smeName",
+  "smeEmail",
+  "smeClassification",
+  "respondentName",
+  "courseName",
+  "reviewedSmeName",
+  "originalDueYear",
+  "reportingYear",
+  "publicationYear",
+  "vertical",
+] as const;
 export const CONDITION_OPERATORS = [
   "equals",
   "not_equals",
@@ -84,6 +94,9 @@ const questionSchema = z.object({
     minLabel: safeText(200),
     maxLabel: safeText(200),
     labels: z.array(authoredText(200)).max(11).optional(),
+    displayOrder: z.enum(["ascending", "descending"]).optional(),
+    minDescription: safeText(1_000).optional(),
+    maxDescription: safeText(1_000).optional(),
   }).optional(),
   rows: z.array(optionSchema).max(50).optional(),
 });
@@ -114,6 +127,7 @@ export const surveyDefinitionSchema = z.object({
   const seen = new Set<string>();
   const trustedSmeContextIds = new Set([
     "internalEmployee", "originalDueYear", "reportingYear", "smeClassification",
+    "smeName", "smeEmail",
   ]);
   const priorQuestions = new Map<string, SurveyQuestionType>(
     definition.surveyType === "course_development_debrief"
@@ -129,7 +143,7 @@ export const surveyDefinitionSchema = z.object({
     for (const question of section.questions) {
       questionCount += 1;
       if (definition.surveyType === "course_development_debrief"
-        && trustedSmeContextIds.has(question.id)) {
+        && trustedSmeContextIds.has(question.id) && !question.contextBinding) {
         context.addIssue({
           code: "custom",
           message: "SME type and Course Reporting Year are trusted context and cannot be editable questions.",
@@ -175,10 +189,23 @@ export const surveyDefinitionSchema = z.object({
       if (question.contextBinding === "vertical" && question.type !== "single_choice") {
         context.addIssue({ code: "custom", message: "Vertical bindings require a single-choice question." });
       }
+      if (question.contextBinding && question.required) {
+        context.addIssue({
+          code: "custom",
+          message: "Trusted context fields are read-only and cannot be required respondent answers.",
+        });
+      }
+      if (question.contextBinding === "smeClassification" && question.type !== "single_choice") {
+        context.addIssue({ code: "custom", message: "SME classification bindings require a single-choice question." });
+      }
       if ((question.contextBinding === "originalDueYear" || question.contextBinding === "reportingYear"
           || question.contextBinding === "publicationYear")
         && question.type !== "number") {
         context.addIssue({ code: "custom", message: "Year bindings require a number question." });
+      }
+      if (["smeName", "smeEmail", "respondentName", "courseName", "reviewedSmeName"].includes(question.contextBinding ?? "")
+        && question.type !== "short_text") {
+        context.addIssue({ code: "custom", message: "Name, email, and course bindings require a short-text question." });
       }
       if (question.validation.maxLength != null && question.validation.minLength != null
         && question.validation.maxLength < question.validation.minLength) {
@@ -207,16 +234,32 @@ const commonButtons = {
   return: "Return to dashboard",
 };
 
-const matrixRows = (statements: readonly string[]) => statements.map((label, index) => ({
-  id: `rating${String(index + 1).padStart(2, "0")}`,
-  label,
-}));
+const ratingQuestion = (
+  id: string,
+  label: string,
+  helpText: string,
+  scale: SurveyQuestion["scale"],
+): SurveyQuestion => ({
+  id, type: "rating_scale", label, helpText, required: true, width: "full", validation: {}, scale,
+});
+
+const agreementScale: NonNullable<SurveyQuestion["scale"]> = {
+  min: 1, max: 5, minLabel: AGREEMENT_SCALE[0], maxLabel: AGREEMENT_SCALE[4],
+  labels: [...AGREEMENT_SCALE], displayOrder: "descending",
+};
+
+const collaborationScale: NonNullable<SurveyQuestion["scale"]> = {
+  min: 1, max: 5, minLabel: COLLABORATION_SCALE[0], maxLabel: COLLABORATION_SCALE[4],
+  labels: [...COLLABORATION_SCALE], displayOrder: "ascending",
+  minDescription: "It really wasn’t up to par.",
+  maxDescription: "Absolutely knocked it out of the park—beyond what we hoped for.",
+};
 
 export const INITIAL_SURVEY_DEFINITIONS: Record<SurveyType, SurveyDefinition> = {
   course_development_debrief: {
     schemaVersion: 1,
     surveyType: "course_development_debrief",
-    title: "Course Development Debrief",
+    title: "Lexipol Course Development Debrief",
     introduction: "Share your experience developing this course with Lexipol.",
     instructions: "Complete every required field. You may save a draft and return before submitting.",
     completionMessage: "Survey submitted successfully. Your response is locked and its history has been preserved.",
@@ -224,85 +267,71 @@ export const INITIAL_SURVEY_DEFINITIONS: Record<SurveyType, SurveyDefinition> = 
     buttons: commonButtons,
     sections: [
       {
-        id: "project-details",
-        title: "Project details",
-        description: "",
+        id: "project-details", title: "Course and SME details",
+        description: "These values come from your DevTrack profile and the associated Wrike course.",
         pageBreakBefore: false,
         questions: [
+          { id: "smeName", type: "short_text", label: "SME Name", helpText: "", required: false, width: "half", contextBinding: "smeName", validation: { maxLength: 200 } },
+          { id: "smeEmail", type: "short_text", label: "Email", helpText: "", required: false, width: "half", contextBinding: "smeEmail", validation: { maxLength: 320 } },
           {
-            id: "originalDueYear", type: "number", label: "Course’s Original Due Year", helpText: "",
-            required: true, width: "half", contextBinding: "originalDueYear",
-            validation: { min: 1000, max: 9999, step: 1 },
+            id: "smeClassification", type: "single_choice", label: "Internal/External", helpText: "",
+            required: false, width: "half", contextBinding: "smeClassification", validation: {},
+            options: [{ id: "internal", label: "Internal" }, { id: "external", label: "External" }],
           },
-          {
-            id: "internalEmployee", type: "yes_no", label: "Are you an internal Lexipol employee?",
-            helpText: "", required: true, width: "half", validation: {},
-          },
-        ].filter((question) => !["originalDueYear", "internalEmployee"].includes(question.id)) as SurveyDefinition["sections"][number]["questions"],
+          { id: "reportingYear", type: "number", label: "Course Reporting Year", helpText: "", required: false, width: "half", contextBinding: "reportingYear", validation: { min: 1000, max: 9999, step: 1 } },
+        ],
       },
       {
-        id: "billing",
-        title: "Billable information",
-        description: "External SMEs must provide billing details and an invoice.",
-        pageBreakBefore: false,
+        id: "billing", title: "Billable information",
+        description: "External SMEs must provide billing details and an invoice.", pageBreakBefore: false,
         questions: [
           {
-            id: "billableHours", type: "number", label: "Billable Hours", helpText: "", required: true,
-            width: "half", validation: { min: 0, max: 99_999_999, step: 0.01 },
+            id: "billableHours", type: "number", label: "Billable Hours",
+            helpText: "Enter the number of hours billed to Lexipol on your invoice for this work.",
+            required: true, width: "half", validation: { min: 0, max: 99_999_999, step: 0.01 },
             visibility: { match: "all", rules: [{ questionId: "internalEmployee", operator: "equals", value: false }] },
           },
           {
-            id: "amountBilled", type: "currency", label: "Amount Billed (USD)", helpText: "", required: true,
-            width: "half", validation: { min: 0, max: 99_999_999, step: 0.01 },
+            id: "amountBilled", type: "currency", label: "Total Amount Billed",
+            helpText: "Enter the total dollar amount billed to Lexipol on your invoice for this work.",
+            required: true, width: "half", validation: { min: 0, max: 99_999_999, step: 0.01 },
             visibility: { match: "all", rules: [{ questionId: "internalEmployee", operator: "equals", value: false }] },
           },
           {
-            id: "invoice", type: "file_upload", label: "Invoice", helpText: "", required: true,
-            width: "full", validation: {
-              maxSizeBytes: 10 * 1024 * 1024,
-              allowedExtensions: ["pdf", "doc", "docx", "xls", "xlsx", "png", "jpg", "jpeg"],
-            },
+            id: "invoice", type: "file_upload", label: "Invoice", helpText: "", required: true, width: "full",
+            validation: { maxSizeBytes: 10 * 1024 * 1024, allowedExtensions: ["pdf", "doc", "docx", "xls", "xlsx", "png", "jpg", "jpeg"] },
             visibility: { match: "all", rules: [{ questionId: "internalEmployee", operator: "equals", value: false }] },
           },
         ],
       },
       {
-        id: "dates",
-        title: "Dates",
-        description: "",
-        pageBreakBefore: false,
+        id: "dates", title: "Dates", description: "", pageBreakBefore: false,
         questions: [
-          {
-            id: "workStartedOn", type: "date", label: "When did you START working on this project?",
-            helpText: "", required: true, width: "half", validation: {},
-          },
-          {
-            id: "workFinishedOn", type: "date", label: "When did you FINISH working on this project?",
-            helpText: "", required: true, width: "half", validation: {},
-          },
+          { id: "workStartedOn", type: "date", label: "Project Start", helpText: "Enter the date you started working on this project.", required: true, width: "half", validation: {} },
+          { id: "workFinishedOn", type: "date", label: "Project End", helpText: "Enter the date you submitted your final lesson plan to the Instructional Designer.", required: true, width: "half", validation: {} },
         ],
       },
       {
-        id: "ratings",
-        title: "Collaboration ratings",
-        description: "",
-        pageBreakBefore: false,
-        questions: [{
-          id: "collaborationRatings", type: "rating_matrix", label: "Rate each statement",
-          helpText: "", required: true, width: "full", validation: {},
-          rows: matrixRows(SME_DEBRIEF_STATEMENTS),
-          scale: { min: 1, max: 5, minLabel: AGREEMENT_SCALE[0], maxLabel: AGREEMENT_SCALE[4], labels: [...AGREEMENT_SCALE] },
-        }],
+        id: "ratings", title: "Collaboration ratings", description: "", pageBreakBefore: false,
+        questions: [
+          ratingQuestion("rating01", "Overall Experience with Lexipol", SME_DEBRIEF_STATEMENTS[0], agreementScale),
+          ratingQuestion("rating02", "Clarity of Goals and Objectives", SME_DEBRIEF_STATEMENTS[1], agreementScale),
+          ratingQuestion("rating03", "Staff Responsiveness", SME_DEBRIEF_STATEMENTS[2], agreementScale),
+          ratingQuestion("rating04", "Adequacy of Tools and Resources", SME_DEBRIEF_STATEMENTS[3], agreementScale),
+          ratingQuestion("rating05", "Training and Support Provided", SME_DEBRIEF_STATEMENTS[4], agreementScale),
+          ratingQuestion("rating06", "Use of My Expertise", SME_DEBRIEF_STATEMENTS[5], agreementScale),
+          ratingQuestion("rating07", "Incorporation of My Feedback", SME_DEBRIEF_STATEMENTS[6], agreementScale),
+          ratingQuestion("rating08", "Autonomy in Course Design", SME_DEBRIEF_STATEMENTS[7], agreementScale),
+          ratingQuestion("rating09", "Feeling Valued as an SME", SME_DEBRIEF_STATEMENTS[8], agreementScale),
+          ratingQuestion("rating10", "Likelihood to Recommend Lexipol", SME_DEBRIEF_STATEMENTS[9], agreementScale),
+        ],
       },
       {
-        id: "comments-section",
-        title: "Additional comments",
-        description: "",
-        pageBreakBefore: false,
+        id: "comments-section", title: "Additional comments", description: "", pageBreakBefore: false,
         questions: [{
-          id: "comments", type: "long_text",
-          label: "Please provide any additional comments or suggestions for improving the course development process at Lexipol.",
-          helpText: "", required: false, width: "full", validation: { maxLength: 5_000 },
+          id: "comments", type: "long_text", label: "Additional Feedback or Suggestions",
+          helpText: "Please provide any additional comments or suggestions for improving the course development process at Lexipol.",
+          required: false, width: "full", validation: { maxLength: 5_000 },
         }],
       },
     ],
@@ -310,7 +339,7 @@ export const INITIAL_SURVEY_DEFINITIONS: Record<SurveyType, SurveyDefinition> = 
   id_sme_review: {
     schemaVersion: 1,
     surveyType: "id_sme_review",
-    title: "Review of Subject Matter Expert",
+    title: "ID Review of SME",
     introduction: "It’s time to share your insights on your recent work with the SME assigned to this project.",
     instructions: "Complete every required field. You may save a draft and return before submitting.",
     completionMessage: "Review submitted successfully. Your response is locked and its history has been preserved.",
@@ -318,78 +347,64 @@ export const INITIAL_SURVEY_DEFINITIONS: Record<SurveyType, SurveyDefinition> = 
     buttons: commonButtons,
     sections: [
       {
-        id: "publication-context",
-        title: "Publication context",
-        description: "",
+        id: "project-context", title: "Course and assignment details",
+        description: "These values come from your DevTrack profile and the associated Wrike course.",
         pageBreakBefore: false,
         questions: [
+          { id: "respondentName", type: "short_text", label: "Instructional Designer’s Name", helpText: "", required: false, width: "half", contextBinding: "respondentName", validation: { maxLength: 200 } },
+          { id: "courseName", type: "short_text", label: "Course Name", helpText: "", required: false, width: "half", contextBinding: "courseName", validation: { maxLength: 1_000 } },
+          { id: "reviewedSmeName", type: "short_text", label: "Project SME", helpText: "", required: false, width: "half", contextBinding: "reviewedSmeName", validation: { maxLength: 200 } },
           {
-            id: "publicationYear", type: "number", label: "Publication Year", helpText: "", required: true,
-            width: "half", contextBinding: "publicationYear", validation: { min: 1000, max: 9999, step: 1 },
-          },
-          {
-            id: "vertical", type: "single_choice", label: "Vertical", helpText: "", required: true,
-            width: "half", contextBinding: "vertical", validation: {},
+            id: "vertical", type: "single_choice", label: "Vertical", helpText: "", required: false, width: "half",
+            contextBinding: "vertical", validation: {},
             options: SURVEY_VERTICALS.map((label) => ({ id: label.replaceAll(" ", "_"), label })),
           },
+          { id: "reportingYear", type: "number", label: "Reporting Year", helpText: "", required: false, width: "half", contextBinding: "reportingYear", validation: { min: 1000, max: 9999, step: 1 } },
         ],
       },
       {
-        id: "ratings",
-        title: "Collaboration ratings",
-        description: "Use the scale to evaluate different aspects of the collaboration.",
-        pageBreakBefore: false,
-        questions: [{
-          id: "collaborationRatings", type: "rating_matrix", label: "Rate each statement",
-          helpText: "", required: true, width: "full", validation: {},
-          rows: matrixRows(ID_REVIEW_STATEMENTS),
-          scale: { min: 1, max: 5, minLabel: COLLABORATION_SCALE[0], maxLabel: COLLABORATION_SCALE[4], labels: [...COLLABORATION_SCALE] },
-        }],
-      },
-      {
-        id: "examples",
-        title: "Real-world examples",
-        description: "",
-        pageBreakBefore: false,
+        id: "ratings", title: "Collaboration ratings",
+        description: "Use the scale to evaluate different aspects of the collaboration.", pageBreakBefore: false,
         questions: [
-          {
-            id: "providedRealWorldExamples", type: "yes_no",
-            label: "Did the SME provide sufficient real-world examples and/or case studies for inclusion in the course?",
-            helpText: "", required: true, width: "full", validation: {},
-          },
-          {
-            id: "realWorldExamplesEffectiveness", type: "rating_scale",
-            label: "Rate the effectiveness of the real-world examples and case studies provided by the SME.",
-            helpText: "", required: true, width: "full", validation: {},
-            scale: {
-              min: 1, max: 5, minLabel: EXAMPLE_EFFECTIVENESS_SCALE[0],
-              maxLabel: EXAMPLE_EFFECTIVENESS_SCALE[4], labels: [...EXAMPLE_EFFECTIVENESS_SCALE],
-            },
-            visibility: { match: "all", rules: [{ questionId: "providedRealWorldExamples", operator: "equals", value: true }] },
-          },
+          ratingQuestion("rating01", "Overall Experience", ID_REVIEW_STATEMENTS[0], collaborationScale),
+          ratingQuestion("rating02", "SME’s Knowledge and Expertise", ID_REVIEW_STATEMENTS[1], collaborationScale),
+          ratingQuestion("rating03", "Responsiveness", ID_REVIEW_STATEMENTS[2], collaborationScale),
+          ratingQuestion("rating04", "Instructional Design Knowledge", ID_REVIEW_STATEMENTS[3], collaborationScale),
+          ratingQuestion("rating05", "Contribution to Development", ID_REVIEW_STATEMENTS[4], collaborationScale),
+          ratingQuestion("rating06", "Openness to Suggestions and Feedback", ID_REVIEW_STATEMENTS[5], collaborationScale),
+          ratingQuestion("rating07", "Deadlines and Schedule", ID_REVIEW_STATEMENTS[6], collaborationScale),
+          ratingQuestion("rating08", "Overall Quality of the End Product", ID_REVIEW_STATEMENTS[7], collaborationScale),
+          ratingQuestion("rating09", "SME Assistance in Learner Interactions", ID_REVIEW_STATEMENTS[8], collaborationScale),
         ],
       },
       {
-        id: "recommendation",
-        title: "Recommendation",
-        description: "",
-        pageBreakBefore: false,
+        id: "examples", title: "Real-world examples", description: "", pageBreakBefore: false,
         questions: [{
-          id: "recommendationScore", type: "rating_scale",
-          label: "Considering your experience, how likely are you to recommend working with this SME to other team members or instructional designers?",
-          helpText: "", required: true, width: "full", validation: {},
-          scale: { min: 0, max: 10, minLabel: "Not at all likely", maxLabel: "Extremely likely" },
+          id: "providedRealWorldExamples", type: "yes_no", label: "Real-World Examples",
+          helpText: "Did the SME provide sufficient real-world examples and/or case studies for inclusion in the course?",
+          required: true, width: "full", validation: {},
         }],
       },
       {
-        id: "comments-section",
-        title: "Additional comments",
-        description: "",
-        pageBreakBefore: false,
+        id: "recommendation", title: "Recommendation", description: "", pageBreakBefore: false,
         questions: [{
-          id: "comments", type: "long_text",
-          label: "Please provide any additional comments or suggestions for improving the process of working with SMEs in course development.",
-          helpText: "", required: false, width: "full", validation: { maxLength: 5_000 },
+          id: "recommendationScore", type: "rating_scale", label: "SME Promoter Score",
+          helpText: "Considering your experience, how likely are you to recommend working with this SME to other team members or instructional designers?",
+          required: true, width: "full", validation: {},
+          scale: {
+            min: 0,
+            max: 10,
+            minLabel: "0 — Not at all likely",
+            maxLabel: "10 — Extremely likely",
+          },
+        }],
+      },
+      {
+        id: "comments-section", title: "Additional comments", description: "", pageBreakBefore: false,
+        questions: [{
+          id: "comments", type: "long_text", label: "Additional Comments",
+          helpText: "Please provide any additional comments or suggestions for improving the process of working with SMEs in course development.",
+          required: false, width: "full", validation: { maxLength: 5_000 },
         }],
       },
     ],
@@ -432,16 +447,44 @@ export function applyContextBindings(definition: SurveyDefinition, answers: Surv
     if (context.smeClassification === "internal") next.internalEmployee = true;
     else if (context.smeClassification === "external") next.internalEmployee = false;
     else delete next.internalEmployee;
-    delete next.originalDueYear;
-    delete next.reportingYear;
-    delete next.smeClassification;
   }
   for (const question of orderedQuestions(definition)) {
     if (!question.contextBinding) continue;
-    const value = context[question.contextBinding];
+    const value = trustedContextValue(question.contextBinding, context);
     if (value !== undefined && value !== null && value !== "") next[question.id] = value;
+    else delete next[question.id];
   }
   return next;
+}
+
+function nestedValue(context: Record<string, unknown>, key: string, field = "name") {
+  const value = context[key];
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)[field] : undefined;
+}
+
+export function trustedContextValue(
+  binding: NonNullable<SurveyQuestion["contextBinding"]>,
+  context: Record<string, unknown>,
+) {
+  switch (binding) {
+    case "smeName": return context.smeName ?? nestedValue(context, "subject");
+    case "smeEmail": return context.smeEmail ?? nestedValue(context, "subject", "email") ?? nestedValue(context, "viewer", "email");
+    case "respondentName": return context.respondentName ?? nestedValue(context, "viewer");
+    case "courseName": return context.courseName ?? context.taskTitle;
+    case "reviewedSmeName":
+      return context.reviewedSmeName ?? nestedValue(context, "reviewedSme") ?? nestedValue(context, "subject");
+    default: return context[binding];
+  }
+}
+
+export function normalizeCurrency(value: unknown) {
+  const raw = typeof value === "number"
+    ? (Number.isFinite(value) ? value.toFixed(2) : "")
+    : typeof value === "string" ? value.trim() : "";
+  if (!/^\d+(?:\.\d{1,2})?$/.test(raw)) return null;
+  const [whole, fraction = ""] = raw.split(".");
+  return `${whole.replace(/^0+(?=\d)/, "") || "0"}.${fraction.padEnd(2, "0")}`;
 }
 
 export function validateSurveyAnswers(
@@ -467,7 +510,16 @@ export function validateSurveyAnswers(
       if (typeof value !== "string") fail("Enter text.");
       else if (question.validation.minLength != null && value.length < question.validation.minLength) fail(`Enter at least ${question.validation.minLength} characters.`);
       else if (value.length > (question.validation.maxLength ?? 10_000)) fail(`Enter no more than ${question.validation.maxLength ?? 10_000} characters.`);
-    } else if (question.type === "number" || question.type === "currency") {
+    } else if (question.type === "currency") {
+      const currency = normalizeCurrency(value);
+      if (!currency) fail("Enter a valid currency amount with no more than two decimal places.");
+      else {
+        const numeric = Number(currency);
+        if (question.validation.min != null && numeric < question.validation.min) fail(`Enter ${question.validation.min} or more.`);
+        else if (question.validation.max != null && numeric > question.validation.max) fail(`Enter ${question.validation.max} or less.`);
+        else answers[question.id] = currency;
+      }
+    } else if (question.type === "number") {
       const numeric = typeof value === "number" ? value : Number(value);
       if (!Number.isFinite(numeric)) fail("Enter a valid number.");
       else if (question.validation.min != null && numeric < question.validation.min) fail(`Enter ${question.validation.min} or more.`);
@@ -516,14 +568,18 @@ export function validateSurveyAnswers(
 export function responseRecordToAnswers(type: SurveyType, response: Record<string, unknown>): SurveyAnswers {
   const common: SurveyAnswers = { comments: response.comments ?? "" };
   const matrix: Record<string, unknown> = {};
+  const individual: Record<string, unknown> = {};
   const count = type === "course_development_debrief" ? 10 : 9;
   for (let index = 1; index <= count; index++) {
     const padded = String(index).padStart(2, "0");
-    matrix[`rating${padded}`] = response[`rating_${padded}`] ?? "";
+    const value = response[`rating_${padded}`] ?? "";
+    matrix[`rating${padded}`] = value;
+    individual[`rating${padded}`] = value;
   }
   if (type === "course_development_debrief") {
     return {
       ...common,
+      ...individual,
       internalEmployee: response.sme_classification === "internal"
         ? true : response.sme_classification === "external" ? false : response.internal_employee ?? "",
       billableHours: response.billable_hours ?? "",
@@ -535,6 +591,8 @@ export function responseRecordToAnswers(type: SurveyType, response: Record<strin
   }
   return {
     ...common,
+    ...individual,
+    reportingYear: response.reporting_year ?? "",
     publicationYear: response.publication_year ?? "",
     vertical: response.vertical ?? "",
     collaborationRatings: matrix,

@@ -22,10 +22,14 @@ describe("course-development survey contracts", () => {
   it("contains every exact matrix statement and scale", () => {
     expect(SME_DEBRIEF_STATEMENTS).toHaveLength(10);
     expect(ID_REVIEW_STATEMENTS).toHaveLength(9);
-    expect(AGREEMENT_SCALE).toEqual(["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"]);
+    expect(AGREEMENT_SCALE).toEqual([
+      "Strongly Disagree", "Disagree", "Neither Agree nor Disagree", "Agree", "Strongly Agree",
+    ]);
     expect(COLLABORATION_SCALE).toEqual(["Needs Improvement", "Below Expectations", "Meets Expectations", "Above Expectations", "Exceeds Expectations"]);
     expect(EXAMPLE_EFFECTIVENESS_SCALE).toHaveLength(5);
-    expect(SME_DEBRIEF_STATEMENTS[9]).toContain("recommend my peers");
+    expect(SME_DEBRIEF_STATEMENTS[9]).toBe(
+      "I would recommend that my peers work with Lexipol for future SME opportunities.",
+    );
     expect(ID_REVIEW_STATEMENTS[8]).toContain("accessible and engaging");
   });
 
@@ -61,10 +65,9 @@ describe("course-development survey contracts", () => {
     expect(surveyDefinitionSchema.safeParse(INITIAL_SURVEY_DEFINITIONS.id_sme_review).success).toBe(true);
     const definition = INITIAL_SURVEY_DEFINITIONS.course_development_debrief;
     const internal = validateSurveyAnswers(definition, {
-      originalDueYear: 2026, internalEmployee: true, workStartedOn: "2026-01-01",
+      internalEmployee: true, workStartedOn: "2026-01-01",
       workFinishedOn: "2026-01-02",
-      collaborationRatings: Object.fromEntries(Array.from({ length: 10 }, (_, index) =>
-        [`rating${String(index + 1).padStart(2, "0")}`, 5])),
+      ...completeRatings(10),
     });
     expect(internal.errors.invoice).toBeUndefined();
     const external = validateSurveyAnswers(definition, { ...internal.answers, internalEmployee: false });

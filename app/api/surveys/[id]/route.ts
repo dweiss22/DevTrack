@@ -112,6 +112,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       fieldErrors: validation.errors,
     }, { status: 400 });
   }
+  const draftErrors = Object.fromEntries(
+    Object.entries(validation.errors).filter(([, message]) =>
+      message !== "This field is required." && message !== "A file is required."),
+  );
+  if (!parsed.data.submit && Object.keys(draftErrors).length) {
+    return NextResponse.json({
+      error: "Review the highlighted survey fields before saving.",
+      fieldErrors: draftErrors,
+    }, { status: 400 });
+  }
   // Persist only visible, schema-valid values even for drafts so changing a
   // conditional answer cannot leave hidden data behind.
   const nextAnswers = validation.answers;

@@ -1,5 +1,5 @@
 begin;
-select plan(62);
+select plan(76);
 select has_table('public','survey_submissions','survey submissions exist');
 select has_table('public','course_development_debrief_responses','debrief responses exist');
 select has_table('public','id_sme_review_responses','ID review responses exist');
@@ -50,6 +50,9 @@ select has_function('public','survey_admin_templates',array[]::text[],'admin tem
 select has_function('public','survey_personal_requirements',array[]::text[],'personal assignment list exists');
 select has_function('public','survey_personal_create_or_resume',array['uuid','uuid'],'assignment-bound personal start exists');
 select has_function('public','survey_save_versioned',array['uuid','jsonb','boolean'],'version-aware save exists');
+select has_column('public','id_sme_review_responses','reporting_year','ID compatibility rows retain Reporting Year');
+select has_function('public','survey_sme_availability_at',array['uuid','timestamp with time zone'],'deterministic SME availability helper exists');
+select has_function('public','survey_sme_availability',array['uuid'],'current-time SME availability wrapper exists');
 select has_table('public','survey_historical_import_batches','historical survey import batches exist');
 select has_table('public','survey_historical_import_upload_attempts','historical upload attempts exist');
 select has_table('public','survey_historical_import_column_mappings','historical column mappings exist');
@@ -62,5 +65,82 @@ select has_column('public','survey_templates','is_import_only','survey templates
 select has_column('public','survey_template_versions','version_origin','survey versions retain their origin');
 select has_function('public','integrate_historical_survey_import_batch',array['uuid'],'historical batch integration RPC exists');
 select has_function('public','rollback_historical_survey_import_batch',array['uuid'],'protected historical rollback RPC exists');
+
+insert into public.organizations(id,name,timezone) values
+  ('90000000-0000-4000-8000-000000000001','Survey boundary Chicago','America/Chicago'),
+  ('90000000-0000-4000-8000-000000000002','Survey boundary Pacific','America/Los_Angeles'),
+  ('90000000-0000-4000-8000-000000000003','Survey boundary UTC','UTC');
+insert into public.wrike_workflow_statuses(
+  organization_id,wrike_id,workflow_id,title,dashboard_classification
+) values
+  ('90000000-0000-4000-8000-000000000001','completed','workflow','Completed','completed'),
+  ('90000000-0000-4000-8000-000000000001','active','workflow','Completed','active'),
+  ('90000000-0000-4000-8000-000000000002','completed','workflow','Completed','completed'),
+  ('90000000-0000-4000-8000-000000000003','completed','workflow','Completed','completed');
+insert into public.wrike_tasks(
+  id,organization_id,wrike_id,title,status,custom_status_id,completed_at
+) values
+  ('91000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','JAN31','January month end','Completed','completed','2024-01-31T18:00:00Z'),
+  ('91000000-0000-4000-8000-000000000002','90000000-0000-4000-8000-000000000001','DST','DST boundary','Completed','completed','2024-03-10T18:00:00Z'),
+  ('91000000-0000-4000-8000-000000000003','90000000-0000-4000-8000-000000000002','AUG31','August month end','Completed','completed','2025-08-31T19:00:00Z'),
+  ('91000000-0000-4000-8000-000000000004','90000000-0000-4000-8000-000000000003','LEAP','Leap day','Completed','completed','2024-02-29T12:00:00Z'),
+  ('91000000-0000-4000-8000-000000000005','90000000-0000-4000-8000-000000000001','ACTIVE','Status title is not authoritative','Completed','active','2024-01-31T18:00:00Z'),
+  ('91000000-0000-4000-8000-000000000006','90000000-0000-4000-8000-000000000001','NO_DATE','Missing completion date','Completed','completed',null);
+
+select is(
+  public.survey_sme_availability_at(
+    '91000000-0000-4000-8000-000000000001','2024-07-31T12:00:00Z'
+  )->>'completedOn','2024-01-31','completion is converted to the organization calendar date'
+);
+select is(
+  public.survey_sme_availability_at(
+    '91000000-0000-4000-8000-000000000001','2024-07-31T12:00:00Z'
+  )->>'availableThrough','2024-07-31','January 31 uses calendar-month arithmetic'
+);
+select is(
+  (public.survey_sme_availability_at(
+    '91000000-0000-4000-8000-000000000001','2024-08-01T04:59:59.999Z'
+  )->>'available')::boolean,true,'SME availability includes the final local millisecond'
+);
+select is(
+  public.survey_sme_availability_at(
+    '91000000-0000-4000-8000-000000000001','2024-08-01T05:00:00Z'
+  )->>'code','expired','SME availability expires at the next local midnight'
+);
+select is(
+  public.survey_sme_availability_at(
+    '91000000-0000-4000-8000-000000000001','2024-08-01T05:00:01Z'
+  )->>'code','expired','SME availability stays expired after cutoff'
+);
+select is(
+  public.survey_sme_availability_at(
+    '91000000-0000-4000-8000-000000000003','2026-02-01T00:00:00Z'
+  )->>'availableThrough','2026-02-28','August 31 clamps to the last February date'
+);
+select is(
+  public.survey_sme_availability_at(
+    '91000000-0000-4000-8000-000000000004','2024-08-01T00:00:00Z'
+  )->>'availableThrough','2024-08-29','leap-day completion retains calendar-month semantics'
+);
+select is(
+  public.survey_sme_availability_at(
+    '91000000-0000-4000-8000-000000000005','2024-02-01T00:00:00Z'
+  )->>'code','not_completed','a completed-looking title cannot replace authoritative classification'
+);
+select is(
+  public.survey_sme_availability_at(
+    '91000000-0000-4000-8000-000000000006','2024-02-01T00:00:00Z'
+  )->>'code','completion_date_missing','completed classification also requires completed_at'
+);
+select is(
+  (public.survey_sme_availability_at(
+    '91000000-0000-4000-8000-000000000002','2024-09-11T04:59:59.999Z'
+  )->>'available')::boolean,true,'DST-season cutoff uses the organization timezone'
+);
+select is(
+  public.survey_sme_availability_at(
+    '91000000-0000-4000-8000-000000000002','2024-09-11T05:00:00Z'
+  )->>'code','expired','DST-season cutoff changes at local midnight'
+);
 select * from finish();
 rollback;

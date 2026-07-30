@@ -181,7 +181,11 @@ The migration and deployment do not run a Wrike import or Vertical repair automa
 
 ## Course-development surveys
 
-DevTrack includes route-backed SME debrief and internal ID-review workflows with trusted Wrike context, drafts, locked submissions, revisions, audit history, and private invoice storage. See [`docs/course-development-surveys.md`](docs/course-development-surveys.md) for authorization, migration, Storage, retention, and deployment details.
+DevTrack includes versioned, administrator-built SME debrief and ID-review
+workflows with trusted Wrike context, completion-based SME availability, drafts,
+locked submissions, revisions, audit history, and private invoice storage. See
+[`docs/course-development-surveys.md`](docs/course-development-surveys.md) for
+authorization, migration order, Storage, retention, and deployment details.
 
 ## Scheduling and deployment
 

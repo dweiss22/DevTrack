@@ -314,6 +314,10 @@ function ContextHeader({ context }: { context: Record<string, unknown> }) {
       )}</dd></div> : null}
     {context.reportingYear != null || context.smeClassification != null
       ? <div><dt>Course Reporting Year</dt><dd>{String(context.reportingYear ?? "Unavailable")}</dd></div> : null}
+    {context.completedOn != null
+      ? <div><dt>Completed</dt><dd>{String(context.completedOn)}</dd></div> : null}
+    {context.availableThrough != null
+      ? <div><dt>SME survey available through</dt><dd>{String(context.availableThrough)}</dd></div> : null}
     {context.publicationYear != null
       ? <div><dt>Publication year</dt><dd>{String(context.publicationYear)}</dd></div> : null}
   </dl>;
@@ -324,8 +328,15 @@ function AdminSurveyControls({ detail, apiBase, critical, setCritical, setMessag
   setCritical: (value: boolean) => void; setMessage: (value: string) => void; reload: () => Promise<void>;
 }) {
   const context = detail.submission.context_snapshot;
+  const questions = detail.definition.sections
+    .flatMap((section) => section.questions);
+  const usesReportingYear = questions.some((question) => question.contextBinding === "reportingYear");
   const [reason, setReason] = useState("");
-  const [year, setYear] = useState(String(detail.submission.survey_type === "course_development_debrief" ? context.originalDueYear ?? "" : context.publicationYear ?? ""));
+  const [year, setYear] = useState(String(usesReportingYear
+    ? context.reportingYear ?? ""
+    : detail.submission.survey_type === "course_development_debrief"
+      ? context.originalDueYear ?? ""
+      : context.publicationYear ?? ""));
   const [vertical, setVertical] = useState(String(context.vertical ?? ""));
 
   async function act(body: Record<string, unknown>, success: string) {
@@ -353,15 +364,22 @@ function AdminSurveyControls({ detail, apiBase, critical, setCritical, setMessag
       disabled={critical} onClick={() => void act({ action: "relock" }, "Pending edits discarded and the submitted revision relocked.")}>Relock submitted revision</button>}
     {(detail.submission.status === "draft" || !detail.submission.is_locked) && <div className="survey-context-correction">
       <h3>Correct trusted survey context</h3>
-      <label>{detail.submission.survey_type === "course_development_debrief" ? "Original Due Year" : "Publication Year"}
+      <label>{usesReportingYear
+        ? "Reporting Year"
+        : detail.submission.survey_type === "course_development_debrief" ? "Original Due Year" : "Publication Year"}
         <input type="number" min="1000" max="9999" value={year} onChange={(event) => setYear(event.target.value)} /></label>
       {detail.submission.survey_type === "id_sme_review" && <label>Vertical<select value={vertical} onChange={(event) => setVertical(event.target.value)}>
         <option value="">Select Vertical</option>{SURVEY_VERTICALS.map((item) => <option key={item}>{item}</option>)}</select></label>}
-      <button type="button" className="secondary" disabled={critical || year.length !== 4}
+      <button type="button" className="secondary" disabled={
+        critical || year.length !== 4
+        || (detail.submission.survey_type === "id_sme_review" && !vertical)
+      }
         onClick={() => void act({
           action: "correct_context",
-          corrections: detail.submission.survey_type === "course_development_debrief"
-            ? { originalDueYear: Number(year) } : { publicationYear: Number(year), vertical },
+          corrections: usesReportingYear
+            ? { reportingYear: Number(year), ...(detail.submission.survey_type === "id_sme_review" ? { vertical } : {}) }
+            : detail.submission.survey_type === "course_development_debrief"
+              ? { originalDueYear: Number(year) } : { publicationYear: Number(year), vertical },
         }, "Survey context corrected and audited.")}>Save context correction</button>
     </div>}
     <details><summary>Revision history ({detail.revisions?.length ?? 0})</summary>{detail.revisions?.length

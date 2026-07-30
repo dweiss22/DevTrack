@@ -20,7 +20,7 @@ describe("definition-derived historical survey CSV", () => {
       const definition = INITIAL_SURVEY_DEFINITIONS[surveyType];
       const contract = canonicalCsvContract(definition, 7, "2026-07-29T12:00:00Z");
       expect(contract.fields.map((field) => field.column)).toContain("surveyVersion");
-      expect(contract.fields.map((field) => field.column)).toContain("collaborationRatings.rating01");
+      expect(contract.fields.map((field) => field.column)).toContain("rating01");
       expect(blankCanonicalCsv(contract).split(/\r?\n/)).toHaveLength(2);
       expect(exampleCanonicalCsv(contract)).toContain("fictional-response-001");
       expect(canonicalDataDictionaryCsv(contract)).toContain("Canonical question ID");
@@ -29,7 +29,7 @@ describe("definition-derived historical survey CSV", () => {
     },
   );
 
-  it("detects and parses the canonical ID review including conditional effectiveness", () => {
+  it("detects and parses the canonical ID review without the historical effectiveness follow-up", () => {
     const definition = INITIAL_SURVEY_DEFINITIONS.id_sme_review;
     const contract = canonicalCsvContract(definition, 3, "2026-07-29T12:00:00Z");
     const document = parseHistoricalCsv(exampleCanonicalCsv(contract));
@@ -39,9 +39,10 @@ describe("definition-derived historical survey CSV", () => {
     expect(parsed.issues).toEqual([]);
     expect(parsed.answers).toMatchObject({
       providedRealWorldExamples: true,
-      realWorldExamplesEffectiveness: 4,
       recommendationScore: 9,
+      rating01: 5,
     });
+    expect(parsed.answers).not.toHaveProperty("realWorldExamplesEffectiveness");
     expect(parsed.reviewedSmeEmail).toBe("jordan.example@example.test");
   });
 
