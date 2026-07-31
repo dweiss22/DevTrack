@@ -263,6 +263,18 @@ The database test command requires Docker Desktop. No live Wrike access is requi
 
 Migrations are forward-only. Do not edit a migration that has already been applied to a shared environment; add a new migration that replaces or extends the affected object.
 
+## Credits
+
+DevTrack was designed and built by the **Training Content Team** at Lexipol.
+
+### Author
+
+- **Training Content Team**, Lexipol
+
+### Contributors
+
+- **Devin Weiss**, Sr. Instructional Designer, Lexipol
+
 ## Additional documentation
 
 - [User invitations and profiles](docs/user-invitations-and-profiles.md)
