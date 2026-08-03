@@ -12,6 +12,8 @@ const source = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
 const migration = source("supabase/migrations/202607280005_strict_dashboard_assignments_and_sme_survey_lock.sql");
 const smeMigration = source("supabase/migrations/202607280002_sme_management_experience.sql");
 const idAnalyticsMigration = source("supabase/migrations/202607280004_id_dashboard_reporting_year_analytics.sql");
+const surveyLaunchFixMigration = source("supabase/migrations/202608030003_align_survey_creation_with_id_dashboard.sql");
+const surveyContextFixMigration = source("supabase/migrations/202608030004_align_survey_context_with_field_sme_identities.sql");
 
 const identity: DashboardIdentity = {
   identity_key: "wrike:sme-1",
@@ -104,6 +106,31 @@ describe("strict dashboard assignments and submitted SME survey lock", () => {
       .toContain("course_development_person_assignments_with_personas");
     expect(source("supabase/migrations/202607270003_course_style_project_filter.sql"))
       .toContain("course_development_person_assignments_with_personas");
+  });
+
+  it("authorizes survey creation against the same persona-aware assignments shown on the ID Dashboard", () => {
+    expect(surveyLaunchFixMigration).toContain(
+      "public.course_development_person_assignments_with_personas(",
+    );
+    expect(surveyLaunchFixMigration).toContain(
+      "create or replace function public.is_course_development_person_assigned(",
+    );
+    expect(surveyLaunchFixMigration).toContain(
+      "grant execute on function public.is_course_development_person_assigned",
+    );
+  });
+
+  it("builds trusted survey context from the field-derived SME identities shown on dashboards", () => {
+    expect(surveyContextFixMigration).toContain(
+      "public.course_development_sme_identity_assignments(",
+    );
+    expect(surveyContextFixMigration).toContain(
+      "public.current_sme_dashboard_identity()",
+    );
+    expect(surveyContextFixMigration).toContain("'smeIdentityId',identity.id");
+    expect(surveyContextFixMigration).not.toContain(
+      "course_development_person_assignments(viewer.organization_id,'sme')",
+    );
   });
 
   it("shows only a submitted receipt and timestamp on the SME Dashboard", () => {

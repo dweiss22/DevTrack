@@ -149,13 +149,14 @@ create or replace function public.finalized_historical_ratings_valid(
   expected_count integer
 )
 returns boolean language sql immutable set search_path=public as $$
-  select jsonb_typeof(ratings)='object'
-    and jsonb_object_length(ratings)=expected_count
+  select case when jsonb_typeof(ratings)='object' then
+    (select count(*) from jsonb_object_keys(ratings))=expected_count
     and not exists(
       select 1 from generate_series(1,expected_count) item(index)
       where coalesce(ratings->>format('rating%s',lpad(item.index::text,2,'0')),'')
         !~ '^[1-5]$'
-    );
+    )
+  else false end;
 $$;
 
 create or replace function public.finalized_historical_import_summary(target_batch_id uuid)

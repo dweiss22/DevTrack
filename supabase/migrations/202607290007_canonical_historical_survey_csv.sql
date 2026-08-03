@@ -15,15 +15,15 @@ begin
   );
   revised_ddl := regexp_replace(
     revised_ddl,
-    'null,\s*NULLIF\(\(import_row\.normalized_answers ->> ''recommendationScore''::text\), ''''::text\)::smallint',
+    'null(::smallint)?,\s*nullif\(\(?import_row\.normalized_answers\s*->>\s*''recommendationScore''(::text)?\)?,\s*''''(::text)?\)::smallint',
     'nullif(import_row.normalized_answers->>''realWorldExamplesEffectiveness'','''')::smallint, nullif(import_row.normalized_answers->>''recommendationScore'','''')::smallint',
-    'g'
+    'gi'
   );
   revised_ddl := regexp_replace(
     revised_ddl,
-    'real_world_examples_effectiveness = NULL::smallint',
+    'real_world_examples_effectiveness\s*=\s*null(::smallint)?',
     'real_world_examples_effectiveness = excluded.real_world_examples_effectiveness',
-    'g'
+    'gi'
   );
   if revised_ddl = function_ddl
     or position('realWorldExamplesEffectiveness' in revised_ddl) = 0

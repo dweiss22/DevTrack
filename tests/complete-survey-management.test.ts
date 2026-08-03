@@ -13,6 +13,9 @@ import {
 const root = process.cwd();
 const source = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
 const migration = source("supabase/migrations/202607300001_complete_survey_management.sql");
+const runtimeFixMigration = source("supabase/migrations/202608030001_fix_survey_template_runtime.sql");
+const browseFixMigration = source("supabase/migrations/202608030002_fix_survey_browse_runtime.sql");
+const browseLabelFixMigration = source("supabase/migrations/202608030005_fix_native_survey_browse_labels.sql");
 const ratings = (count: number) => Object.fromEntries(
   Array.from({ length: count }, (_, index) => [
     `rating${String(index + 1).padStart(2, "0")}`,
@@ -145,6 +148,30 @@ describe("standard survey definitions", () => {
 });
 
 describe("complete survey database and interface contract", () => {
+  it("qualifies the template viewer lookup so the RETURNS TABLE id is not ambiguous", () => {
+    expect(runtimeFixMigration).toContain("select member.* into viewer");
+    expect(runtimeFixMigration).toContain("where member.id=public.current_effective_user_id()");
+    expect(runtimeFixMigration).toContain("grant execute on function public.survey_admin_templates()");
+    expect(runtimeFixMigration).toContain("perform public.seed_default_survey_templates(organization_record.id)");
+  });
+
+  it("qualifies the unified browse viewer lookup so the RETURNS TABLE id is not ambiguous", () => {
+    expect(browseFixMigration).toContain("select member.* into viewer");
+    expect(browseFixMigration).toContain("where member.id=public.current_effective_user_id()");
+    expect(browseFixMigration).toContain("grant execute on function public.survey_browse_unified");
+    expect(browseFixMigration).toContain("select pg_notify('pgrst','reload schema')");
+  });
+
+  it("labels native submissions from task and field-derived SME context", () => {
+    expect(browseLabelFixMigration).toContain(
+      "coalesce(survey.context_snapshot->>'taskTitle',",
+    );
+    expect(browseLabelFixMigration).toContain(
+      "survey.context_snapshot#>>'{reviewedSme,name}'",
+    );
+    expect(browseLabelFixMigration).toContain("reviewed.display_name");
+  });
+
   it("uses completed classification, completed_at, timezone dates, and an inclusive six-month cutoff", () => {
     expect(migration).toContain("status.dashboard_classification");
     expect(migration).toContain("classification is distinct from 'completed'");

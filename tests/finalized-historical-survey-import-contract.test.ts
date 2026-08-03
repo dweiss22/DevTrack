@@ -16,6 +16,11 @@ describe("finalized historical import persistence contract", () => {
     expect(migration).not.toContain("alter table public.survey_submissions\n  alter column task_id drop not null");
   });
 
+  it("validates rating objects with portable PostgreSQL JSON functions", () => {
+    expect(migration).toContain("jsonb_object_keys(ratings)");
+    expect(migration).not.toContain("jsonb_object_length");
+  });
+
   it("enforces the stable duplicate key and preserves original identifiers", () => {
     expect(migration).toContain("unique (organization_id,survey_type,source_response_id)");
     expect(migration).toContain("original_source_response_id");

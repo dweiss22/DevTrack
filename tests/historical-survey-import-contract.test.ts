@@ -123,6 +123,9 @@ describe("historical survey import security and persistence contract", () => {
   it("retains the exact published version and canonical conditional answer during integration", () => {
     expect(canonicalMigration).toContain("version_origin in (''historical_import'',''published'')");
     expect(canonicalMigration).toContain("realWorldExamplesEffectiveness");
+    expect(canonicalMigration).toContain("normalized_answers\\s*->>\\s*''recommendationScore''");
+    expect(canonicalMigration).toContain("real_world_examples_effectiveness\\s*=\\s*null(::smallint)?");
+    expect(canonicalMigration).toContain("'gi'");
     expect(canonicalMigration).toContain("without changing survey ownership, privacy, or access");
   });
 
