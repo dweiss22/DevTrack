@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { FinalizedCourseDraftForm } from "@/components/finalized-course-draft-form";
 import { SurveyRenderer, type RenderedSurveyAttachment } from "@/components/survey-renderer";
 import { SurveyReceived } from "@/components/survey-received";
 import { SURVEY_VERTICALS, surveyTitle, type SurveyType } from "@/lib/surveys/domain";
+import type { FinalizedDraftStatus } from "@/lib/projects/finalized-draft";
 import {
   applyContextBindings,
   surveyDefinitionSchema,
@@ -17,7 +19,7 @@ import type { NotificationDeliveryStatus } from "@/lib/notifications/types";
 
 type Detail = {
   submission: {
-    id: string; survey_type: SurveyType; status: "draft" | "submitted"; is_locked: boolean;
+    id: string; task_id: string; survey_type: SurveyType; status: "draft" | "submitted"; is_locked: boolean;
     revision_number: number; created_by: string; subject_application_user_id: string | null;
     context_snapshot: Record<string, unknown>; unlock_reason: string | null;
     original_submitted_at: string | null; latest_submitted_at: string | null;
@@ -25,6 +27,7 @@ type Detail = {
   definition: SurveyDefinition;
   versionNumber: number;
   response: SurveyAnswers;
+  finalizedDraft?: FinalizedDraftStatus;
   attachments: RenderedSurveyAttachment[];
   viewer: { role: string; canEdit: boolean; canManage: boolean };
   audit?: { id: number; event_type: string; actor_role: string; actor_name: string; reason: string | null; created_at: string }[];
@@ -219,6 +222,9 @@ export function SurveyDialog({
         {detail.viewer.canManage && detail.historicalImport?.length
           ? <HistoricalImportProvenance integrations={detail.historicalImport} /> : null}
         <ContextHeader context={context} />
+        {detail.submission.survey_type === "id_sme_review" && detail.finalizedDraft
+          ? <FinalizedCourseDraftForm taskId={detail.submission.task_id} initial={detail.finalizedDraft} />
+          : null}
         {typeof context.configurationMessage === "string" && context.configurationMessage
           ? <p className="notice warning" role="status">{context.configurationMessage}</p>
           : null}

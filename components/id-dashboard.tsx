@@ -1,5 +1,6 @@
 import Link from "next/link";
 import React from "react";
+import { FinalizedDraftDashboardCell } from "@/components/finalized-draft-dashboard-cell";
 import { IdDashboardAnalyticsSection } from "@/components/id-dashboard-analytics";
 import { SearchableFilterSelect } from "@/components/searchable-filter-select";
 import { StatusBadge } from "@/components/wrike-reference";
@@ -90,8 +91,9 @@ export function IdDashboard({ identities, selected, rows, canSelect, canActAsAss
               <td data-label="Status"><StatusBadge name={row.status_name} /></td>
               <td data-label="Vertical">{row.vertical ?? "Needs context review"}</td>
               <td data-label="Course Style">{row.course_style ?? "—"}</td>
-              <td data-label="Finalized Draft">{row.finalized_draft?.available ? "Available" : "Not available"}
-                {canActAsAssignedId ? <><br /><Link href={`/projects/${row.task_id}?returnTo=${encodeURIComponent(returnTo)}#finalized-draft`}>{row.finalized_draft?.available ? "Edit link" : "Add link"}</Link></> : null}</td>
+              <td data-label="Finalized Draft">{canActAsAssignedId
+                ? <FinalizedDraftDashboardCell taskId={row.task_id} initial={row.finalized_draft ?? { available: false }} />
+                : row.finalized_draft?.available ? "Available" : "Not available"}</td>
               <td data-label="Survey"><div className="dashboard-survey-actions">
                 {!reviewAvailable
                   ? <span className="muted">{row.sme_identity_status === "missing"
