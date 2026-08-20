@@ -34,11 +34,21 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const detail = await loadSurveyDetail(supabase, id);
   if (!detail) return NextResponse.json({ error: "Survey is unavailable." }, { status: 404 });
   const { data: canEdit } = await supabase.rpc("can_edit_survey", { target_submission_id: id });
+  let finalizedDraft: unknown;
+  if (detail.submission.survey_type === "id_sme_review" && profile.access.operationalRoles.includes("id")) {
+    const { data: controls } = await supabase.rpc("assigned_id_project_controls", {
+      target_task_id: detail.submission.task_id,
+    });
+    finalizedDraft = (controls as { finalizedDraft?: unknown } | null)?.finalizedDraft ?? { available: false };
+  }
   if (!hasCapability(profile.access, "manage_surveys")) {
     const visibleDetail = profile.access.operationalRoles.includes("sme")
       && detail.submission.survey_type === "course_development_debrief"
       ? surveyDetailForSme(detail) : detail;
-    return NextResponse.json({ ...visibleDetail, viewer: { role: profile.role, canEdit: Boolean(canEdit), canManage: false } });
+    return NextResponse.json({
+      ...visibleDetail, finalizedDraft,
+      viewer: { role: profile.role, canEdit: Boolean(canEdit), canManage: false },
+    });
   }
   const [audit, revisions, revisers, actors, notificationEvents, historicalImport] = await Promise.all([
     supabase.from("survey_audit_log").select("id,event_type,actor_id,actor_role,reason,previous_values,new_values,created_at").eq("submission_id", id).order("created_at", { ascending: false }),
@@ -75,6 +85,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   ]);
   return NextResponse.json({
     ...detail,
+    finalizedDraft,
     viewer: { role: profile.role, canEdit: Boolean(canEdit), canManage: true },
     audit: (audit.data ?? []).map((event) => ({ ...event, actor_name: actorNames[event.actor_id] ?? "Deleted user" })),
     revisions: (revisions.data ?? []).map((revision) => ({ ...revision, submitted_by_name: actorNames[revision.submitted_by] ?? "Deleted user" })),

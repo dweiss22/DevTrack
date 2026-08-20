@@ -5,6 +5,20 @@ import { finalizedCourseDraftUrlSchema } from "@/lib/projects/finalized-draft";
 
 const idSchema = z.string().uuid();
 
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const { supabase } = await requireCapability("view_surveys");
+  if (!idSchema.safeParse(id).success) {
+    return NextResponse.json({ error: "Project action is unavailable." }, { status: 404 });
+  }
+  const { data, error } = await supabase.rpc("assigned_id_project_controls", { target_task_id: id });
+  if (error || !data) {
+    return NextResponse.json({ error: "Project action is unavailable." }, { status: 404 });
+  }
+  const controls = data as { finalizedDraft?: unknown };
+  return NextResponse.json(controls.finalizedDraft ?? { available: false });
+}
+
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { supabase } = await requireCapability("view_surveys");
