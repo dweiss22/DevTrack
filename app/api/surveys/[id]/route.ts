@@ -35,7 +35,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   if (!detail) return NextResponse.json({ error: "Survey is unavailable." }, { status: 404 });
   const { data: canEdit } = await supabase.rpc("can_edit_survey", { target_submission_id: id });
   let finalizedDraft: unknown;
-  if (detail.submission.survey_type === "id_sme_review" && profile.role === "id") {
+  if (detail.submission.survey_type === "id_sme_review" && profile.access.operationalRoles.includes("id")) {
     const { data: controls } = await supabase.rpc("assigned_id_project_controls", {
       target_task_id: detail.submission.task_id,
     });
@@ -85,6 +85,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   ]);
   return NextResponse.json({
     ...detail,
+    finalizedDraft,
     viewer: { role: profile.role, canEdit: Boolean(canEdit), canManage: true },
     audit: (audit.data ?? []).map((event) => ({ ...event, actor_name: actorNames[event.actor_id] ?? "Deleted user" })),
     revisions: (revisions.data ?? []).map((revision) => ({ ...revision, submitted_by_name: actorNames[revision.submitted_by] ?? "Deleted user" })),
