@@ -22,6 +22,19 @@ export type IdCategoryPeriod = {
   categories: IdCategoryAverage[];
 };
 
+export type IdOtherIdentityYears = {
+  wrikeUserId: string;
+  displayName: string;
+  points: { year: number; averageMinutes: number | null }[];
+};
+
+export type IdCurrentYearProgress = {
+  year: number;
+  startMinutes: number;
+  currentAverageMinutes: number | null;
+  asOfDate: string | null;
+};
+
 export type IdDashboardAnalytics = {
   timeDataSynchronized: boolean;
   developmentTimeByYear: IdDevelopmentYear[];
@@ -30,6 +43,9 @@ export type IdDashboardAnalytics = {
     allTime: IdCategoryPeriod;
     years: IdCategoryPeriod[];
   };
+  otherIdentitiesByYear: IdOtherIdentityYears[];
+  yAxisMaxMinutes: number | null;
+  currentYearProgress: IdCurrentYearProgress | null;
 };
 
 export type IdDashboardAnalyticsResult =
@@ -52,6 +68,9 @@ export const EMPTY_ID_DASHBOARD_ANALYTICS: IdDashboardAnalytics = {
     allTime: EMPTY_PERIOD,
     years: [],
   },
+  otherIdentitiesByYear: [],
+  yAxisMaxMinutes: null,
+  currentYearProgress: null,
 };
 
 export async function loadIdDashboardAnalytics(
@@ -98,6 +117,26 @@ export function normalizeIdDashboardAnalytics(value: unknown): IdDashboardAnalyt
       years: Array.isArray(categoryTime?.years)
         ? categoryTime.years.map((period) => normalizeCategoryPeriod(period, Number(period.year)))
         : [],
+    },
+    otherIdentitiesByYear: Array.isArray(candidate.otherIdentitiesByYear)
+      ? candidate.otherIdentitiesByYear.map((identity) => ({
+        wrikeUserId: String(identity.wrikeUserId),
+        displayName: identity.displayName || "Instructional Designer",
+        points: Array.isArray(identity.points)
+          ? identity.points.map((point) => ({
+            year: Number(point.year),
+            averageMinutes: point.averageMinutes == null ? null : Number(point.averageMinutes),
+          }))
+          : [],
+      }))
+      : [],
+    yAxisMaxMinutes: candidate.yAxisMaxMinutes == null ? null : Number(candidate.yAxisMaxMinutes),
+    currentYearProgress: candidate.currentYearProgress == null ? null : {
+      year: Number(candidate.currentYearProgress.year),
+      startMinutes: Number(candidate.currentYearProgress.startMinutes),
+      currentAverageMinutes: candidate.currentYearProgress.currentAverageMinutes == null
+        ? null : Number(candidate.currentYearProgress.currentAverageMinutes),
+      asOfDate: candidate.currentYearProgress.asOfDate ?? null,
     },
   };
 }
