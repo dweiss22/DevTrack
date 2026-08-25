@@ -1,5 +1,6 @@
 {
   "crons": [
+    { "path": "/api/cron/wrike-sync", "schedule": "0 6 * * *" },
     { "path": "/api/cron/reporting-cleanup", "schedule": "0 7 * * *" },
     { "path": "/api/cron/sme-debrief-notifications", "schedule": "15 7 * * *" }
   ]

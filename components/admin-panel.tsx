@@ -23,6 +23,7 @@ type FolderRun = {
   custom_field_conflict_count: number; custom_field_normalization_diagnostics: { logicalFieldCount?: number; normalizedTaskValueCount?: number; conflictCount?: number };
   task_custom_field_diagnostics?: Record<string, unknown>;
   unresolved_reference_count: number; reference_resolution_diagnostics: { unresolvedByType?: Record<string, number>; manualMappings?: number; ignoredCustomFields?: number };
+  trigger_source?: "manual" | "scheduled"; started_at?: string; completed_at?: string | null;
 };
 type ConfiguredFolder = { id: string; title: string };
 type FolderFailure = { operation: string; folderId: string; folderTitle: string; requestFolderId: string; status: number | null; message: string };
@@ -42,6 +43,17 @@ type Props = {
   importConflictCount: number;
   importConflictError: string | null;
 };
+
+function formatLastRunWhen(timestamp: string) {
+  const then = new Date(timestamp).getTime();
+  const minutes = Math.round((Date.now() - then) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
 
 export function AdminPanel({ connection, folderRuns, folders, unresolvedReferences, verticalDiagnostics, verticalDiagnosticsError, repairRuns, importConflicts, importConflictCount, importConflictError }: Props) {
   const connected = connection?.status === "connected";
@@ -120,6 +132,7 @@ export function AdminPanel({ connection, folderRuns, folders, unresolvedReferenc
   }
 
   const otherUnresolvedReferences = unresolvedReferences.filter((reference) => reference.reference_type !== "custom_field");
+  const lastRun = folderRuns[0] ?? null;
 
   return <div className="admin-stack">
     {message && <p className={error ? "notice error" : "notice"} role={error ? "alert" : "status"}>{message}</p>}
@@ -127,6 +140,9 @@ export function AdminPanel({ connection, folderRuns, folders, unresolvedReferenc
       <div className="admin-action-grid">
     <section className="admin-action-card">
       <div><p className="eyebrow">WRIKE DATA — CURRENT STAGE</p><h2>Import folder tasks and timelogs</h2><p>This action refreshes people, workflow statuses, timelog categories, folder metadata, LCT fields, tasks, and timelogs. Reference failures remain visible warnings; selected-folder failures stop reconciliation.</p></div>
+      {lastRun && <p className="notice compact" title={lastRun.created_at}>
+        Last run {formatLastRunWhen(lastRun.completed_at ?? lastRun.created_at)} · {lastRun.trigger_source === "scheduled" ? "automatic daily sync" : "manual"} · {lastRun.status}
+      </p>}
       <div className="space-import-actions"><button onClick={importFolderTasks} disabled={!connected || importing}>{importing ? "Importing tasks and timelogs…" : "Import folder tasks and timelogs"}</button></div>
       {!connected && <p className="notice error">Connect Wrike before importing folder data.</p>}
       {needsUserScope && <p className="notice error">Reconnect Wrike to grant <code>amReadOnlyUser</code>. Tasks and timelogs can still import, but authoritative user details cannot refresh. <a href="/api/wrike/connect">Reconnect Wrike</a></p>}

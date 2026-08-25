@@ -204,7 +204,8 @@ export async function validateBeforeReset<T>(loadAndValidate: () => Promise<T>, 
   return validated;
 }
 
-export async function importConfiguredFolderTasks(organizationId: string) {
+export async function importConfiguredFolderTasks(organizationId: string, options?: { triggerSource?: "manual" | "scheduled" }) {
+  const triggerSource = options?.triggerSource ?? "manual";
   const db = createAdminClient();
   await requireVerticalCompletenessSchema(db);
   const leaseToken = crypto.randomUUID();
@@ -224,7 +225,8 @@ export async function importConfiguredFolderTasks(organizationId: string) {
     organization_id: organizationId,
     status: "running",
     started_at: startedAt.toISOString(),
-    selected_folder_count: SELECTED_WRIKE_FOLDERS.length
+    selected_folder_count: SELECTED_WRIKE_FOLDERS.length,
+    trigger_source: triggerSource
   }).select("id").single();
   if (runStartError || !run) {
     await db.rpc("release_wrike_sync_lease", { target_organization_id: organizationId, target_token: leaseToken });
