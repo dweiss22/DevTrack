@@ -4,6 +4,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
+  categoryTrend,
   CategoryTimeTooltip,
   DevelopmentTimeTooltip,
   IdDashboardAnalyticsSection,
@@ -23,14 +24,15 @@ import {
 
 const root = process.cwd();
 const source = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
-const migration = source("supabase/migrations/202607280004_id_dashboard_reporting_year_analytics.sql");
+const migration = source("supabase/migrations/202608250001_id_dashboard_org_trend_lines.sql");
+const currentYear = new Date().getFullYear();
 
 const analytics: IdDashboardAnalytics = {
   timeDataSynchronized: true,
   developmentTimeByYear: [
     { year: 2023, projectCount: 2, averageMinutes: 180, totalMinutes: 360 },
     { year: 2024, projectCount: 1, averageMinutes: 0, totalMinutes: 0 },
-    { year: 2025, projectCount: 1, averageMinutes: 300, totalMinutes: 300 },
+    { year: currentYear, projectCount: 1, averageMinutes: 300, totalMinutes: 300 },
   ],
   categoryTime: {
     denominatorDefinition: "Distinct ID-assigned projects on which the selected ID logged time in the selected period.",
@@ -47,11 +49,16 @@ const analytics: IdDashboardAnalytics = {
         categories: [{ name: "Uncategorized", averageMinutes: 60, totalMinutes: 60, percentage: 100 }],
       },
       {
-        year: 2025, qualifyingProjectCount: 1, totalMinutes: 240, entryCount: 2,
+        year: currentYear, qualifyingProjectCount: 1, totalMinutes: 240, entryCount: 2,
         categories: [{ name: "Development", averageMinutes: 240, totalMinutes: 240, percentage: 100 }],
       },
     ],
   },
+  otherIdentitiesByYear: [
+    { wrikeUserId: "other-1", displayName: "Other ID", points: [{ year: 2023, averageMinutes: 90 }, { year: currentYear, averageMinutes: 150 }] },
+  ],
+  yAxisMaxMinutes: 300,
+  currentYearProgress: { year: currentYear, startMinutes: 120, currentAverageMinutes: 300, asOfDate: "2026-01-15" },
 };
 
 describe("ID Dashboard analytics", () => {
@@ -82,11 +89,11 @@ describe("ID Dashboard analytics", () => {
     expect(migration).toContain("'all'::text period_key");
     expect(migration).toContain("entry.reporting_year::text");
     expect(categoryPeriodForYear(analytics, "all").qualifyingProjectCount).toBe(2);
-    expect(categoryPeriodForYear(analytics, 2025).categories[0].averageMinutes).toBe(240);
+    expect(categoryPeriodForYear(analytics, currentYear).categories[0].averageMinutes).toBe(240);
   });
 
   it("returns only reporting years with qualifying entries, keeps uncategorized time, and removes empty categories", () => {
-    expect(analytics.categoryTime.years.map((period) => period.year)).toEqual([2024, 2025]);
+    expect(analytics.categoryTime.years.map((period) => period.year)).toEqual([2024, currentYear]);
     expect(categoryPeriodForYear(analytics, 2024).categories[0].name).toBe("Uncategorized");
     expect(migration).toContain("then 'Uncategorized'");
     expect(migration).toContain("category.id is null or category.is_unresolved");
@@ -141,7 +148,7 @@ describe("ID Dashboard analytics", () => {
     expect(html).toContain("All time");
     expect(html).toContain("2024");
     expect(html).toContain("0.0");
-    expect(html).toContain("Uncategorized");
+    expect(html).toContain("Development");
     expect(html).toContain("Workflow category legend");
     expect(html).toContain("View accessible data");
   });
@@ -195,6 +202,61 @@ describe("ID Dashboard analytics", () => {
     const error = renderToStaticMarkup(<IdDashboardAnalyticsSection analytics={null} error="Analytics failed." />);
     expect(error).toContain("ID analytics unavailable");
     expect(error).toContain("Assigned-project details remain available below.");
+  });
+
+  it("returns org-wide context for faded other-ID lines, a shared Y-axis max, and current-year progress", () => {
+    expect(migration).toContain("otherIdentitiesByYear");
+    expect(migration).toContain("yAxisMaxMinutes");
+    expect(migration).toContain("currentYearProgress");
+    expect(migration).toContain("identity.id<>selected_identity.id");
+    expect(migration).toContain("org_assigned_tasks");
+
+    const normalized = normalizeIdDashboardAnalytics({
+      timeDataSynchronized: true,
+      developmentTimeByYear: [],
+      categoryTime: { allTime: {}, years: [] },
+      otherIdentitiesByYear: [
+        { wrikeUserId: "abc", displayName: "Someone Else", points: [{ year: 2024, averageMinutes: 90 }] },
+      ],
+      yAxisMaxMinutes: 480,
+      currentYearProgress: { year: currentYear, startMinutes: 60, currentAverageMinutes: 150, asOfDate: "2026-02-01" },
+    });
+    expect(normalized.otherIdentitiesByYear).toEqual([
+      { wrikeUserId: "abc", displayName: "Someone Else", points: [{ year: 2024, averageMinutes: 90 }] },
+    ]);
+    expect(normalized.yAxisMaxMinutes).toBe(480);
+    expect(normalized.currentYearProgress).toEqual({
+      year: currentYear, startMinutes: 60, currentAverageMinutes: 150, asOfDate: "2026-02-01",
+    });
+
+    const empty = normalizeIdDashboardAnalytics({ timeDataSynchronized: false });
+    expect(empty.otherIdentitiesByYear).toEqual([]);
+    expect(empty.yAxisMaxMinutes).toBeNull();
+    expect(empty.currentYearProgress).toBeNull();
+  });
+
+  it("defaults the workflow-category donut to the current reporting year and shows the current-year progress note", () => {
+    const html = renderToStaticMarkup(<IdDashboardAnalyticsSection analytics={analytics} />);
+    expect(html).toContain(`Donut chart of time by workflow category for ${currentYear}`);
+    expect(html).toContain("is still in progress");
+    expect(html).toContain("started at 2.0h");
+    expect(html).toContain("now averaging 5.0h");
+  });
+
+  it("shows a legend trend arrow only against a completed prior year, never for all-time or the current year", () => {
+    expect(categoryTrend(
+      { name: "Development", averageMinutes: 240, totalMinutes: 300, percentage: 100 },
+      { year: 2024, qualifyingProjectCount: 1, totalMinutes: 200, entryCount: 1, categories: [
+        { name: "Development", averageMinutes: 200, totalMinutes: 200, percentage: 100 },
+      ] },
+      2025,
+    )).toEqual({ direction: "up", priorMinutes: 200 });
+    expect(categoryTrend(
+      { name: "Development", averageMinutes: 240, totalMinutes: 300, percentage: 100 }, null, "all",
+    )).toBeNull();
+    expect(categoryTrend(
+      { name: "Development", averageMinutes: 240, totalMinutes: 300, percentage: 100 }, null, currentYear,
+    )).toBeNull();
   });
 
   it("keeps Super Admin persona selection wired to the same selected-ID analytics RPC", () => {
