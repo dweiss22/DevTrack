@@ -7,7 +7,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { id } = await params;
   const { profile, user } = await requireCapability("manage_users");
   const parsed = z.object({
-    roles: z.array(z.enum(["id", "sme"])).max(2),
+    roles: z.array(z.enum(["id", "sme", "project_reviewer"])).max(3),
     wrikeUserId: z.string().uuid().nullable(),
   }).safeParse(await request.json().catch(() => null));
   if (!z.string().uuid().safeParse(id).success || !parsed.success) {

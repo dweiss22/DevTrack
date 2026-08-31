@@ -154,7 +154,7 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
         <label>Email address<input name="email" type="email" autoComplete="email" maxLength={320} required placeholder="person@example.com" /></label>
         <label>Initial operational role<select name="role" value={inviteRole}
           onChange={(event) => setInviteRole(event.target.value as OperationalRole)}>
-          <option value="id">ID</option><option value="sme">SME</option></select></label>
+          <option value="id">ID</option><option value="sme">SME</option><option value="project_reviewer">Project Reviewer</option></select></label>
         {inviteRole === "sme" ? <label>SME type<select name="smeClassification" required defaultValue="">
           <option value="" disabled>Select SME type</option>
           <option value="internal">Internal SME</option>
@@ -176,7 +176,7 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
           <td>{member.name}{member.accountState === "deletion_pending" ? <><br /><span className="error">Deletion pending</span></> : null}</td>
           <td>{member.email}</td>
           <td>{locked ? <><strong>{roleLabel(member.role)}</strong><br /><span className="muted">Fixed account</span></> : <div className="role-checkboxes">
-            {member.operationalRoles.map((role) => <span className="role-chip" key={role}>{role === "id" ? "ID" : "SME"}</span>)}
+            {member.operationalRoles.map((role) => <span className="role-chip" key={role}>{operationalRoleLabel(role)}</span>)}
             {member.managementRoles.map((role) => <span className="role-chip" key={role}>{role === "sme_coordinator" ? "SME Coordinator" : role === "admin" ? "Admin" : "SuperAdmin"}</span>)}
             {!member.operationalRoles.length && !member.managementRoles.length ? <span className="muted">No active roles</span> : null}
           </div>}</td>
@@ -233,4 +233,8 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
     {impersonationTarget && <div className="modal-backdrop"><section className="card management-dialog" role="dialog" aria-modal="true" aria-labelledby="impersonate-title"><h2 id="impersonate-title">Log in as {impersonationTarget.name}</h2><p>You will see DevTrack with this user’s permissions. All changes retain both identities in the audit history.</p><form onSubmit={startImpersonation}><label>Reason<textarea name="reason" required minLength={3} maxLength={1000} autoFocus /></label><div className="table-actions"><button disabled={Boolean(submitting)}>Start impersonation</button><button className="secondary" type="button" onClick={() => setImpersonationTarget(null)} disabled={Boolean(submitting)}>Cancel</button></div></form></section></div>}
     {deletionTarget && <div className="modal-backdrop"><section className="card management-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-user-title"><h2 id="delete-user-title">Delete {deletionTarget.name}</h2>{deletionPreview ? <><p>This removes authentication, membership, mappings, conversations, invitations, and never-submitted drafts.</p><ul><li>{deletionPreview.delete.draftSurveys} draft surveys and {deletionPreview.delete.draftAttachments} draft files deleted</li><li>{deletionPreview.delete.conversations} conversations and {deletionPreview.delete.reportingMemberships} reporting assignments deleted</li><li>{deletionPreview.retain.submittedSurveys} submitted surveys and {deletionPreview.retain.surveyAuditEvents} audit events retained as “Deleted user”</li></ul><form onSubmit={startDeletion}><label>Deletion reason<textarea name="reason" required minLength={3} maxLength={2000} /></label><label>Type {deletionPreview.email} to confirm<input name="confirmationEmail" type="email" required autoComplete="off" /></label><div className="table-actions"><button className="danger" disabled={Boolean(submitting)}>Delete user</button><button className="secondary" type="button" onClick={() => setDeletionTarget(null)} disabled={Boolean(submitting)}>Cancel</button></div></form>{deletionStage && <p className="notice" role="status">{deletionStage}</p>}</> : <p>{deletionStage}</p>}</section></div>}
   </div>;
+}
+
+function operationalRoleLabel(role: OperationalRole) {
+  return role === "id" ? "ID" : role === "sme" ? "SME" : "Project Reviewer";
 }

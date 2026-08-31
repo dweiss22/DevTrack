@@ -32,7 +32,9 @@ export function AdditiveAccessPanel({ members, identities, impersonating, canGra
           <td><div className="role-checkboxes"><label><input type="checkbox" checked={member.operationalRoles.includes("id")}
             disabled={member.locked || Boolean(working) || impersonating} onChange={(event) => toggleRole("id", event.target.checked)} /> ID</label>
             <label><input type="checkbox" checked={member.operationalRoles.includes("sme")}
-              disabled={member.locked || Boolean(working) || impersonating} onChange={(event) => toggleRole("sme", event.target.checked)} /> SME</label></div></td>
+              disabled={member.locked || Boolean(working) || impersonating} onChange={(event) => toggleRole("sme", event.target.checked)} /> SME</label>
+            <label><input type="checkbox" checked={member.operationalRoles.includes("project_reviewer")}
+              disabled={member.locked || Boolean(working) || impersonating} onChange={(event) => toggleRole("project_reviewer", event.target.checked)} /> Project Reviewer</label></div></td>
           <td>{member.locked ? <><strong>SuperAdmin</strong><br /><span className="muted">Fixed account</span></> : <div className="role-checkboxes">
             <label><input type="checkbox" checked={member.managementRoles.includes("admin")}
               disabled={!canGrantAdmin || Boolean(working) || impersonating}

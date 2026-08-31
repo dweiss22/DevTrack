@@ -5,10 +5,10 @@ export const IMPERSONATION_MAX_SECONDS = 60 * 60;
 
 export type RequestIdentityContext = {
   actorUserId: string;
-  actorRole: "super_admin" | "admin" | "id" | "sme";
+  actorRole: "super_admin" | "admin" | "id" | "sme" | "project_reviewer";
   actorName: string;
   effectiveUserId: string;
-  effectiveRole: "super_admin" | "admin" | "id" | "sme";
+  effectiveRole: "super_admin" | "admin" | "id" | "sme" | "project_reviewer";
   effectiveName: string;
   effectiveEmail?: string | null;
   organizationId: string;
@@ -17,7 +17,7 @@ export type RequestIdentityContext = {
   lastActivityAt: string | null;
   absoluteExpiresAt: string | null;
   operationalPersonaRole?: "id" | null;
-  operationalRoles?: Array<"id" | "sme">;
+  operationalRoles?: Array<"id" | "sme" | "project_reviewer">;
   managementRoles?: Array<"sme_coordinator" | "admin" | "super_admin">;
 };
 

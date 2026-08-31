@@ -11,7 +11,7 @@ const migration = source("supabase/migrations/202607230003_role_based_access_con
 
 describe("four-role capability model", () => {
   it("defines exactly the required roles and centralized capability matrix", () => {
-    expect(APPLICATION_ROLES).toEqual(["super_admin", "admin", "id", "sme"]);
+    expect(APPLICATION_ROLES).toEqual(["super_admin", "admin", "id", "sme", "project_reviewer"]);
     for (const capability of ["manage_users", "manage_settings", "manage_integrations", "manage_data", "view_standard_pages", "view_sme_dashboard", "select_sme_dashboard_user", "edit_own_profile"] as const) {
       expect(hasCapability("super_admin", capability)).toBe(true);
     }
@@ -22,16 +22,20 @@ describe("four-role capability model", () => {
     expect(hasCapability("sme", "view_sme_dashboard")).toBe(true);
     expect(hasCapability("sme", "view_standard_pages")).toBe(false);
     expect(hasCapability("sme", "select_sme_dashboard_user")).toBe(false);
+    expect(hasCapability("project_reviewer", "view_core_pages")).toBe(true);
+    expect(hasCapability("project_reviewer", "view_standard_pages")).toBe(false);
+    expect(hasCapability("project_reviewer", "manage_users")).toBe(false);
   });
 
   it("shows role-appropriate navigation and SME landing behavior", () => {
-    const ids = (role: "super_admin" | "admin" | "id" | "sme") => navigationForRole(role).flatMap((entry) => entry.kind === "link" ? [entry.id] : []);
+    const ids = (role: "super_admin" | "admin" | "id" | "sme" | "project_reviewer") => navigationForRole(role).flatMap((entry) => entry.kind === "link" ? [entry.id] : []);
     expect(ids("super_admin")).toContain("data");
     expect(ids("admin")).toContain("users");
     expect(ids("id")).toContain("projects");
     expect(ids("id")).toContain("sme-dashboard");
     expect(ids("id")).not.toContain("users");
     expect(ids("sme")).toEqual(["sme-dashboard"]);
+    expect(ids("project_reviewer")).toEqual(["dashboard", "development", "projects"]);
     expect(hasCapability("sme", "create_sme_debrief")).toBe(true);
     expect(hasCapability("sme", "create_id_review")).toBe(false);
     expect(hasCapability("id", "create_id_review")).toBe(true);
@@ -41,8 +45,8 @@ describe("four-role capability model", () => {
   });
 
   it("never exposes SuperAdmin as an assignable invitation or role option", () => {
-    expect(assignableRolesFor("super_admin")).toEqual(["admin", "id", "sme"]);
-    expect(assignableRolesFor("admin")).toEqual(["admin", "id", "sme"]);
+    expect(assignableRolesFor("super_admin")).toEqual(["admin", "id", "sme", "project_reviewer"]);
+    expect(assignableRolesFor("admin")).toEqual(["admin", "id", "sme", "project_reviewer"]);
     expect(source("lib/users/invitations.ts")).not.toContain('"super_admin"');
     expect(source("components/user-management-panel.tsx")).not.toContain('<option value="super_admin">');
   });
@@ -87,9 +91,10 @@ describe("database-enforced SuperAdmin and SME isolation", () => {
 
 describe("server route authorization", () => {
   it("guards standard pages and mutations with capabilities", () => {
-    for (const file of ["app/page.tsx", "app/projects/page.tsx", "app/development/page.tsx", "app/ask/page.tsx"]) {
-      expect(source(file), file).toContain('requirePageCapability("view_standard_pages")');
+    for (const file of ["app/page.tsx", "app/projects/page.tsx", "app/development/page.tsx"]) {
+      expect(source(file), file).toContain('requirePageCapability("view_core_pages")');
     }
+    expect(source("app/ask/page.tsx")).toContain('requirePageCapability("view_standard_pages")');
     expect(source("app/admin/users/page.tsx")).toContain('requirePageCapability("manage_users")');
     expect(source("app/api/admin/users/invitations/route.ts")).toContain('requireCapability("manage_users")');
     expect(source("app/api/ask/route.ts")).toContain('requireCapability("view_standard_pages")');

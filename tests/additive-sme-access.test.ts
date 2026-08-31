@@ -47,7 +47,7 @@ describe("additive SME access", () => {
     expect(accessPanel).toContain('{ role: "admin", enabled: event.target.checked }');
     expect(accessPanel).toContain("canGrantAdmin");
     expect(userPanel).not.toContain('<option value="admin">Admin</option>');
-    expect(invitations).toContain('operationalInvitationRoleSchema = z.enum(["id", "sme"])');
+    expect(invitations).toContain('operationalInvitationRoleSchema = z.enum(["id", "sme", "project_reviewer"])');
     expect(compatibility).toContain("sync_additive_admin_legacy_role");
     expect(compatibility).toContain("insert into public.application_user_operational_personas");
     expect(compatibility).toContain("set role='admin'");

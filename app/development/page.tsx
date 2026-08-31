@@ -11,7 +11,7 @@ import { loadDevelopmentAnalytics, loadDevelopmentOptions, loadDevelopmentProjec
 type SearchValues = Record<string, string | string[] | undefined>;
 export default async function DevelopmentPage({ searchParams }: { searchParams: Promise<SearchValues> }) {
   const query = await searchParams;
-  const { supabase, profile } = await requirePageCapability("view_standard_pages");
+  const { supabase, profile } = await requirePageCapability("view_core_pages");
   const [yearsResult, optionsResult, lastRunResult] = await Promise.all([
     loadDevelopmentYearOptions(supabase), loadDevelopmentOptions(supabase, profile.organization_id),
     supabase.from("wrike_folder_task_import_runs").select("created_at").eq("organization_id", profile.organization_id).eq("status", "succeeded").order("created_at", { ascending: false }).limit(1).maybeSingle()

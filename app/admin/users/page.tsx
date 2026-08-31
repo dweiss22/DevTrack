@@ -64,7 +64,7 @@ export default async function UserManagementPage() {
       profileCompleted: Boolean(user.profile_completed),
       personaWrikeUserId: personasByUser.get(user.id)?.find((persona) => persona.operational_role === "id")?.wrike_user_id ?? null,
       operationalRoles: (personasByUser.get(user.id)?.map((persona) => persona.operational_role)
-        ?? (user.role === "id" || user.role === "sme" ? [user.role] : [])) as Array<"id" | "sme">,
+        ?? (user.role === "id" || user.role === "sme" || user.role === "project_reviewer" ? [user.role] : [])) as Array<"id" | "sme" | "project_reviewer">,
       managementRoles: (managementByUser.get(user.id)
         ?? (user.role === "admin" || user.role === "super_admin" ? [user.role] : [])) as Array<"sme_coordinator" | "admin" | "super_admin">,
       accessWrikeUserId: personasByUser.get(user.id)?.find((persona) => persona.wrike_user_id)?.wrike_user_id ?? user.wrike_user_id,

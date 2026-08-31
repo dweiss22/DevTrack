@@ -14,7 +14,7 @@ function Metric({ label, value, detail }: { label: string; value: number; detail
 }
 
 export default async function Dashboard() {
-  const { supabase, profile } = await requirePageCapability("view_standard_pages");
+  const { supabase, profile } = await requirePageCapability("view_core_pages");
   const lastRunResult = await supabase.from("wrike_folder_task_import_runs").select("created_at").eq("organization_id", profile.organization_id).eq("status", "succeeded").order("created_at", { ascending: false }).limit(1).maybeSingle();
   const filters = parseReportingFilters({});
   const overviewPromise = loadDashboardOverview(supabase);

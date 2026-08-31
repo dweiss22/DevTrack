@@ -14,6 +14,7 @@ export const developmentFiltersSchema = z.object({
   q: optionalText,
   completionClassification: optionalEnum(["completed", "incomplete"]),
   developmentStatus: optionalText,
+  timelogCategory: optionalText,
   assigneeIds: z.preprocess((value) => value ? [String(value)] : undefined, z.array(z.string()).optional()),
   folderIds: z.preprocess((value) => value ? [String(value)] : undefined, z.array(z.string()).optional()),
   projectIds: z.preprocess((value) => value ? [String(value)] : undefined, z.array(z.string()).optional()),
