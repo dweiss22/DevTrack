@@ -145,6 +145,7 @@ main { min-width: 0; max-width: 1500px; width: 100%; padding: 42px; margin: auto
 .development-analysis-card h2 { margin-bottom: 4px; font-size: 18px; }
 .development-analysis-card > p { color: var(--muted); font-size: 13px; }
 .development-analysis-card .recharts-bar-rectangle { cursor: pointer; }
+.development-analysis-card .chart-expand-toggle { display: block; margin-top: 8px; }
 .development-filters .filter-fields { grid-template-columns: repeat(4,minmax(150px,1fr)); }
 .development-check { align-content: center; padding-top: 24px; }
 .active-filter-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 18px; }
