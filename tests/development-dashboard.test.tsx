@@ -4,7 +4,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DevelopmentFiltersForm } from "@/components/development-filters";
-import { completionPercentages, developmentFilterHref, parseDevelopmentFilters, resolveDevelopmentContactValues, usesCurrentStatusFallback, type DevelopmentOptions, type DevelopmentProjectRow } from "@/lib/reporting/development";
+import { completionPercentages, developmentFilterHref, parseDevelopmentFilters, resolveDevelopmentContactValues, type DevelopmentOptions, type DevelopmentProjectRow } from "@/lib/reporting/development";
 
 const options: DevelopmentOptions = {
   statuses: [{ id: "S1", name: "In Review", color: "#123456", resolved: true }],
@@ -27,10 +27,9 @@ describe("Development reporting dashboard", () => {
     expect(url.searchParams.get("page")).toBe("1");
   });
 
-  it("handles zero totals and documents current-status time attribution", () => {
+  it("handles zero totals", () => {
     expect(completionPercentages(0, 0)).toEqual({ completion: 0, incomplete: 0 });
     expect(completionPercentages(3, 1)).toEqual({ completion: 75, incomplete: 25 });
-    expect(usesCurrentStatusFallback("current_task_status")).toBe(true);
   });
 
   it("resolves Contacts values through synchronized Wrike users", () => {
@@ -49,7 +48,7 @@ describe("Development reporting dashboard", () => {
     expect((markup.match(/<select/g) ?? [])).toHaveLength(1);
   });
 
-  it("uses the same six project-list columns as Projects and keeps historical-status disclosure", () => {
+  it("uses the same six project-list columns as Projects and groups hours by timelog category", () => {
     const table = fs.readFileSync(path.join(process.cwd(), "components/development-project-table.tsx"), "utf8");
     const page = fs.readFileSync(path.join(process.cwd(), "app/development/page.tsx"), "utf8");
     for (const label of ["Project name", "Status", "Vertical", "ID Assigned", "Folders", "Development percentile"]) expect(table).toContain(`label: "${label}"`);
@@ -60,7 +59,9 @@ describe("Development reporting dashboard", () => {
     expect(table).not.toContain("Visible columns");
     expect(table).not.toContain("devtrack-development-columns");
     expect(page).toContain("loadProjectLengthPercentilesResult");
-    expect(fs.readFileSync(path.join(process.cwd(), "components/development-analytics.tsx"), "utf8")).toContain("historical status-at-entry data is not available");
+    const analytics = fs.readFileSync(path.join(process.cwd(), "components/development-analytics.tsx"), "utf8");
+    expect(analytics).toContain("hoursByCategory");
+    expect(analytics).not.toContain("historical status-at-entry data is not available");
   });
 
   it("provides a polished, accessible route-level loading state", () => {

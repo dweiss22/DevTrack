@@ -73,12 +73,11 @@ export function filtersForDevelopmentRpc(filters: DevelopmentFilters) {
 export type DevelopmentYearOption = { year: number; label: string; projects: number };
 export type DevelopmentYearOptions = { years: DevelopmentYearOption[]; missingProjects: number; defaultYear?: number };
 export type DevelopmentStatusMetric = { statusId: string; name: string; color: string | null; resolved: boolean; projects: number };
-export type DevelopmentTimeMetric = { statusId: string; name: string; color: string | null; resolved: boolean; minutes: number; projectCount: number };
+export type DevelopmentTimeCategoryMetric = { categoryId: string; name: string; minutes: number; projectCount: number };
 export type DevelopmentAnalytics = {
   metrics: { totalCourses: number; completedCourses: number; incompleteCourses: number; unmappedStatusCourses: number; totalMinutes: number };
   activeStatuses: DevelopmentStatusMetric[];
-  hoursByStatus: DevelopmentTimeMetric[];
-  timeStatusAttribution: "current_task_status" | "status_at_entry";
+  hoursByCategory: DevelopmentTimeCategoryMetric[];
 };
 export type DevelopmentReference = { id: string; name: string; resolved: boolean };
 export type DevelopmentProjectRow = {
@@ -178,7 +177,6 @@ export function completionPercentages(completed: number, incomplete: number) {
 }
 
 export function statusPercentage(value: number, total: number) { return total ? value / total * 100 : 0; }
-export function usesCurrentStatusFallback(mode: DevelopmentAnalytics["timeStatusAttribution"]) { return mode === "current_task_status"; }
 export function developmentFilterHref(filters: DevelopmentFilters, updates: Partial<DevelopmentFilters>) {
   return `/development?${developmentFiltersToQuery({ ...filters, ...updates, page: 1 })}`;
 }
