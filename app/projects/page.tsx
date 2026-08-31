@@ -23,7 +23,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const projectListQuery = new URLSearchParams(filtersToQuery(filters));
   if (returnTo) projectListQuery.set("returnTo", returnTo);
   const projectListHref = `/projects?${projectListQuery.toString()}`;
-  const { supabase, profile } = await requirePageCapability("view_standard_pages");
+  const { supabase, profile } = await requirePageCapability("view_core_pages");
   const [projectsLoad, statusesLoad, customFieldsResult, facetsLoad, peopleLoad, identitiesResult] = await Promise.all([
     captureProjectsRequest("Project list query", loadTaskRows(supabase, filters)),
     captureProjectsRequest("Project status options", loadStatusOptions(supabase, profile.organization_id)),

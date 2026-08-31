@@ -1,6 +1,6 @@
-export const APPLICATION_ROLES = ["super_admin", "admin", "id", "sme"] as const;
+export const APPLICATION_ROLES = ["super_admin", "admin", "id", "sme", "project_reviewer"] as const;
 export type ApplicationRole = typeof APPLICATION_ROLES[number];
-export const OPERATIONAL_ROLES = ["id", "sme"] as const;
+export const OPERATIONAL_ROLES = ["id", "sme", "project_reviewer"] as const;
 export type OperationalRole = typeof OPERATIONAL_ROLES[number];
 export const MANAGEMENT_ROLES = ["sme_coordinator", "admin", "super_admin"] as const;
 export type ManagementRole = typeof MANAGEMENT_ROLES[number];
@@ -17,6 +17,7 @@ export const CAPABILITIES = [
   "manage_integrations",
   "manage_data",
   "view_standard_pages",
+  "view_core_pages",
   "view_sme_dashboard",
   "select_sme_dashboard_user",
   "view_id_dashboard",
@@ -42,8 +43,9 @@ const roleCapabilities: Record<ApplicationRole, ReadonlySet<Capability>> = {
   admin: new Set(CAPABILITIES.filter((capability) =>
     capability !== "manage_operational_personas" && capability !== "view_personal_surveys"
       && capability !== "view_personal_survey_index")),
-  id: new Set(["view_standard_pages", "view_sme_dashboard", "select_sme_dashboard_user", "view_id_dashboard", "view_surveys", "view_personal_surveys", "view_personal_survey_index", "create_id_review", "edit_own_profile"]),
+  id: new Set(["view_standard_pages", "view_core_pages", "view_sme_dashboard", "select_sme_dashboard_user", "view_id_dashboard", "view_surveys", "view_personal_surveys", "view_personal_survey_index", "create_id_review", "edit_own_profile"]),
   sme: new Set(["view_sme_dashboard", "view_surveys", "view_personal_surveys", "create_sme_debrief", "edit_own_profile"]),
+  project_reviewer: new Set(["view_core_pages", "edit_own_profile"]),
 };
 
 const managementCapabilities: Record<ManagementRole, ReadonlySet<Capability>> = {
@@ -58,10 +60,11 @@ const managementCapabilities: Record<ManagementRole, ReadonlySet<Capability>> = 
 const operationalCapabilities: Record<OperationalRole, ReadonlySet<Capability>> = {
   id: roleCapabilities.id,
   sme: roleCapabilities.sme,
+  project_reviewer: roleCapabilities.project_reviewer,
 };
 
 export function normalizeApplicationRole(value: unknown): ApplicationRole {
-  if (value === "super_admin" || value === "admin" || value === "id" || value === "sme") return value;
+  if (value === "super_admin" || value === "admin" || value === "id" || value === "sme" || value === "project_reviewer") return value;
   if (value === "member") return "id";
   throw new Error("DevTrack encountered an unsupported application role.");
 }
@@ -69,14 +72,14 @@ export function normalizeApplicationRole(value: unknown): ApplicationRole {
 export function accessProfileForLegacyRole(role: ApplicationRole): AccessProfile {
   return {
     legacyRole: role,
-    operationalRoles: role === "id" || role === "sme" ? [role] : [],
+    operationalRoles: role === "id" || role === "sme" || role === "project_reviewer" ? [role] : [],
     managementRoles: role === "super_admin" || role === "admin" ? [role] : [],
   };
 }
 
 export function normalizeAccessProfile(value: Partial<AccessProfile> | null | undefined, fallbackRole: ApplicationRole): AccessProfile {
   const operationalRoles = [...new Set((value?.operationalRoles ?? []).filter((role): role is OperationalRole =>
-    role === "id" || role === "sme"))];
+    role === "id" || role === "sme" || role === "project_reviewer"))];
   const managementRoles = [...new Set((value?.managementRoles ?? []).filter((role): role is ManagementRole =>
     role === "sme_coordinator" || role === "admin" || role === "super_admin"))];
   const fallback = accessProfileForLegacyRole(fallbackRole);
@@ -98,16 +101,16 @@ export function isAdministratorRole(access: ApplicationRole | AccessProfile) {
 }
 
 export function roleLabel(role: ApplicationRole) {
-  return role === "super_admin" ? "SuperAdmin" : role === "admin" ? "Admin" : role === "id" ? "ID" : "SME";
+  return role === "super_admin" ? "SuperAdmin" : role === "admin" ? "Admin" : role === "id" ? "ID" : role === "sme" ? "SME" : "Project Reviewer";
 }
 
 export function landingPageForRole(role: ApplicationRole | AccessProfile) {
   const access = typeof role === "string" ? accessProfileForLegacyRole(role) : role;
-  if (hasCapability(access, "view_standard_pages")) return "/";
+  if (hasCapability(access, "view_standard_pages") || hasCapability(access, "view_core_pages")) return "/";
   if (hasCapability(access, "view_sme_dashboard")) return "/sme-dashboard";
   return "/profile";
 }
 
 export function assignableRolesFor(actorRole: ApplicationRole): ApplicationRole[] {
-  return hasCapability(actorRole, "manage_users") ? ["admin", "id", "sme"] : [];
+  return hasCapability(actorRole, "manage_users") ? ["admin", "id", "sme", "project_reviewer"] : [];
 }
