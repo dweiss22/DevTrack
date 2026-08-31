@@ -48,12 +48,12 @@ begin
   select pg_get_functiondef(procedure.oid) into definition
   from pg_proc procedure join pg_namespace namespace on namespace.oid=procedure.pronamespace
   where namespace.nspname='public' and procedure.proname='reporting_id_dashboard_rows';
-  if definition is null or definition not like '%if viewer.role=''id'' then target_wrike_user_id:=viewer.wrike_user_id;%' then
+  if definition is null or definition not like '%if viewer.role=''id'' then%target_wrike_user_id:=viewer.wrike_user_id;%' then
     raise exception 'reporting_id_dashboard_rows definition not found or shape changed unexpectedly';
   end if;
   definition:=replace(definition,
-    'if viewer.role=''id'' then target_wrike_user_id:=viewer.wrike_user_id;',
-    'if viewer.role=''id'' then target_wrike_user_id:=public.current_id_operational_identity();');
+    'target_wrike_user_id:=viewer.wrike_user_id;',
+    'target_wrike_user_id:=public.current_id_operational_identity();');
   execute definition;
 end $$;
 
