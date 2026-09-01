@@ -45,7 +45,7 @@ const roleCapabilities: Record<ApplicationRole, ReadonlySet<Capability>> = {
       && capability !== "view_personal_survey_index")),
   id: new Set(["view_standard_pages", "view_core_pages", "view_sme_dashboard", "select_sme_dashboard_user", "view_id_dashboard", "view_surveys", "view_personal_surveys", "view_personal_survey_index", "create_id_review", "edit_own_profile"]),
   sme: new Set(["view_sme_dashboard", "view_surveys", "view_personal_surveys", "create_sme_debrief", "edit_own_profile"]),
-  project_reviewer: new Set(["view_core_pages", "edit_own_profile"]),
+  project_reviewer: new Set(["view_core_pages", "view_surveys", "edit_own_profile"]),
 };
 
 const managementCapabilities: Record<ManagementRole, ReadonlySet<Capability>> = {

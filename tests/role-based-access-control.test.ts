@@ -34,8 +34,8 @@ describe("four-role capability model", () => {
     expect(ids("id")).toContain("projects");
     expect(ids("id")).toContain("sme-dashboard");
     expect(ids("id")).not.toContain("users");
-    expect(ids("sme")).toEqual(["sme-dashboard"]);
-    expect(ids("project_reviewer")).toEqual(["dashboard", "development", "projects"]);
+    expect(ids("sme")).toEqual(["sme-dashboard", "survey-results"]);
+    expect(ids("project_reviewer")).toEqual(["dashboard", "development", "survey-results", "projects"]);
     expect(hasCapability("sme", "create_sme_debrief")).toBe(true);
     expect(hasCapability("sme", "create_id_review")).toBe(false);
     expect(hasCapability("id", "create_id_review")).toBe(true);

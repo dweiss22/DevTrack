@@ -9,13 +9,15 @@ export async function GET(request: NextRequest) {
     taskId: z.string().uuid(),
     type: z.enum(SURVEY_TYPES),
   }).safeParse(Object.fromEntries(request.nextUrl.searchParams));
-  if (!parsed.success) return NextResponse.json({ error: "Survey context is unavailable." }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "The requested project or survey type is invalid." }, { status: 400 });
   const { data, error } = await supabase.rpc("survey_context_for_task", {
     target_task_id: parsed.data.taskId,
     requested_type: parsed.data.type,
   });
   if (error || !data) {
-    return NextResponse.json({ error: "Survey context is unavailable." }, { status: !error || error.code === "42501" ? 404 : 400 });
+    return NextResponse.json({
+      error: error?.message || "This project could not be found, or this survey type is not available for it.",
+    }, { status: !error || error.code === "42501" ? 404 : 400 });
   }
   if (parsed.data.type === "course_development_debrief"
     && profile.access.operationalRoles.includes("sme")) {

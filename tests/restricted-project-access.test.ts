@@ -52,7 +52,8 @@ describe("restricted SME projects and assigned-ID actions", () => {
 
   it("keeps assigned-ID controls off administrator-selected dashboard views", () => {
     expect(idDashboard).toContain("canActAsAssignedId");
-    expect(idDashboard).toContain("canActAsAssignedId\n                  ?");
+    const idDashboardTable = source("components/id-dashboard-project-table.tsx");
+    expect(idDashboardTable).toContain("canActAsAssignedId\n                ? ownHref");
     expect(internalProject).toContain('profile.role === "id"');
     expect(internalProject).toContain('rpc("assigned_id_project_controls"');
     expect(internalProject).not.toContain('hasCapability(profile.role, "create_id_review")');

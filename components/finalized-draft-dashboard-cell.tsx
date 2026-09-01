@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { finalizedCourseDraftUrlSchema, type FinalizedDraftStatus } from "@/lib/projects/finalized-draft";
 
 export function FinalizedDraftDashboardCell({ taskId, initial }: {

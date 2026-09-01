@@ -8,6 +8,7 @@ export type SmeProjectAccessState =
   | "mapping_missing"
   | "identity_unavailable"
   | "not_assigned"
+  | "assignment_conflict"
   | "unavailable";
 
 export type SmeProjectLoadResult =
@@ -51,7 +52,8 @@ export async function loadSmeProjectDetail({
   const state = (data as { state?: string }).state;
   if (state !== "allowed") {
     const known: SmeProjectAccessState[] = [
-      "not_found", "selection_required", "mapping_missing", "identity_unavailable", "not_assigned", "unavailable",
+      "not_found", "selection_required", "mapping_missing", "identity_unavailable",
+      "not_assigned", "assignment_conflict", "unavailable",
     ];
     return { ok: false, state: known.includes(state as SmeProjectAccessState)
       ? state as SmeProjectAccessState : "unavailable" };

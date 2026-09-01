@@ -2,6 +2,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { roleLabel, type ApplicationRole, type ManagementRole, type OperationalRole } from "@/lib/auth/roles";
+import { SmeProjectFolder } from "@/components/sme-project-folder";
 import { smeClassificationLabel, type SmeClassification } from "@/lib/smes/domain";
 
 export type ManagedMember = {
@@ -13,6 +14,7 @@ export type ManagedMember = {
   smeClassification: SmeClassification | null;
   smeClassificationUpdatedAt: string | null;
   smeIdentityId: string | null;
+  smeProjectFolderUrl?: string | null;
 };
 type IdentityOption = { id: string; name: string; email: string | null };
 type SmeIdentityOption = {
@@ -206,7 +208,7 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
         <h2 id="sme-identity-links-title">SME account links</h2></div>
         <p>Link an application account to the durable SME identity discovered from imported project fields. Historical projects and surveys stay with the identity.</p></div>
       <div className="admin-table-wrap"><table><thead><tr>
-        <th>Application user</th><th>Field-derived SME identity</th><th>Normalized match</th><th>Linkage status</th>
+        <th>Application user</th><th>Field-derived SME identity</th><th>Normalized match</th><th>Linkage status</th><th>Project folder</th>
       </tr></thead><tbody>{members.filter((member) => member.operationalRoles.includes("sme")).map((member) => {
         const linked = smeIdentities.find((identity) => identity.id === member.smeIdentityId);
         return <tr key={`sme-link:${member.id}`}>
@@ -226,6 +228,9 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
               : linked.resolutionStatus === "resolved" ? "Admin-confirmed match"
                 : "Field-derived match"}</span></>
             : <span className="notice compact warning">Link required</span>}</td>
+          <td>{member.smeIdentityId
+            ? <SmeProjectFolder smeIdentityId={member.smeIdentityId} initialUrl={member.smeProjectFolderUrl ?? null} editable />
+            : <span className="muted">Link an identity first</span>}</td>
         </tr>;
       })}</tbody></table></div>
     </section>

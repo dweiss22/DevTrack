@@ -2,6 +2,7 @@ import Link from "next/link";
 import React from "react";
 import { SearchableFilterSelect } from "@/components/searchable-filter-select";
 import { SmeDashboardAnalytics } from "@/components/sme-dashboard-analytics";
+import { SmeProjectFolder } from "@/components/sme-project-folder";
 import { SurveyReceived } from "@/components/survey-received";
 import {
   canonicalDashboardIdentities, dashboardIdentityLabel, submissionHref,
@@ -47,6 +48,8 @@ export function SmeDashboard({ identities, selected, rows, canSelect, canLaunchD
       : !selected.selectable ? <p className="card notice warning">This SME name is ambiguous or comes from conflicting project data. An administrator must confirm its identity before its dashboard can be opened.</p>
       : <>
         <div className="sme-dashboard-toolbar">
+          {selected.sme_identity_id && <SmeProjectFolder smeIdentityId={selected.sme_identity_id}
+            initialUrl={selected.project_folder_url ?? null} editable={canSelect} />}
           <span>Project period</span>
           <div className="scope-toggle" role="group" aria-label="Assignment period">
             <Link className={scope === "recent" ? "button" : "button secondary"} href={scopeHref("recent")}>Recent</Link>
