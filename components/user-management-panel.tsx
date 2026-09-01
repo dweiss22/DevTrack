@@ -44,6 +44,8 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
   const [deletionPreview, setDeletionPreview] = useState<DeletionPreview | null>(null);
   const [deletionStage, setDeletionStage] = useState("");
   const [inviteRole, setInviteRole] = useState<OperationalRole>("id");
+  const [newSmeNameDrafts, setNewSmeNameDrafts] = useState<Record<string, string>>({});
+  const NEW_SME_NAME_OPTION = "__new__";
 
   async function request(url: string, method: string, body: unknown, success: string) {
     setSubmitting(url); setMessage(""); setError(false);
@@ -148,6 +150,22 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
     }, `${member.name} is now linked to ${identity.name}.`);
   }
 
+  function reserveAndLinkSmeIdentity(member: ManagedMember) {
+    const newDisplayName = (newSmeNameDrafts[member.id] ?? "").trim();
+    if (!newDisplayName) return;
+    const replacing = Boolean(member.smeIdentityId);
+    const confirmed = !replacing || window.confirm(
+      `Confirm linking ${member.name} (${member.email}) to a new SME identity reserved for “${newDisplayName}”. `
+      + "This replaces the existing linkage; project and survey history will remain attached to the prior SME identity."
+    );
+    if (!confirmed) return;
+    void request(`/api/admin/users/${member.id}/sme-identity`, "PATCH", {
+      newDisplayName, confirmReplacement: replacing,
+    }, `${member.name} is now linked to a reserved identity for “${newDisplayName}”. `
+      + "This SME's projects will appear automatically once that exact name is typed into a Wrike project's SME field.");
+    setNewSmeNameDrafts((current) => ({ ...current, [member.id]: "" }));
+  }
+
   return <div className="admin-stack">
     {message && <p className={error ? "notice error" : "notice"} role={error ? "alert" : "status"}>{message}</p>}
     <section className="card" aria-labelledby="add-user-title">
@@ -206,21 +224,35 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
     <section className="card" aria-labelledby="sme-identity-links-title">
       <div className="section-heading"><div><p className="eyebrow">FIELD-DERIVED IDENTITY</p>
         <h2 id="sme-identity-links-title">SME account links</h2></div>
-        <p>Link an application account to the durable SME identity discovered from imported project fields. Historical projects and surveys stay with the identity.</p></div>
+        <p>Link an application account to the durable SME identity discovered from imported project fields. Historical projects and surveys stay with the identity. This is separate from the “Wrike identity / ID persona” column above, which only applies to people with a real Wrike login — an SME account links to the name typed into a project's Wrike SME field and works with or without a Wrike account. If the SME hasn't been assigned to any Wrike project yet, choose “＋ New name not yet in Wrike” below to reserve their name now; the account links up automatically once that exact name appears on a project.</p></div>
       <div className="admin-table-wrap"><table><thead><tr>
         <th>Application user</th><th>Field-derived SME identity</th><th>Normalized match</th><th>Linkage status</th><th>Project folder</th>
       </tr></thead><tbody>{members.filter((member) => member.operationalRoles.includes("sme")).map((member) => {
         const linked = smeIdentities.find((identity) => identity.id === member.smeIdentityId);
+        const draftingNewName = newSmeNameDrafts[member.id] !== undefined;
         return <tr key={`sme-link:${member.id}`}>
           <td><strong>{member.name}</strong><br /><span className="muted">{member.email}</span></td>
           <td><select aria-label={`Field-derived SME identity for ${member.name}`}
-            value={member.smeIdentityId ?? ""} disabled={Boolean(submitting) || impersonating}
-            onChange={(event) => linkSmeIdentity(member, event.target.value)}>
+            value={draftingNewName ? NEW_SME_NAME_OPTION : member.smeIdentityId ?? ""}
+            disabled={Boolean(submitting) || impersonating}
+            onChange={(event) => event.target.value === NEW_SME_NAME_OPTION
+              ? setNewSmeNameDrafts((current) => ({ ...current, [member.id]: "" }))
+              : linkSmeIdentity(member, event.target.value)}>
             <option value="" disabled>Select discovered SME</option>
             {smeIdentities.map((identity) => <option key={identity.id} value={identity.id}>
               {identity.name}{identity.resolutionStatus === "ambiguous" ? " — confirmation required" : ""}
             </option>)}
-          </select></td>
+            <option value={NEW_SME_NAME_OPTION}>＋ New name not yet in Wrike</option>
+          </select>
+          {draftingNewName && <div className="sme-new-identity-draft">
+            <input type="text" placeholder="Name as it will appear in Wrike's SME field" maxLength={200}
+              value={newSmeNameDrafts[member.id] ?? ""} disabled={Boolean(submitting) || impersonating}
+              onChange={(event) => setNewSmeNameDrafts((current) => ({ ...current, [member.id]: event.target.value }))} />
+            <button type="button" className="secondary" disabled={Boolean(submitting) || impersonating || !(newSmeNameDrafts[member.id] ?? "").trim()}
+              onClick={() => reserveAndLinkSmeIdentity(member)}>Reserve &amp; link</button>
+            <button type="button" className="secondary" disabled={Boolean(submitting)}
+              onClick={() => setNewSmeNameDrafts((current) => { const next = { ...current }; delete next[member.id]; return next; })}>Cancel</button>
+          </div>}</td>
           <td>{linked ? <><strong>{linked.name}</strong><br /><code>{linked.normalizedName}</code></>
             : <span className="muted">Not linked</span>}</td>
           <td>{linked ? <><span className="role-chip">Linked</span>{" "}
