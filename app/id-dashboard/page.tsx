@@ -59,10 +59,19 @@ export default async function IdDashboardPage({ searchParams }: { searchParams: 
   const ownOperationalView = profile.role === "id"
     || (profile.role === "super_admin" && Boolean(persona?.wrike_user_id)
       && selected?.wrike_user_id === persona?.wrike_user_id);
+  const surveyRequirements = ownOperationalView
+    ? await supabase.rpc("survey_personal_requirements")
+    : { data: null };
+  const requirementCounts = surveyRequirements.data as { incompleteCount: number; completedCount: number } | null;
   return <AppShell isAdmin={isAdministratorRole(profile.access)}>
     <header className="page-header"><div><p className="eyebrow">INSTRUCTIONAL DESIGN ASSIGNMENTS</p>
       <h1>ID Dashboard{selected ? ` — ${selected.display_name}` : ""}</h1>
       <p>Online Learning projects explicitly assigned through the Wrike ID Assigned custom field.</p></div></header>
+    {requirementCounts && <a className="card id-dashboard-survey-summary" href="/surveys">
+      <span>Your assigned surveys</span>
+      <span><strong>{requirementCounts.incompleteCount}</strong> incomplete</span>
+      <span><strong>{requirementCounts.completedCount}</strong> completed</span>
+    </a>}
     <IdDashboard identities={identities} selected={selected} rows={enrichedRows}
       canSelect={canSelect} canActAsAssignedId={ownOperationalView} mappingRequired={!canSelect && !selected}
       ownOperationalView={ownOperationalView} analytics={analyticsResult.data}

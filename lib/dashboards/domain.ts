@@ -8,6 +8,7 @@ export type DashboardIdentity = {
   mapping_status: "mapped" | "unmapped" | "missing";
   identity_status: "discovered" | "verified" | "ambiguous" | "resolved" | "unverified";
   selectable: boolean;
+  project_folder_url?: string | null;
 };
 
 export function canonicalDashboardIdentities(identities: readonly DashboardIdentity[]) {

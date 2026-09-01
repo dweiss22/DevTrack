@@ -108,8 +108,8 @@ describe("role-aware dashboard behavior", () => {
   });
 
   it("renders separate project/SME review rows and mobile cards", () => {
-    expect(source("components/id-dashboard.tsx")).toContain("row.task_id}:${row.sme_identity_id");
-    expect(source("components/id-dashboard.tsx")).toContain("colleague_reviews");
+    expect(source("components/id-dashboard-project-table.tsx")).toContain("row.task_id}:${row.sme_identity_id");
+    expect(source("components/id-dashboard-project-table.tsx")).toContain("colleague_reviews");
     expect(source("lib/dashboards/domain.ts")).toContain("Start review");
     expect(source("app/globals.css")).toContain(".dashboard-project-table td::before");
   });

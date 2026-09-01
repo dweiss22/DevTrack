@@ -11,16 +11,20 @@ const content: Record<AccessState, { title: string; message: string }> = {
     message: "Choose a verified SME from SME Dashboard before opening this project.",
   },
   mapping_missing: {
-    title: "Wrike identity not configured",
-    message: "Ask an administrator to map your DevTrack account to your verified Wrike identity.",
+    title: "SME identity not configured",
+    message: "Ask an administrator to link your DevTrack account to your SME identity in User Management. A Wrike account is not required for this link.",
   },
   identity_unavailable: {
-    title: "Wrike identity unavailable",
-    message: "The selected identity is missing, inactive, unresolved, or not verified in this organization.",
+    title: "SME identity unavailable",
+    message: "The selected SME identity is missing or its name matches more than one person in this organization's project data. Ask an administrator to resolve it.",
   },
   not_assigned: {
     title: "Project assignment unavailable",
-    message: "The project does not explicitly assign this SME through the authoritative Wrike SME field.",
+    message: "This project's SME field does not list this SME's name. Ask an administrator to confirm the SME field on this project in Wrike.",
+  },
+  assignment_conflict: {
+    title: "SME field needs administrative review",
+    message: "This SME's name appears on the project, but the project's SME field contains conflicting or ambiguous values, so it cannot be shown here yet. Ask an administrator to correct the SME field on this project in Wrike.",
   },
   unavailable: {
     title: "Project unavailable",

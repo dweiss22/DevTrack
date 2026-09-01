@@ -57,8 +57,12 @@ describe("dashboard project recency ordering", () => {
     for (const file of ["components/id-dashboard.tsx", "components/sme-dashboard.tsx"]) {
       const source = fs.readFileSync(path.join(root, file), "utf8");
       expect(source).toContain("sortDashboardProjectsNewestFirst(rows)");
-      expect(source).toContain("orderedRows.map");
-      expect(source).toContain("Projects ordered from most recent to oldest");
     }
+    const idTable = fs.readFileSync(path.join(root, "components/id-dashboard-project-table.tsx"), "utf8");
+    expect(idTable).toContain("rows.map");
+    expect(idTable).toContain("Projects ordered from most recent to oldest");
+    const smeDashboard = fs.readFileSync(path.join(root, "components/sme-dashboard.tsx"), "utf8");
+    expect(smeDashboard).toContain("orderedRows.map");
+    expect(smeDashboard).toContain("Projects ordered from most recent to oldest");
   });
 });

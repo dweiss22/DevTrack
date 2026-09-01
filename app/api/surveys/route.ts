@@ -26,6 +26,6 @@ export async function POST(request: NextRequest) {
         target_reviewed_wrike_user_id: parsed.data.reviewedWrikeUserId ?? null,
       });
   return error
-    ? NextResponse.json({ error: "Survey context is unavailable." }, { status: error.code === "42501" ? 404 : 400 })
+    ? NextResponse.json({ error: error.message || "Survey context is unavailable." }, { status: error.code === "42501" ? 404 : 400 })
     : NextResponse.json({ id: data });
 }

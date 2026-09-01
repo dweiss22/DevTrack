@@ -1,7 +1,7 @@
 import { hasCapability, type AccessProfile, type ApplicationRole, type Capability } from "@/lib/auth/roles";
 
 export type NavigationEntry =
-  | { kind: "link"; id: "dashboard" | "development" | "sme-dashboard" | "sme-management" | "id-dashboard" | "surveys" | "projects" | "users" | "data" | "admin-surveys"; href: string; label: string; capability: Capability }
+  | { kind: "link"; id: "dashboard" | "development" | "sme-dashboard" | "sme-management" | "id-dashboard" | "surveys" | "survey-results" | "projects" | "users" | "data" | "admin-surveys"; href: string; label: string; capability: Capability }
   | { kind: "divider"; id: "projects-divider" | "administration-divider" };
 
 export const APPLICATION_NAVIGATION: readonly NavigationEntry[] = [
@@ -10,6 +10,7 @@ export const APPLICATION_NAVIGATION: readonly NavigationEntry[] = [
   { kind: "link", id: "sme-dashboard", href: "/sme-dashboard", label: "SME Dashboard", capability: "view_sme_dashboard" },
   { kind: "link", id: "id-dashboard", href: "/id-dashboard", label: "ID Dashboard", capability: "view_id_dashboard" },
   { kind: "link", id: "surveys", href: "/surveys", label: "Surveys", capability: "view_personal_survey_index" },
+  { kind: "link", id: "survey-results", href: "/survey-results", label: "Survey Results", capability: "view_surveys" },
   { kind: "divider", id: "projects-divider" },
   { kind: "link", id: "projects", href: "/projects", label: "Projects", capability: "view_core_pages" },
   { kind: "divider", id: "administration-divider" },

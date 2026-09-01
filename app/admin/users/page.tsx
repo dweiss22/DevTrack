@@ -31,7 +31,7 @@ export default async function UserManagementPage() {
   if (smeProfilesError) throw new Error(`SME account types could not be loaded: ${smeProfilesError.message}`);
   const { data: smeIdentities, error: smeIdentitiesError } = await admin
     .from("sme_dashboard_identities")
-    .select("id,display_name,normalized_name,resolution_status,ambiguity_reason,wrike_user_id,application_user_id")
+    .select("id,display_name,normalized_name,resolution_status,ambiguity_reason,wrike_user_id,application_user_id,project_folder_url")
     .eq("organization_id", profile.organization_id)
     .order("display_name");
   if (smeIdentitiesError) throw new Error(`Field-derived SME identities could not be loaded: ${smeIdentitiesError.message}`);
@@ -54,6 +54,8 @@ export default async function UserManagementPage() {
   const smeProfileByUser = new Map((smeProfiles ?? []).map((row) => [row.application_user_id, row]));
   const smeIdentityByUser = new Map((smeIdentities ?? []).filter((row) => row.application_user_id)
     .map((row) => [row.application_user_id as string, row.id]));
+  const smeFolderUrlByUser = new Map((smeIdentities ?? []).filter((row) => row.application_user_id)
+    .map((row) => [row.application_user_id as string, row.project_folder_url as string | null]));
   const members = (users ?? []).map((user) => {
     const authenticationUser = authenticationById.get(user.id);
     return {
@@ -72,6 +74,7 @@ export default async function UserManagementPage() {
       smeClassification: smeProfileByUser.get(user.id)?.classification as "internal" | "external" | null ?? null,
       smeClassificationUpdatedAt: smeProfileByUser.get(user.id)?.updated_at ?? null,
       smeIdentityId: smeIdentityByUser.get(user.id) ?? null,
+      smeProjectFolderUrl: smeFolderUrlByUser.get(user.id) ?? null,
     };
   });
   const identityOptions = (wrikeUsers ?? []).map((identity) => ({ id: identity.id, name: identity.display_name, email: identity.email }));
