@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { user, profile } = await requireCapability("manage_users");
+  const { user, profile } = await requireCapability("manage_smes");
   const parsed = z.object({
     smeIdentityId: z.string().uuid().optional(),
     newDisplayName: z.string().trim().min(1).max(200).optional(),
