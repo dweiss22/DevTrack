@@ -213,7 +213,7 @@ describe("complete survey database and interface contract", () => {
   it("exposes builder preview, endpoint guidance, and availability UI fields", () => {
     const designer = source("components/survey-designer.tsx");
     const renderer = source("components/survey-renderer.tsx");
-    const personal = source("app/surveys/page.tsx");
+    const personal = source("components/personal-survey-list.tsx");
     expect(designer).toContain("Preview SME type");
     expect(designer).toContain("displayOrder");
     expect(designer).toContain("minDescription");

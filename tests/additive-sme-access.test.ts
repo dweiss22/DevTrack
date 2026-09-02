@@ -21,7 +21,6 @@ describe("additive SME access", () => {
     const sme = accessProfileForLegacyRole("sme");
     expect(hasCapability(sme, "view_personal_surveys")).toBe(true);
     expect(hasCapability(sme, "view_personal_survey_index")).toBe(false);
-    expect(navigationForRole(sme).some((entry) => entry.kind === "link" && entry.id === "surveys")).toBe(false);
   });
 
   it("ships audited grants and an anonymized, recent-aware project experience", () => {

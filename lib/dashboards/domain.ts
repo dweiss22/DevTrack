@@ -71,7 +71,6 @@ export function dashboardReturnHref(value: string | string[] | undefined, fallba
   const allowed = candidate === "/sme-dashboard" || candidate.startsWith("/sme-dashboard?")
     || /^\/sme-dashboard\/projects\/[0-9a-f-]+$/i.test(candidate)
     || candidate === "/id-dashboard" || candidate.startsWith("/id-dashboard?")
-    || candidate === "/surveys" || candidate.startsWith("/surveys?")
     || /^\/projects\/[0-9a-f-]+(?:\?.*)?$/i.test(candidate);
   return allowed ? candidate : fallback;
 }

@@ -103,7 +103,7 @@ describe("versioned survey management", () => {
   });
 
   it("keeps personal completed responses read-only and excludes revision assignment", () => {
-    const page = source("app/surveys/page.tsx");
+    const page = source("components/personal-survey-list.tsx");
     const dialog = source("components/survey-dialog.tsx");
     const actions = source("app/api/admin/surveys/submissions/[id]/actions/route.ts");
     expect(page).toContain("Incomplete");
