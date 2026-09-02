@@ -326,8 +326,6 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
 .survey-results-statements > div { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 6px; }
 .survey-results-statements dt { color: var(--muted); }
 .survey-results-statements dd { font-weight: 700; }
-.id-dashboard-survey-summary { display: flex; align-items: center; gap: 18px; margin-bottom: 16px; font-weight: 700; color: var(--navy); text-decoration: none; }
-.id-dashboard-survey-summary strong { font-size: 1.1rem; }
 pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px; background: #f8fafc; padding: 12px; border-radius: 7px; }
 .muted, small { color: var(--muted); }
 .report-filters { margin-bottom: 18px; }
