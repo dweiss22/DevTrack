@@ -858,7 +858,9 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
 .sme-chart-canvas { min-width: 0; overflow: hidden; }
 .sme-dashboard-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: .75rem; margin: 0 0 .75rem; color: var(--muted); font-size: .78rem; font-weight: 700; }
 .sme-project-folder-editor { display: flex; align-items: center; gap: .5rem; margin-right: auto; }
-.sme-project-folder-editor input { min-width: 220px; padding: .4rem .6rem; border: 1px solid var(--line); border-radius: 8px; font-size: .8rem; }
+.link-field-editor { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.link-field-editing input { min-width: 220px; padding: .4rem .6rem; border: 1px solid var(--line); border-radius: 8px; font-size: .8rem; }
+.link-field-edit-icon { display: inline-flex; align-items: center; justify-content: center; width: 1.9rem; height: 1.9rem; padding: 0; border-radius: 999px; background: var(--blue-soft); color: var(--navy); font-size: .85rem; line-height: 1; box-shadow: none; }
 .scope-toggle { display: flex; gap: .5rem; white-space: nowrap; }
 .sme-project-list td:nth-child(2), .sme-project-list th:nth-child(2) { width: 90px; text-align: center; }
 .sme-status-indicator { display: inline-grid; place-items: center; width: 2rem; height: 2rem; border-radius: 999px; }
@@ -926,6 +928,9 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
 .sme-category-label { min-width: 0; overflow-wrap: anywhere; }
 .sme-category-legend strong { white-space: nowrap; color: var(--navy); }
 .sme-management-metrics { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.metric-card { display: flex; flex-direction: column; gap: .4rem; min-width: 0; padding: 1.1rem 1.25rem; }
+.metric-card span { color: var(--muted); font-size: .72rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+.metric-card strong { color: var(--navy); font-size: 1.9rem; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1.1; overflow-wrap: anywhere; }
 .sme-management-page { min-width: 0; width: 100%; max-width: 1240px; margin: 0 auto; }
 .sme-management-page .card { min-width: 0; }
 .sme-management-page .admin-table-wrap { width: 100%; }

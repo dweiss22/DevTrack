@@ -72,6 +72,7 @@ export function SurveyDialog({
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [critical, setCritical] = useState(false);
+  const closedRef = useRef(false);
   const dirty = state === "ready" && JSON.stringify(answers) !== baseline;
   const editable = Boolean(!forceReadOnly && detail?.viewer.canEdit && !detail.submission.is_locked);
 
@@ -88,9 +89,19 @@ export function SurveyDialog({
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (dialog && !dialog.open) dialog.showModal();
-    return () => { if (dialog?.open) dialog.close(); };
-  }, []);
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+    const handleClose = () => {
+      if (closedRef.current) return;
+      closedRef.current = true;
+      router.replace(fallbackHref);
+    };
+    dialog.addEventListener("close", handleClose);
+    return () => {
+      dialog.removeEventListener("close", handleClose);
+      if (dialog.open) dialog.close();
+    };
+  }, [fallbackHref, router]);
 
   useEffect(() => {
     if (submissionId) {
@@ -121,10 +132,10 @@ export function SurveyDialog({
   }, [dirty]);
 
   function close() {
-    if (critical) return;
-    if (dirty && !confirm("You have unsaved changes. Close this survey and discard them?")) return;
-    dialogRef.current?.close();
-    router.replace(fallbackHref);
+    if (state === "ready" && dirty && !confirm("You have unsaved changes. Close this survey and discard them?")) return;
+    const dialog = dialogRef.current;
+    if (dialog?.open) dialog.close();
+    else if (!closedRef.current) { closedRef.current = true; router.replace(fallbackHref); }
   }
 
   async function save(submit: boolean) {

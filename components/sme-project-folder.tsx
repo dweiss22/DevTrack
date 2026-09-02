@@ -1,16 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
+import { LinkFieldEditor } from "@/components/link-field-editor";
 
 export function SmeProjectFolder({ smeIdentityId, initialUrl, editable }: {
   smeIdentityId: string; initialUrl: string | null; editable: boolean;
 }) {
-  const [url, setUrl] = useState(initialUrl ?? "");
-  const [saved, setSaved] = useState(initialUrl ?? "");
+  const [saved, setSaved] = useState(initialUrl);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
-  async function save() {
+  async function save(url: string) {
     setSaving(true); setMessage("");
     try {
       const response = await fetch("/api/smes/project-folder", {
@@ -19,26 +19,17 @@ export function SmeProjectFolder({ smeIdentityId, initialUrl, editable }: {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "The project folder link could not be saved.");
-      setSaved(data.projectFolderUrl ?? ""); setUrl(data.projectFolderUrl ?? ""); setMessage("Saved.");
+      setSaved(data.projectFolderUrl ?? null); setMessage("Saved.");
+      return true;
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "The project folder link could not be saved.");
+      return false;
     } finally { setSaving(false); }
   }
 
-  if (!editable) {
-    return saved
-      ? <a className="button secondary" href={saved} target="_blank" rel="noopener noreferrer">Project Folder</a>
-      : null;
-  }
-
   return <div className="sme-project-folder-editor">
-    {saved && <a className="button secondary" href={saved} target="_blank" rel="noopener noreferrer">Project Folder</a>}
-    <label className="sr-only" htmlFor="sme-project-folder-url">SME project folder URL</label>
-    <input id="sme-project-folder-url" type="url" placeholder="https://…sharepoint.com/…"
-      value={url} onChange={(event) => setUrl(event.target.value)} />
-    <button type="button" className="button secondary" onClick={save} disabled={saving}>
-      {saving ? "Saving…" : "Save folder link"}
-    </button>
+    <LinkFieldEditor url={saved} editable={editable} label="Project Folder" addLabel="Add project folder link"
+      saving={saving} onSave={save} />
     {message && <span className="muted">{message}</span>}
   </div>;
 }
