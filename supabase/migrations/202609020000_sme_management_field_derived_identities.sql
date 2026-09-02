@@ -217,7 +217,9 @@ begin
 end;
 $$;
 
-create or replace function public.sme_management_rows()
+drop function if exists public.sme_management_rows();
+
+create function public.sme_management_rows()
 returns table(
   sme_identity_id uuid,wrike_user_id uuid,application_user_id uuid,display_name text,email text,
   mapping_status text,coordinator boolean,assigned_projects bigint,active_projects bigint,
