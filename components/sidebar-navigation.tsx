@@ -3,13 +3,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BarChart3, BookOpenCheck, BriefcaseBusiness, ClipboardList, Database, FolderKanban, Gauge, LogOut, Menu, UserRound, Users, UsersRound, X } from "lucide-react";
+import { BarChart3, BookOpenCheck, BriefcaseBusiness, ClipboardList, Database, FolderKanban, Gauge, LogOut, Menu, UserRound, Users, UsersRound, Video, X } from "lucide-react";
 import { DevTrackBrand } from "@/components/devtrack-brand";
 import lexipolLogo from "@/images/Lexipol_logo_wht-60.png";
 import { navigationForRole, navigationPathIsActive, type NavigationEntry } from "@/lib/navigation";
 import type { AccessProfile } from "@/lib/auth/roles";
 
-const icons = { dashboard: BarChart3, development: BookOpenCheck, sme: Users, "sme-dashboard": Gauge, "sme-management": UsersRound, "id-dashboard": UserRound, surveys: ClipboardList, "survey-results": ClipboardList, "admin-surveys": ClipboardList, other: UsersRound, projects: FolderKanban, users: BriefcaseBusiness, data: Database };
+const icons = { dashboard: BarChart3, development: BookOpenCheck, sme: Users, "sme-dashboard": Gauge, "sme-management": UsersRound, "id-dashboard": UserRound, "video-dashboard": Video, surveys: ClipboardList, "survey-results": ClipboardList, "admin-surveys": ClipboardList, other: UsersRound, projects: FolderKanban, users: BriefcaseBusiness, data: Database };
 
 export function SidebarNavigation({ access, lastSynced, profileName, impersonating = false }: { access: AccessProfile; lastSynced?: string | null; profileName: string; impersonating?: boolean }) {
   const pathname = usePathname();

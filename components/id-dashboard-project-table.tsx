@@ -125,7 +125,7 @@ export function IdDashboardProjectTable({ rows, returnTo, canActAsAssignedId }: 
         </tr>;
       })}</tbody></table></div>
       : <p className="card empty" style={{ display: columnCount ? undefined : "none" }}>
-        No synchronized Online Learning projects explicitly match this Wrike identity in the ID Assigned field.
+        No synchronized Online Learning projects explicitly match this Wrike identity in the Designer Assigned field.
       </p>}
   </div>;
 }

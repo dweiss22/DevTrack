@@ -33,7 +33,7 @@ export function DevelopmentProjectTable({ rows, total, filters, people, percenti
           <td data-label="Project name"><Link href={`/projects/${row.taskId}?returnTo=${encodeURIComponent(currentHref)}&returnLabel=Development`}>{row.title}</Link></td>
           <td data-label="Status">{row.status.resolved ? <StatusBadge name={row.status.name} id={row.status.id} color={row.status.color} /> : <span className="status-badge unresolved"><UnresolvedReferenceLabel id={row.status.id} type="custom_status" label="Unknown Status" /></span>}</td>
           <td data-label="Vertical">{projectTableVerticalLabel(vertical, row.verticalState)}{vertical?.hasUnresolvedVertical ? <span title="Vertical value needs review"> ⚠</span> : null}</td>
-          <td data-label="ID Assigned">{designers.length ? designers.map((person, index) => <span key={`${person.id}-${index}`}>{index ? ", " : ""}{person.resolved ? person.label : <UnresolvedReferenceLabel id={person.referenceId ?? person.id} type="user" />}</span>) : "—"}</td>
+          <td data-label="Designer Assigned">{designers.length ? designers.map((person, index) => <span key={`${person.id}-${index}`}>{index ? ", " : ""}{person.resolved ? person.label : <UnresolvedReferenceLabel id={person.referenceId ?? person.id} type="user" />}</span>) : "—"}</td>
           <td data-label="Folders">{row.locations.length ? row.locations.map((location, index) => <span key={location.id}>{index ? ", " : ""}{location.resolved ? location.name : <UnresolvedReferenceLabel id={location.id} type="folder" />}</span>) : "—"}</td>
           <td data-label="Development percentile"><ProjectPercentileRing benchmark={percentileByTask[row.taskId] ?? null} /></td>
         </tr>;
@@ -47,7 +47,7 @@ const DEVELOPMENT_SORT_COLUMNS = [
   { key: "title", label: "Project name", initial: "asc" },
   { key: "status", label: "Status", initial: "asc" },
   { key: "vertical", label: "Vertical", initial: "asc" },
-  { key: "designer", label: "ID Assigned", initial: "asc" },
+  { key: "designer", label: "Designer Assigned", initial: "asc" },
   { key: "folders", label: "Folders", initial: "asc" },
   { key: "percentile", label: "Development percentile", initial: "desc" }
 ] as const satisfies readonly { key: DevelopmentFilters["sort"]; label: string; initial: TableSortDirection }[];

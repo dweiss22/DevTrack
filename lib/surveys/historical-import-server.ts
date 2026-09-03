@@ -406,7 +406,7 @@ export async function stageHistoricalSurveyFile(input: StageInput): Promise<Hist
     });
 
     if (matchedTask && respondentWrike && surveyType === "id_sme_review" && !idAssignments.has(`${matchedTask.id}:${respondentWrike.id}`)) {
-      issue(stagedIssues, "missing_assignment", "The matched reviewer is not currently resolved in the project's ID Assigned field.", {
+      issue(stagedIssues, "missing_assignment", "The matched reviewer is not currently resolved in the project's Designer Assigned field.", {
         candidates: [{ taskId: matchedTask.id, wrikeUserId: respondentWrike.id, role: "id" }],
       });
     }

@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 
-const PROJECT_COLUMNS = ["Project name", "Status", "Vertical", "ID Assigned", "Folders", "Development percentile"];
+const PROJECT_COLUMNS = ["Project name", "Status", "Vertical", "Designer Assigned", "Folders", "Development percentile"];
 
 export default function DevelopmentLoading() {
   return <AppShell isAdmin={false}>

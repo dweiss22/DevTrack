@@ -51,7 +51,7 @@ describe("Development reporting dashboard", () => {
   it("uses the same six project-list columns as Projects and groups hours by timelog category", () => {
     const table = fs.readFileSync(path.join(process.cwd(), "components/development-project-table.tsx"), "utf8");
     const page = fs.readFileSync(path.join(process.cwd(), "app/development/page.tsx"), "utf8");
-    for (const label of ["Project name", "Status", "Vertical", "ID Assigned", "Folders", "Development percentile"]) expect(table).toContain(`label: "${label}"`);
+    for (const label of ["Project name", "Status", "Vertical", "Designer Assigned", "Folders", "Development percentile"]) expect(table).toContain(`label: "${label}"`);
     expect(table).toContain("SortableTableHeader");
     expect(table).toContain("projectOverviewContactValues");
     expect(table).toContain("projectTableVerticalLabel");
@@ -73,6 +73,6 @@ describe("Development reporting dashboard", () => {
     expect(loading).toContain("development-route-loading-filter");
     expect(loading).toContain("development-route-loading-chart");
     expect(loading).toContain("development-route-loading-projects");
-    for (const label of ["Project name", "Status", "Vertical", "ID Assigned", "Folders", "Development percentile"]) expect(loading).toContain(`"${label}"`);
+    for (const label of ["Project name", "Status", "Vertical", "Designer Assigned", "Folders", "Development percentile"]) expect(loading).toContain(`"${label}"`);
   });
 });

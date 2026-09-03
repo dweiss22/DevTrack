@@ -71,7 +71,7 @@ export default async function IdDashboardPage({ searchParams }: { searchParams: 
   return <AppShell isAdmin={isAdministratorRole(profile.access)}>
     <header className="page-header"><div><p className="eyebrow">INSTRUCTIONAL DESIGN ASSIGNMENTS</p>
       <h1>ID Dashboard{selected ? ` — ${selected.display_name}` : ""}</h1>
-      <p>Online Learning projects explicitly assigned through the Wrike ID Assigned custom field.</p></div></header>
+      <p>Online Learning projects explicitly assigned through the Wrike Designer Assigned custom field.</p></div></header>
     {ownOperationalView && (surveyRequirements.error
       ? <p className="card notice error" role="alert">Your assigned surveys could not be loaded. Confirm the latest database migration is applied.</p>
       : requirements && <PersonalSurveyList requirements={requirements} tab={surveyTab} tabHref={tabHref}
