@@ -736,6 +736,9 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
 .survey-tabs a { display: inline-flex; align-items: center; gap: 7px; padding: 10px 15px; border-radius: 8px 8px 0 0; color: var(--muted); font-weight: 750; text-decoration: none; }
 .survey-tabs a[aria-current="page"] { margin-bottom: -1px; border: 1px solid var(--line); border-bottom-color: #fff; background: #fff; color: var(--blue); }
 .survey-tabs a span { min-width: 24px; padding: 2px 7px; border-radius: 999px; background: #eaf1f8; color: var(--navy); text-align: center; font-size: 11px; }
+.survey-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 10px 15px; border: 0; border-radius: 8px 8px 0 0; background: none; color: var(--muted); font-weight: 750; font: inherit; cursor: pointer; }
+.survey-tabs button[aria-current="page"] { margin-bottom: -1px; border: 1px solid var(--line); border-bottom-color: #fff; background: #fff; color: var(--blue); }
+.survey-tabs button span { min-width: 24px; padding: 2px 7px; border-radius: 999px; background: #eaf1f8; color: var(--navy); text-align: center; font-size: 11px; }
 .survey-template-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
 .survey-template-card { display: grid; align-content: start; gap: 16px; }
 .survey-template-card h2 { margin: 2px 0 0; }

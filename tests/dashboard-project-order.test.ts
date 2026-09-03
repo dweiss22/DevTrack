@@ -59,7 +59,7 @@ describe("dashboard project recency ordering", () => {
       expect(source).toContain("sortDashboardProjectsNewestFirst(rows)");
     }
     const idTable = fs.readFileSync(path.join(root, "components/id-dashboard-project-table.tsx"), "utf8");
-    expect(idTable).toContain("rows.map");
+    expect(idTable).toContain("visibleRows.map");
     expect(idTable).toContain("Projects ordered from most recent to oldest");
     const smeDashboard = fs.readFileSync(path.join(root, "components/sme-dashboard.tsx"), "utf8");
     expect(smeDashboard).toContain("orderedRows.map");

@@ -1,6 +1,5 @@
 import { AppShell } from "@/components/app-shell";
 import { IdDashboard, type IdDashboardRow } from "@/components/id-dashboard";
-import { PersonalSurveyList, type Requirements } from "@/components/personal-survey-list";
 import { requirePageCapability } from "@/lib/auth";
 import { hasCapability, isAdministratorRole } from "@/lib/auth/roles";
 import type { DashboardIdentity } from "@/lib/dashboards/domain";
@@ -10,11 +9,10 @@ type CurrentIdentity = { wrike_user_id: string | null; display_name: string | nu
 type DraftStatusRow = { task_id: string; available: boolean; updated_at: string | null; updated_by_name: string | null };
 type CourseStyleRow = { task_id: string; course_style: string | null };
 
-export default async function IdDashboardPage({ searchParams }: { searchParams: Promise<{ id?: string; tab?: string }> }) {
+export default async function IdDashboardPage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
   const { profile, supabase } = await requirePageCapability("view_id_dashboard");
   const query = await searchParams;
   const requested = query.id;
-  const surveyTab = query.tab === "completed" ? "completed" : "incomplete";
   const canSelect = hasCapability(profile.access, "select_id_dashboard_user");
   const [identityResult, personaResult] = await Promise.all([
     canSelect ? supabase.rpc("reporting_id_dashboard_identities") : supabase.rpc("reporting_current_id_identity"),
@@ -62,20 +60,10 @@ export default async function IdDashboardPage({ searchParams }: { searchParams: 
   const ownOperationalView = profile.role === "id"
     || (profile.role === "super_admin" && Boolean(persona?.wrike_user_id)
       && selected?.wrike_user_id === persona?.wrike_user_id);
-  const surveyRequirements = ownOperationalView
-    ? await supabase.rpc("survey_personal_requirements")
-    : { data: null, error: null };
-  const requirements = surveyRequirements.data as Requirements | null;
-  const tabHref = (nextTab: "incomplete" | "completed") =>
-    `/id-dashboard?${new URLSearchParams({ ...(requested ? { id: requested } : {}), tab: nextTab })}`;
   return <AppShell isAdmin={isAdministratorRole(profile.access)}>
     <header className="page-header"><div><p className="eyebrow">INSTRUCTIONAL DESIGN ASSIGNMENTS</p>
       <h1>ID Dashboard{selected ? ` — ${selected.display_name}` : ""}</h1>
       <p>Online Learning projects explicitly assigned through the Wrike Designer Assigned custom field.</p></div></header>
-    {ownOperationalView && (surveyRequirements.error
-      ? <p className="card notice error" role="alert">Your assigned surveys could not be loaded. Confirm the latest database migration is applied.</p>
-      : requirements && <PersonalSurveyList requirements={requirements} tab={surveyTab} tabHref={tabHref}
-        returnTo={tabHref(surveyTab)} />)}
     <IdDashboard identities={identities} selected={selected} rows={enrichedRows}
       canSelect={canSelect} canActAsAssignedId={ownOperationalView} mappingRequired={!canSelect && !selected}
       ownOperationalView={ownOperationalView} analytics={analyticsResult.data}

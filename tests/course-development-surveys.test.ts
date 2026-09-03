@@ -137,7 +137,7 @@ describe("route-backed accessible survey experience", () => {
   it("provides canonical/intercepted routes and role-aware launch points", () => {
     expect(source("app/@modal/(.)projects/[id]/surveys/[surveyType]/page.tsx")).toContain("<SurveyDialog");
     expect(source("app/projects/[id]/surveys/[surveyType]/page.tsx")).toContain("survey_context_for_task");
-    expect(source("app/id-dashboard/page.tsx")).toContain('supabase.rpc("survey_personal_requirements")');
+    expect(source("components/id-dashboard-project-table.tsx")).toContain('own_review?.status === "submitted"');
     expect(source("app/admin/surveys/page.tsx")).toContain('requirePageCapability("manage_surveys")');
     expect(source("components/sme-dashboard.tsx")).toContain('"course-development-debrief"');
     expect(source("app/projects/[id]/page.tsx")).toContain('surveyHref(id, "id-sme-review"');

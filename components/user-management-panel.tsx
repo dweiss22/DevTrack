@@ -196,9 +196,21 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
           <td>{member.name}{member.accountState === "deletion_pending" ? <><br /><span className="error">Deletion pending</span></> : null}</td>
           <td>{member.email}</td>
           <td>{locked ? <><strong>{roleLabel(member.role)}</strong><br /><span className="muted">Fixed account</span></> : <div className="role-checkboxes">
-            {member.operationalRoles.map((role) => <span className="role-chip" key={role}>{operationalRoleLabel(role)}</span>)}
-            {member.managementRoles.map((role) => <span className="role-chip" key={role}>{role === "sme_coordinator" ? "SME Coordinator" : role === "admin" ? "Admin" : "SuperAdmin"}</span>)}
-            {!member.operationalRoles.length && !member.managementRoles.length ? <span className="muted">No active roles</span> : null}
+            {canManageTarget(member) ? <label>
+              <span className="sr-only">Role for {member.name}</span>
+              <select aria-label={`Role for ${member.name}`} value={member.role} disabled={Boolean(submitting)}
+                onChange={(event) => request(`/api/admin/users/${member.id}`, "PATCH", { role: event.target.value },
+                  `Role updated for ${member.email}.`)}>
+                <option value="id">ID</option>
+                <option value="sme">SME</option>
+                <option value="project_reviewer">Project Reviewer</option>
+                <option value="videographer">Videographer</option>
+              </select>
+            </label> : <>
+              {member.operationalRoles.map((role) => <span className="role-chip" key={role}>{operationalRoleLabel(role)}</span>)}
+              {member.managementRoles.map((role) => <span className="role-chip" key={role}>{role === "sme_coordinator" ? "SME Coordinator" : role === "admin" ? "Admin" : "SuperAdmin"}</span>)}
+              {!member.operationalRoles.length && !member.managementRoles.length ? <span className="muted">No active roles</span> : null}
+            </>}
           </div>}</td>
           <td>{member.operationalRoles.includes("sme") ? <label>
             <span className="sr-only">SME type for {member.name}</span>
