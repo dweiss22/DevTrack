@@ -20,7 +20,7 @@ export function AdditiveAccessPanel({ members, identities, impersonating, canGra
   }
   return <section className="card" aria-labelledby="additive-access-title"><div className="section-heading"><div>
     <p className="eyebrow">TWO-AXIS ACCESS</p><h2 id="additive-access-title">Operational and app management roles</h2></div>
-    <p>ID and SME roles may be combined. App management roles add features without replacing operational access. Only SuperAdmin may change Admin access.</p></div>
+    <p>ID and SME roles may be combined. App management roles add features without replacing operational access. Only SuperAdmin may grant Admin or SuperAdmin access.</p></div>
     {message && <p className="notice" role="status">{message}</p>}
     <div className="admin-table-wrap"><table><thead><tr><th>User</th><th>Operational roles</th><th>Management access</th><th>Verified Wrike identity</th></tr></thead>
       <tbody>{members.map((member) => {
@@ -36,6 +36,10 @@ export function AdditiveAccessPanel({ members, identities, impersonating, canGra
             <label><input type="checkbox" checked={member.operationalRoles.includes("project_reviewer")}
               disabled={member.locked || Boolean(working) || impersonating} onChange={(event) => toggleRole("project_reviewer", event.target.checked)} /> Project Reviewer</label></div></td>
           <td>{member.locked ? <><strong>SuperAdmin</strong><br /><span className="muted">Fixed account</span></> : <div className="role-checkboxes">
+            <label><input type="checkbox" checked={member.managementRoles.includes("super_admin")}
+              disabled={!canGrantAdmin || Boolean(working) || impersonating}
+              onChange={(event) => void update(`/api/admin/users/${member.id}/management-roles`,
+                { role: "super_admin", enabled: event.target.checked }, `SuperAdmin access updated for ${member.email}.`)} /> SuperAdmin</label>
             <label><input type="checkbox" checked={member.managementRoles.includes("admin")}
               disabled={!canGrantAdmin || Boolean(working) || impersonating}
               onChange={(event) => void update(`/api/admin/users/${member.id}/management-roles`,

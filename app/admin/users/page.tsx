@@ -104,7 +104,7 @@ export default async function UserManagementPage() {
       id: member.id, name: member.name, email: member.email,
       operationalRoles: member.operationalRoles, managementRoles: member.managementRoles,
       accessWrikeUserId: member.accessWrikeUserId,
-      locked: member.managementRoles.includes("super_admin"),
+      locked: member.role === "super_admin",
     }))} identities={identityOptions} impersonating={identity.impersonating}
       canGrantAdmin={profile.access.managementRoles.includes("super_admin")} /> : null}
     <UserApprovalQueue users={pendingUsers} /></AppShell>;
