@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params; const { profile, user } = await requireCapability("manage_users");
-  const parsed = z.object({ role: z.enum(["sme_coordinator", "admin"]), enabled: z.boolean() })
+  const parsed = z.object({ role: z.enum(["sme_coordinator", "admin", "super_admin"]), enabled: z.boolean() })
     .safeParse(await request.json().catch(() => null));
   if (!z.string().uuid().safeParse(id).success || !parsed.success) return NextResponse.json({ error: "Select a valid management role." }, { status: 400 });
   const { error } = await createAdminClient().rpc("set_application_user_management_role", {
