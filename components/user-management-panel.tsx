@@ -195,27 +195,18 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
         const isSuperAdmin = member.role === "super_admin";
         const isOwnAccount = member.id === managerId;
         const canEdit = canManageTarget(member);
+        const canEditRole = canManageTarget(member) || canManageSuperAdmin(member);
         const persona = isSuperAdmin && managerRole === "super_admin" && isOwnAccount;
         const identityOption = identities.find((identity) => identity.id === member.accessWrikeUserId);
+        const accessProfileContent = isOwnAccount && isSuperAdmin ?
+          <><strong>{roleLabel(member.role)}</strong><br /><span className="muted">Your account</span></>
+        : canEditRole ?
+          <div className="role-checkboxes"><label><span className="sr-only">Role for {member.name}</span><select aria-label={`Role for ${member.name}`} value={member.role} disabled={Boolean(submitting)} onChange={(event) => request(`/api/admin/users/${member.id}`, "PATCH", { role: event.target.value }, `Role updated for ${member.email}.`)}><option value="id">ID</option><option value="sme">SME</option><option value="project_reviewer">Project Reviewer</option><option value="admin">Admin</option>{managerRole === "super_admin" ? <option value="super_admin">SuperAdmin</option> : null}</select></label></div>
+        : <div className="role-checkboxes">{member.operationalRoles.map((role) => <span className="role-chip" key={role}>{operationalRoleLabel(role)}</span>)}{member.managementRoles.map((role) => <span className="role-chip" key={role}>{role === "sme_coordinator" ? "SME Coordinator" : role === "admin" ? "Admin" : "SuperAdmin"}</span>)}{isSuperAdmin && !member.operationalRoles.length && !member.managementRoles.length ? <><strong>{roleLabel(member.role)}</strong><br /><span className="muted">Protected account</span></> : !member.operationalRoles.length && !member.managementRoles.length ? <span className="muted">No active roles</span> : null}</div>;
         return <tr key={member.id}>
           <td>{member.name}{member.accountState === "deletion_pending" ? <><br /><span className="error">Deletion pending</span></> : null}</td>
           <td>{member.email}</td>
-          <td>{(isOwnAccount && isSuperAdmin) ? <><strong>{roleLabel(member.role)}</strong><br /><span className="muted">Your account</span></> : (canManageTarget(member) || canManageSuperAdmin(member)) ? (<div className="role-checkboxes"><label>
-              <span className="sr-only">Role for {member.name}</span>
-              <select aria-label={`Role for ${member.name}`} value={member.role} disabled={Boolean(submitting)}
-                onChange={(event) => request(`/api/admin/users/${member.id}`, "PATCH", { role: event.target.value },
-                  `Role updated for ${member.email}.`)}>
-                <option value="id">ID</option>
-                <option value="sme">SME</option>
-                <option value="project_reviewer">Project Reviewer</option>
-                <option value="admin">Admin</option>
-                {managerRole === "super_admin" ? <option value="super_admin">SuperAdmin</option> : null}
-              </select>
-            </label></div>) : <div className="role-checkboxes">
-            {member.operationalRoles.map((role) => <span className="role-chip" key={role}>{operationalRoleLabel(role)}</span>)}
-            {member.managementRoles.map((role) => <span className="role-chip" key={role}>{role === "sme_coordinator" ? "SME Coordinator" : role === "admin" ? "Admin" : "SuperAdmin"}</span>)}
-            {isSuperAdmin && !member.operationalRoles.length && !member.managementRoles.length ? <><strong>{roleLabel(member.role)}</strong><br /><span className="muted">Protected account</span></> : !member.operationalRoles.length && !member.managementRoles.length ? <span className="muted">No active roles</span> : null}
-          </div>}</td>
+          <td>{accessProfileContent}</td>
           <td>{member.operationalRoles.includes("sme") ? <label>
             <span className="sr-only">SME type for {member.name}</span>
             <select aria-label={`SME type for ${member.name}`} value={member.smeClassification ?? ""}
