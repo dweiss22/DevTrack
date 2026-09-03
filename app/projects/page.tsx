@@ -80,7 +80,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
           <td data-label="Project name"><Link href={`/projects/${project.task_id}?returnTo=${encodeURIComponent(projectListHref)}`}>{project.title}</Link></td>
           <td data-label="Status"><StatusBadge name={project.status_name} id={project.custom_status_id} color={project.status_reference.color} resolved={project.status_reference.resolved} /></td>
           <td data-label="Vertical">{projectTableVerticalLabel(vertical, project.vertical_state)}{vertical?.hasUnresolvedVertical ? <span title={isAdministrator ? `Unrecognized: ${vertical.unresolvedVerticalTokens?.join(", ") || "missing value"}` : "Vertical value needs review"}> ⚠</span> : null}</td>
-          <td data-label="ID Assigned">{idAssignedValues.length ? idAssignedValues.map((person, index) => <span key={`${person.id}-${index}`}>{index > 0 && ", "}{person.resolved ? person.label : <UnresolvedReferenceLabel id={person.referenceId ?? person.id} type="user" label={person.label} showId={person.referenceId != null} />}</span>) : "—"}</td>
+          <td data-label="Designer Assigned">{idAssignedValues.length ? idAssignedValues.map((person, index) => <span key={`${person.id}-${index}`}>{index > 0 && ", "}{person.resolved ? person.label : <UnresolvedReferenceLabel id={person.referenceId ?? person.id} type="user" label={person.label} showId={person.referenceId != null} />}</span>) : "—"}</td>
           <td data-label="Course Style">{projectCourseStyleLabel(courseStyle)}</td>
           <td data-label="Folders">{project.locations.length ? project.locations.map((location, index) => <span key={location.wrikeId}>{index > 0 && ", "}{location.resolved ? location.title : <UnresolvedReferenceLabel id={location.wrikeId} type="folder" />}</span>) : "—"}</td>
           <td data-label="Development percentile"><ProjectPercentileRing benchmark={percentileByTask.get(project.task_id) ?? null} /></td>
@@ -95,7 +95,7 @@ const PROJECT_COLUMNS = [
   { key: "title", label: "Project name", initial: "asc" },
   { key: "status", label: "Status", initial: "asc" },
   { key: "vertical", label: "Vertical", initial: "asc" },
-  { key: "designer", label: "ID Assigned", initial: "asc" },
+  { key: "designer", label: "Designer Assigned", initial: "asc" },
   { key: null, label: "Course Style", initial: "asc" },
   { key: "folders", label: "Folders", initial: "asc" },
   { key: "percentile", label: "Development percentile", initial: "desc" }

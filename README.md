@@ -8,7 +8,7 @@ DevTrack is a secure, organization-scoped application for analyzing and managing
 
 - Connects to Wrike through OAuth 2.0 and stores encrypted access and refresh tokens.
 - Synchronizes configured folder tasks, projects, workflows, statuses, users, spaces, timelog categories, custom-field definitions, task custom-field values, and time entries.
-- Preserves raw Wrike values while maintaining normalized reporting fields for Reporting Year, Vertical, Course Type, Authoring Tool, ID Assigned, SME, and other configured fields.
+- Preserves raw Wrike values while maintaining normalized reporting fields for Reporting Year, Vertical, Course Type, Authoring Tool, Designer Assigned, SME, and other configured fields.
 - Retains source-folder relationships, synchronization diagnostics, unresolved references, and custom-field conflicts instead of silently discarding uncertain data.
 - Provides administrator tools for synchronization history, Vertical diagnostics and repair, status classification, and custom-field mapping.
 
@@ -16,7 +16,7 @@ DevTrack is a secure, organization-scoped application for analyzing and managing
 
 - **Dashboard** provides organization-wide course and effort summaries for authorized reporting users.
 - **Development** provides year-scoped course-development reporting and sortable project metrics.
-- **ID Dashboard** includes only projects whose synchronized **ID Assigned** field explicitly matches the selected verified ID identity. It includes assignment totals, status metrics, average development hours by course reporting year, workflow-category time, and project links.
+- **ID Dashboard** includes only projects whose synchronized **Designer Assigned** field explicitly matches the selected verified ID identity. It includes assignment totals, status metrics, average development hours by course reporting year, workflow-category time, and project links.
 - **SME Dashboard** includes only projects whose synchronized **SME** field explicitly matches the selected verified SME identity. It supports Recent and All Time scopes, status analytics, submitted billing trends, survey states, and restricted SME project details.
 - **Projects** provides authorized internal reporting users with searchable project details, normalized custom fields, timelines, contributors, and time analytics.
 

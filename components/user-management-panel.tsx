@@ -174,7 +174,7 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
         <label>Email address<input name="email" type="email" autoComplete="email" maxLength={320} required placeholder="person@example.com" /></label>
         <label>Initial operational role<select name="role" value={inviteRole}
           onChange={(event) => setInviteRole(event.target.value as OperationalRole)}>
-          <option value="id">ID</option><option value="sme">SME</option><option value="project_reviewer">Project Reviewer</option></select></label>
+          <option value="id">ID</option><option value="sme">SME</option><option value="project_reviewer">Project Reviewer</option><option value="videographer">Videographer</option></select></label>
         {inviteRole === "sme" ? <label>SME type<select name="smeClassification" required defaultValue="">
           <option value="" disabled>Select SME type</option>
           <option value="internal">Internal SME</option>
@@ -273,5 +273,5 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
 }
 
 function operationalRoleLabel(role: OperationalRole) {
-  return role === "id" ? "ID" : role === "sme" ? "SME" : "Project Reviewer";
+  return role === "id" ? "ID" : role === "sme" ? "SME" : role === "videographer" ? "Videographer" : "Project Reviewer";
 }

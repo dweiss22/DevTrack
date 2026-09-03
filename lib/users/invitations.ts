@@ -3,8 +3,8 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 import { smeClassificationSchema } from "@/lib/smes/domain";
 
-export const applicationRoleSchema = z.enum(["admin", "id", "sme", "project_reviewer"]);
-export const operationalInvitationRoleSchema = z.enum(["id", "sme", "project_reviewer"]);
+export const applicationRoleSchema = z.enum(["admin", "id", "sme", "project_reviewer", "videographer"]);
+export const operationalInvitationRoleSchema = z.enum(["id", "sme", "project_reviewer", "videographer"]);
 export const invitationInputSchema = z.object({
   email: z.string().trim().email().max(320),
   role: operationalInvitationRoleSchema,

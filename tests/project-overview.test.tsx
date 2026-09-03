@@ -127,7 +127,7 @@ describe("project Overview metadata", () => {
 
   it("keeps the exact Overview order and removes deprecated Overview labels", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "app/projects/[id]/page.tsx"), "utf8");
-    const labels = ["Status", "Percentile", "Reporting year", "ID Assigned", "Vertical", "Length", "Assigned in Wrike", "Authoring Tool", "SME", "Legal Reviewer"];
+    const labels = ["Status", "Percentile", "Reporting year", "Designer Assigned", "Vertical", "Length", "Assigned in Wrike", "Authoring Tool", "SME", "Legal Reviewer"];
     const positions = labels.map((label) => source.indexOf(`label=\"${label}\"`));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
