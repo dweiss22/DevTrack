@@ -161,7 +161,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
         <MetadataItem label="Status"><StatusBadge name={statusReference.name} id={row.custom_status_id} color={statusReference.color} resolved={statusReference.resolved} /></MetadataItem>
         <MetadataItem label="Percentile" className="project-percentile-item"><ProjectPercentileGauge benchmark={benchmark} /></MetadataItem>
         <MetadataItem label="Reporting year">{reportingYear ?? fieldValue(fieldByRole.get("reporting"))}{reportingYear && fieldByRole.get("reporting")?.conflict && <ConflictBadge />}</MetadataItem>
-        <MetadataItem label="ID Assigned">{contactFieldValue(fieldByRole.get("owner"), people)}</MetadataItem>
+        <MetadataItem label="Designer Assigned">{contactFieldValue(fieldByRole.get("owner"), people)}</MetadataItem>
         <MetadataItem label="Vertical">{formatVerticalMembership(vertical?.displayValues ?? []) ?? "Not assigned"}{vertical?.conflict && <ConflictBadge />}{row.vertical_state === "synchronization_incomplete" && <MetadataWarning>Previously synchronized</MetadataWarning>}{row.vertical_state === "unrecognized" && <MetadataWarning>Needs review</MetadataWarning>}</MetadataItem>
         <MetadataItem label="Length">{courseLengthValue(fieldByRole.get("courseLength"))}</MetadataItem>
         <MetadataItem label="Course Style">{projectCourseStyleLabel(fieldByRole.get("courseStyle") ? { values: fieldByRole.get("courseStyle")!.displayValues } : undefined)}</MetadataItem>

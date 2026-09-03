@@ -11,7 +11,7 @@ const migration = source("supabase/migrations/202607230003_role_based_access_con
 
 describe("four-role capability model", () => {
   it("defines exactly the required roles and centralized capability matrix", () => {
-    expect(APPLICATION_ROLES).toEqual(["super_admin", "admin", "id", "sme", "project_reviewer"]);
+    expect(APPLICATION_ROLES).toEqual(["super_admin", "admin", "id", "sme", "project_reviewer", "videographer"]);
     for (const capability of ["manage_users", "manage_settings", "manage_integrations", "manage_data", "view_standard_pages", "view_sme_dashboard", "select_sme_dashboard_user", "edit_own_profile"] as const) {
       expect(hasCapability("super_admin", capability)).toBe(true);
     }
@@ -45,8 +45,8 @@ describe("four-role capability model", () => {
   });
 
   it("never exposes SuperAdmin as an assignable invitation or role option", () => {
-    expect(assignableRolesFor("super_admin")).toEqual(["admin", "id", "sme", "project_reviewer"]);
-    expect(assignableRolesFor("admin")).toEqual(["admin", "id", "sme", "project_reviewer"]);
+    expect(assignableRolesFor("super_admin")).toEqual(["admin", "id", "sme", "project_reviewer", "videographer"]);
+    expect(assignableRolesFor("admin")).toEqual(["admin", "id", "sme", "project_reviewer", "videographer"]);
     expect(source("lib/users/invitations.ts")).not.toContain('"super_admin"');
     expect(source("components/user-management-panel.tsx")).not.toContain('<option value="super_admin">');
   });

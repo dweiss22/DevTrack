@@ -40,6 +40,7 @@ export function IdDashboardProjectTable({ rows, returnTo, canActAsAssignedId }: 
 }) {
   const [visible, setVisible] = useState<Record<OptionalColumnKey, boolean>>(DEFAULT_VISIBLE);
   const [open, setOpen] = useState(false);
+  const [surveyTab, setSurveyTab] = useState<"all" | "incomplete" | "completed">("all");
   const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,8 +64,24 @@ export function IdDashboardProjectTable({ rows, returnTo, canActAsAssignedId }: 
   }, [open]);
 
   const columnCount = useMemo(() => 2 + OPTIONAL_COLUMNS.filter((column) => visible[column.key]).length, [visible]);
+  const visibleRows = useMemo(() => {
+    if (!canActAsAssignedId || surveyTab === "all") return rows;
+    return rows.filter((row) => (row.own_review?.status === "submitted") === (surveyTab === "completed"));
+  }, [rows, canActAsAssignedId, surveyTab]);
+  const completedCount = useMemo(() => rows.filter((row) => row.own_review?.status === "submitted").length, [rows]);
+  const incompleteCount = rows.length - completedCount;
 
   return <div className="id-dashboard-project-table-wrap">
+    {canActAsAssignedId && <nav className="survey-tabs" aria-label="My assigned surveys">
+      <button type="button" aria-current={surveyTab === "incomplete" ? "page" : undefined}
+        onClick={() => setSurveyTab((current) => current === "incomplete" ? "all" : "incomplete")}>
+        Incomplete <span>{incompleteCount}</span>
+      </button>
+      <button type="button" aria-current={surveyTab === "completed" ? "page" : undefined}
+        onClick={() => setSurveyTab((current) => current === "completed" ? "all" : "completed")}>
+        Completed <span>{completedCount}</span>
+      </button>
+    </nav>}
     <div className="dashboard-table-toolbar" ref={popoverRef}>
       <button type="button" className="button secondary" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
         Columns
@@ -77,7 +94,7 @@ export function IdDashboardProjectTable({ rows, returnTo, canActAsAssignedId }: 
         </label>)}
       </div>}
     </div>
-    {rows.length ? <div className="dashboard-table-wrap"><table className="dashboard-project-table id-dashboard-table">
+    {visibleRows.length ? <div className="dashboard-table-wrap"><table className="dashboard-project-table id-dashboard-table">
       <caption className="sr-only">Projects ordered from most recent to oldest</caption><thead><tr>
         <th>Course Name</th>
         {visible.sme && <th>SME</th>}
@@ -90,7 +107,7 @@ export function IdDashboardProjectTable({ rows, returnTo, canActAsAssignedId }: 
         {visible.dueDate && <th>Due Date</th>}
         {visible.completedAt && <th>Completed Date</th>}
         <th>Survey</th>
-      </tr></thead><tbody>{rows.map((row) => {
+      </tr></thead><tbody>{visibleRows.map((row) => {
         const reviewAvailable = Boolean(row.sme_identity_id)
           && !["ambiguous", "conflict", "missing", "unresolved"].includes(row.sme_identity_status);
         const startHref = reviewAvailable
@@ -125,7 +142,9 @@ export function IdDashboardProjectTable({ rows, returnTo, canActAsAssignedId }: 
         </tr>;
       })}</tbody></table></div>
       : <p className="card empty" style={{ display: columnCount ? undefined : "none" }}>
-        No synchronized Online Learning projects explicitly match this Wrike identity in the ID Assigned field.
+        {rows.length && surveyTab !== "all"
+          ? `No projects match the ${surveyTab} survey filter.`
+          : "No synchronized Online Learning projects explicitly match this Wrike identity in the Designer Assigned field."}
       </p>}
   </div>;
 }
