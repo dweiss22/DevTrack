@@ -130,11 +130,8 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
   }
 
   const canManageTarget = (member: ManagedMember) => !impersonating && member.id !== managerId
-    && (managerRole === "super_admin" || (managerRole === "admin" && member.role !== "admin" && member.role !== "super_admin"))
+    && member.role !== "super_admin" && (managerRole === "super_admin" || (managerRole === "admin" && member.role !== "admin"))
     && member.accountState === "active" && member.profileCompleted;
-
-  const canManageSuperAdmin = (member: ManagedMember) => !impersonating && member.id !== managerId
-    && managerRole === "super_admin" && member.accountState === "active" && member.profileCompleted;
 
   function linkSmeIdentity(member: ManagedMember, identityId: string) {
     const identity = smeIdentities.find((option) => option.id === identityId);
@@ -177,7 +174,7 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
         <label>Email address<input name="email" type="email" autoComplete="email" maxLength={320} required placeholder="person@example.com" /></label>
         <label>Initial operational role<select name="role" value={inviteRole}
           onChange={(event) => setInviteRole(event.target.value as OperationalRole)}>
-          <option value="id">ID</option><option value="sme">SME</option><option value="project_reviewer">Project Reviewer</option></select></label>
+          <option value="id">ID</option><option value="sme">SME</option><option value="project_reviewer">Project Reviewer</option><option value="videographer">Videographer</option></select></label>
         {inviteRole === "sme" ? <label>SME type<select name="smeClassification" required defaultValue="">
           <option value="" disabled>Select SME type</option>
           <option value="internal">Internal SME</option>
@@ -192,21 +189,29 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
     <section className="user-members-section" aria-labelledby="organization-members-title">
       <div className="section-heading"><div><h2 id="organization-members-title">Organization members</h2></div><p>{members.length} active</p></div>
       {members.length ? <div className="admin-table-wrap"><table><thead><tr><th>User</th><th>Email</th><th>Access profile</th><th>SME type</th><th>Wrike identity / ID persona</th><th>Added</th><th>Actions</th></tr></thead><tbody>{members.map((member) => {
-        const isSuperAdmin = member.role === "super_admin";
-        const isOwnAccount = member.id === managerId;
-        const canEdit = canManageTarget(member);
-        const canEditRole = canManageTarget(member) || canManageSuperAdmin(member);
-        const persona = isSuperAdmin && managerRole === "super_admin" && isOwnAccount;
+        const locked = member.role === "super_admin";
+        const persona = locked && managerRole === "super_admin" && member.id === managerId;
         const identityOption = identities.find((identity) => identity.id === member.accessWrikeUserId);
-        const accessProfileContent = isOwnAccount && isSuperAdmin ?
-          <><strong>{roleLabel(member.role)}</strong><br /><span className="muted">Your account</span></>
-        : canEditRole ?
-          <div className="role-checkboxes"><label><span className="sr-only">Role for {member.name}</span><select aria-label={`Role for ${member.name}`} value={member.role} disabled={Boolean(submitting)} onChange={(event) => request(`/api/admin/users/${member.id}`, "PATCH", { role: event.target.value }, `Role updated for ${member.email}.`)}><option value="id">ID</option><option value="sme">SME</option><option value="project_reviewer">Project Reviewer</option><option value="admin">Admin</option>{managerRole === "super_admin" ? <option value="super_admin">SuperAdmin</option> : null}</select></label></div>
-        : <div className="role-checkboxes">{member.operationalRoles.map((role) => <span className="role-chip" key={role}>{operationalRoleLabel(role)}</span>)}{member.managementRoles.map((role) => <span className="role-chip" key={role}>{role === "sme_coordinator" ? "SME Coordinator" : role === "admin" ? "Admin" : "SuperAdmin"}</span>)}{isSuperAdmin && !member.operationalRoles.length && !member.managementRoles.length ? <><strong>{roleLabel(member.role)}</strong><br /><span className="muted">Protected account</span></> : !member.operationalRoles.length && !member.managementRoles.length ? <span className="muted">No active roles</span> : null}</div>;
         return <tr key={member.id}>
           <td>{member.name}{member.accountState === "deletion_pending" ? <><br /><span className="error">Deletion pending</span></> : null}</td>
           <td>{member.email}</td>
-          <td>{accessProfileContent}</td>
+          <td>{locked ? <><strong>{roleLabel(member.role)}</strong><br /><span className="muted">Fixed account</span></> : <div className="role-checkboxes">
+            {canManageTarget(member) ? <label>
+              <span className="sr-only">Role for {member.name}</span>
+              <select aria-label={`Role for ${member.name}`} value={member.role} disabled={Boolean(submitting)}
+                onChange={(event) => request(`/api/admin/users/${member.id}`, "PATCH", { role: event.target.value },
+                  `Role updated for ${member.email}.`)}>
+                <option value="id">ID</option>
+                <option value="sme">SME</option>
+                <option value="project_reviewer">Project Reviewer</option>
+                <option value="videographer">Videographer</option>
+              </select>
+            </label> : <>
+              {member.operationalRoles.map((role) => <span className="role-chip" key={role}>{operationalRoleLabel(role)}</span>)}
+              {member.managementRoles.map((role) => <span className="role-chip" key={role}>{role === "sme_coordinator" ? "SME Coordinator" : role === "admin" ? "Admin" : "SuperAdmin"}</span>)}
+              {!member.operationalRoles.length && !member.managementRoles.length ? <span className="muted">No active roles</span> : null}
+            </>}
+          </div>}</td>
           <td>{member.operationalRoles.includes("sme") ? <label>
             <span className="sr-only">SME type for {member.name}</span>
             <select aria-label={`SME type for ${member.name}`} value={member.smeClassification ?? ""}
@@ -274,11 +279,11 @@ export function UserManagementPanel({ members, identities, smeIdentities, person
       })}</tbody></table></div>
     </section>
 
-    {impersonationTarget && <div className=”modal-backdrop”><section className=”card management-dialog” role=”dialog” aria-modal=”true” aria-labelledby=”impersonate-title”><h2 id=”impersonate-title”>Log in as {impersonationTarget.name}</h2><p>You will see DevTrack with this user’s permissions. All changes retain both identities in the audit history.</p><form onSubmit={startImpersonation}><label>Reason<textarea name=”reason” required minLength={3} maxLength={1000} autoFocus /></label><div className=”table-actions”><button disabled={Boolean(submitting)}>Start impersonation</button><button className=”secondary” type=”button” onClick={() => setImpersonationTarget(null)} disabled={Boolean(submitting)}>Cancel</button></div></form></section></div>}
-    {deletionTarget && <div className=”modal-backdrop”><section className=”card management-dialog” role=”dialog” aria-modal=”true” aria-labelledby=”delete-user-title”><h2 id=”delete-user-title”>Delete {deletionTarget.name}</h2>{deletionPreview ? <><p>This removes authentication, membership, mappings, conversations, invitations, and never-submitted drafts.</p><ul><li>{deletionPreview.delete.draftSurveys} draft surveys and {deletionPreview.delete.draftAttachments} draft files deleted</li><li>{deletionPreview.delete.conversations} conversations and {deletionPreview.delete.reportingMemberships} reporting assignments deleted</li><li>{deletionPreview.retain.submittedSurveys} submitted surveys and {deletionPreview.retain.surveyAuditEvents} audit events retained as “Deleted user”</li></ul><form onSubmit={startDeletion}><label>Deletion reason<textarea name=”reason” required minLength={3} maxLength={2000} /></label><label>Type {deletionPreview.email} to confirm<input name=”confirmationEmail” type=”email” required autoComplete=”off” /></label><div className=”table-actions”><button className=”danger” disabled={Boolean(submitting)}>Delete user</button><button className=”secondary” type=”button” onClick={() => setDeletionTarget(null)} disabled={Boolean(submitting)}>Cancel</button></div></form>{deletionStage && <p className=”notice” role=”status”>{deletionStage}</p>}</> : <p>{deletionStage}</p>}</section></div>}
+    {impersonationTarget && <div className="modal-backdrop"><section className="card management-dialog" role="dialog" aria-modal="true" aria-labelledby="impersonate-title"><h2 id="impersonate-title">Log in as {impersonationTarget.name}</h2><p>You will see DevTrack with this user’s permissions. All changes retain both identities in the audit history.</p><form onSubmit={startImpersonation}><label>Reason<textarea name="reason" required minLength={3} maxLength={1000} autoFocus /></label><div className="table-actions"><button disabled={Boolean(submitting)}>Start impersonation</button><button className="secondary" type="button" onClick={() => setImpersonationTarget(null)} disabled={Boolean(submitting)}>Cancel</button></div></form></section></div>}
+    {deletionTarget && <div className="modal-backdrop"><section className="card management-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-user-title"><h2 id="delete-user-title">Delete {deletionTarget.name}</h2>{deletionPreview ? <><p>This removes authentication, membership, mappings, conversations, invitations, and never-submitted drafts.</p><ul><li>{deletionPreview.delete.draftSurveys} draft surveys and {deletionPreview.delete.draftAttachments} draft files deleted</li><li>{deletionPreview.delete.conversations} conversations and {deletionPreview.delete.reportingMemberships} reporting assignments deleted</li><li>{deletionPreview.retain.submittedSurveys} submitted surveys and {deletionPreview.retain.surveyAuditEvents} audit events retained as “Deleted user”</li></ul><form onSubmit={startDeletion}><label>Deletion reason<textarea name="reason" required minLength={3} maxLength={2000} /></label><label>Type {deletionPreview.email} to confirm<input name="confirmationEmail" type="email" required autoComplete="off" /></label><div className="table-actions"><button className="danger" disabled={Boolean(submitting)}>Delete user</button><button className="secondary" type="button" onClick={() => setDeletionTarget(null)} disabled={Boolean(submitting)}>Cancel</button></div></form>{deletionStage && <p className="notice" role="status">{deletionStage}</p>}</> : <p>{deletionStage}</p>}</section></div>}
   </div>;
 }
 
 function operationalRoleLabel(role: OperationalRole) {
-  return role === "id" ? "ID" : role === "sme" ? "SME" : "Project Reviewer";
+  return role === "id" ? "ID" : role === "sme" ? "SME" : role === "videographer" ? "Videographer" : "Project Reviewer";
 }
