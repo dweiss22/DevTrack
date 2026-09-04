@@ -188,6 +188,45 @@ export function taskPersonIdentityObservations(tasks: readonly WrikeTask[], enri
   return [...grouped.values()];
 }
 
+// The "Designer Assigned" ([LCT] Designer Assigned (M)/(L), normalized to "id
+// assigned") field is free text, not a Wrike Contacts picker, so people who
+// only ever appear there (most freelance videographers) never surface through
+// taskPersonIdentityObservations' Contacts-field scan. Split its typed values
+// the same way course_development_person_tokens() does in Postgres and feed
+// the pieces through the same Wrike-contact name-search verification.
+export const ID_ASSIGNED_NORMALIZED_KEYS = ["id assigned", "instructional designer", "course owner", "project owner", "owner", "id"];
+
+function looksSplittable(piece: string) {
+  return /\s/.test(piece) || /^[a-z0-9]{8}$/i.test(piece) || /^[^@\s]+@[^@\s]+$/.test(piece);
+}
+
+export function splitPersonDisplayValue(value: string) {
+  const raw = value.trim();
+  if (!raw) return [];
+  const pieces = raw.split(/\s*[,;]\s*/).map((piece) => piece.trim()).filter(Boolean);
+  if (pieces.length > 1 && pieces.every(looksSplittable)) return pieces;
+  return [raw];
+}
+
+export function designerAssignedPersonIdentityObservations(tasks: readonly WrikeTask[], enrichedByTaskId: ReadonlyMap<string, EnrichedTaskMetadata>) {
+  const grouped = new Map<string, TaskPersonIdentity>();
+  for (const task of tasks) {
+    const idAssignedFields = (enrichedByTaskId.get(task.id)?.customFieldsNormalized ?? [])
+      .filter((field) => ID_ASSIGNED_NORMALIZED_KEYS.includes(field.normalizedKey));
+    const names = idAssignedFields.flatMap((field) => field.displayValues.flatMap(splitPersonDisplayValue))
+      .map((name) => cleanPersonDisplayName(name))
+      .filter(isReadablePersonName);
+    for (const displayName of names) {
+      const identity = { displayName, email: null };
+      const key = personIdentityKey(identity);
+      const existing = grouped.get(key);
+      if (existing) existing.sourceTaskIds = [...new Set([...existing.sourceTaskIds, task.id])];
+      else grouped.set(key, { ...identity, sourceTaskIds: [task.id] });
+    }
+  }
+  return [...grouped.values()];
+}
+
 export async function processPendingPersonIdentities(db: AdminClient, organizationId: string, client: WrikeClient, observations: readonly TaskPersonIdentity[] = [], now = new Date(), batchSize = 100) {
   const nowIso = now.toISOString();
   const observedByKey = new Map<string, TaskPersonIdentity>();
