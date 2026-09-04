@@ -3,12 +3,14 @@ import { projectOverviewContactValues } from "@/lib/reporting/projects";
 import { WrikeClient } from "@/lib/wrike/client";
 import {
   contactsQueryPath,
+  designerAssignedPersonIdentityObservations,
   matchPersonIdentity,
   mergePersonIdentity,
   normalizePersonName,
   personIdentityDue,
   processPendingPersonIdentities,
   isVerifiablePersonName,
+  splitPersonDisplayValue,
   taskPersonIdentityObservations,
   wrikeContactNameSearchUrl,
   type StoredPersonIdentity,
@@ -144,6 +146,46 @@ describe("Wrike person identity matching", () => {
     expect(taskPersonIdentityObservations(tasks, metadata as never)).toEqual([
       { displayName: "Katie Willis", email: null, sourceTaskIds: ["TASK1", "TASK2"] }
     ]);
+  });
+
+  it("splits a multi-name free-text field only when every piece looks like a name, ID, or email", () => {
+    expect(splitPersonDisplayValue("Lawson Coke, Jamie Rivera")).toEqual(["Lawson Coke", "Jamie Rivera"]);
+    expect(splitPersonDisplayValue("Smith, John")).toEqual(["Smith, John"]);
+    expect(splitPersonDisplayValue("Lawson Coke")).toEqual(["Lawson Coke"]);
+    expect(splitPersonDisplayValue("")).toEqual([]);
+  });
+
+  it("extracts free-text Designer Assigned names, not just Contacts-type fields", () => {
+    const tasks = [
+      { id: "TASK1", title: "One", status: "Active" },
+      { id: "TASK2", title: "Two", status: "Active" }
+    ];
+    const metadata = new Map(tasks.map((task) => [task.id, {
+      folderIds: [], folders: [], folderNames: [],
+      customFields: [],
+      customFieldsNormalized: [{
+        normalizedKey: "id assigned", normalizedTitle: "Designer Assigned",
+        displayValues: ["Jamie Rivera, Lawson Coke"], sourceFieldIds: [], sourceTitles: [],
+        sources: [], conflict: false, conflictMetadata: null
+      }]
+    }]));
+    expect(designerAssignedPersonIdentityObservations(tasks, metadata as never)).toEqual([
+      { displayName: "Jamie Rivera", email: null, sourceTaskIds: ["TASK1", "TASK2"] },
+      { displayName: "Lawson Coke", email: null, sourceTaskIds: ["TASK1", "TASK2"] }
+    ]);
+  });
+
+  it("ignores unresolved raw IDs and non-id-assigned fields when extracting free-text names", () => {
+    const tasks = [{ id: "TASK1", title: "One", status: "Active" }];
+    const metadata = new Map(tasks.map((task) => [task.id, {
+      folderIds: [], folders: [], folderNames: [],
+      customFields: [],
+      customFieldsNormalized: [
+        { normalizedKey: "id assigned", normalizedTitle: "Designer Assigned", displayValues: ["KUAMISSN"], sourceFieldIds: [], sourceTitles: [], sources: [], conflict: false, conflictMetadata: null },
+        { normalizedKey: "sme", normalizedTitle: "SME", displayValues: ["Someone Else"], sourceFieldIds: [], sourceTitles: [], sources: [], conflict: false, conflictMetadata: null }
+      ]
+    }]));
+    expect(designerAssignedPersonIdentityObservations(tasks, metadata as never)).toEqual([]);
   });
 
   it("builds people-only active contact queries using name or email filters", () => {

@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
 import { SearchableFilterSelect } from "@/components/searchable-filter-select";
 import { StatusBadge } from "@/components/wrike-reference";
+import { VideoDashboardAnalyticsSection } from "@/components/video-dashboard-analytics";
 import {
   canonicalDashboardIdentities, dashboardIdentityLabel, type DashboardIdentity,
 } from "@/lib/dashboards/domain";
 import { sortDashboardProjectsNewestFirst } from "@/lib/dashboards/project-order";
+import type { VideoDashboardAnalytics } from "@/lib/dashboards/video-analytics";
 
 export type VideoDashboardRow = {
   task_id: string;
@@ -51,12 +53,14 @@ function ProjectTable({ rows, extraColumn }: {
   </tbody></table></div>;
 }
 
-export function VideoDashboard({ identities, selected, rows, contributorRows, mappingRequired }: {
+export function VideoDashboard({ identities, selected, rows, contributorRows, mappingRequired, analytics, analyticsError }: {
   identities: DashboardIdentity[];
   selected: DashboardIdentity | null;
   rows: VideoDashboardRow[];
   contributorRows: VideoDashboardContributorRow[];
   mappingRequired: boolean;
+  analytics?: VideoDashboardAnalytics | null;
+  analyticsError?: string | null;
 }) {
   const canonicalIdentities = canonicalDashboardIdentities(identities);
   const selectableIdentities = canonicalIdentities.filter((identity) => identity.selectable && identity.wrike_user_id);
@@ -72,6 +76,7 @@ export function VideoDashboard({ identities, selected, rows, contributorRows, ma
     {mappingRequired ? <p className="card notice warning" role="status">Your DevTrack account is not mapped to a verified Wrike identity. Ask an administrator to configure the mapping in User Management.</p>
       : !selected ? <p className="card empty">{selectableIdentities.length ? "Select a videographer to view assigned work." : "No trusted Designer assignments are available."}</p>
         : <>
+          <VideoDashboardAnalyticsSection analytics={analytics ?? null} error={analyticsError} />
           <section className="card">
             <div className="section-heading"><div><p className="eyebrow">OWNED</p><h2>Projects assigned to {selected.display_name}</h2></div></div>
             {rows.length ? <ProjectTable rows={rows} /> : <p className="empty">No Single Video projects are currently assigned to {selected.display_name}.</p>}
