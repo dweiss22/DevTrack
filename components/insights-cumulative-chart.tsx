@@ -18,7 +18,7 @@ export function InsightsCumulativeChart({ data }: { data: HoursTimeseries }) {
   }));
   const totalHours = round1(hoursFromMinutes(data.totalMinutes));
 
-  return <article className="card insights-chart-card" aria-labelledby="cumulative-hours-title">
+  return <article className="insights-chart-card" aria-labelledby="cumulative-hours-title">
     <div className="chart-heading">
       <div>
         <h2 id="cumulative-hours-title">Cumulative hours</h2>
