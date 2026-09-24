@@ -1,14 +1,13 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import Link from "next/link";
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { exportChartSvgAsPng } from "@/lib/reporting/chart-export";
 import { hoursFromMinutes, percentDifference, type HoursTimeseries } from "@/lib/reporting/insights";
 
 type ChartMode = "bar" | "line";
 
-export function InsightsComparisonChart({ metricA, metricB, swapHref }: { metricA: HoursTimeseries; metricB: HoursTimeseries; swapHref: string }) {
+export function InsightsComparisonChart({ metricA, metricB, metricATitle, metricBTitle, onSwap }: { metricA: HoursTimeseries; metricB: HoursTimeseries; metricATitle: string; metricBTitle: string; onSwap: () => void }) {
   const [mode, setMode] = useState<ChartMode>("bar");
   const containerRef = useRef<HTMLDivElement>(null);
   const months = [...new Set([...metricA.periods.map((period) => period.label), ...metricB.periods.map((period) => period.label)])];
@@ -24,24 +23,24 @@ export function InsightsComparisonChart({ metricA, metricB, swapHref }: { metric
   const totalBHours = round1(hoursFromMinutes(metricB.totalMinutes));
   const difference = percentDifference(totalAHours, totalBHours);
 
-  return <article className="card insights-chart-card" aria-labelledby="comparison-chart-title">
+  return <article className="insights-chart-card" aria-labelledby="comparison-chart-title">
     <div className="chart-heading">
       <div>
         <h2 id="comparison-chart-title">Compare two metrics</h2>
-        <p>Metric A and Metric B use the independent filter panels above.</p>
+        <p>{metricATitle} compared with {metricBTitle}, based on the filter panels above.</p>
       </div>
       <div className="insights-chart-controls">
         <div className="insights-mode-toggle" role="group" aria-label="Chart type">
           <button type="button" aria-pressed={mode === "bar"} onClick={() => setMode("bar")}>Grouped bars</button>
           <button type="button" aria-pressed={mode === "line"} onClick={() => setMode("line")}>Lines</button>
         </div>
-        <Link className="button secondary" href={swapHref}>Swap A / B</Link>
+        <button type="button" className="secondary" onClick={onSwap}>Swap A / B</button>
         <button type="button" className="secondary" onClick={() => exportChartSvgAsPng(containerRef.current, "comparison-hours.png")}>Export as image</button>
       </div>
     </div>
     <div className="insights-comparison-summary">
-      <div className="insights-comparison-stat metric-a"><span>Metric A</span><strong>{totalAHours.toLocaleString()}h</strong><small>{metricA.totalCourses.toLocaleString()} course{metricA.totalCourses === 1 ? "" : "s"}</small></div>
-      <div className="insights-comparison-stat metric-b"><span>Metric B</span><strong>{totalBHours.toLocaleString()}h</strong><small>{metricB.totalCourses.toLocaleString()} course{metricB.totalCourses === 1 ? "" : "s"}</small></div>
+      <div className="insights-comparison-stat metric-a"><span>Metric A · {metricATitle}</span><strong>{totalAHours.toLocaleString()}h</strong><small>{metricA.totalCourses.toLocaleString()} course{metricA.totalCourses === 1 ? "" : "s"}</small></div>
+      <div className="insights-comparison-stat metric-b"><span>Metric B · {metricBTitle}</span><strong>{totalBHours.toLocaleString()}h</strong><small>{metricB.totalCourses.toLocaleString()} course{metricB.totalCourses === 1 ? "" : "s"}</small></div>
       <div className="insights-comparison-stat"><span>Difference (B vs A)</span><strong>{difference == null ? "—" : `${difference >= 0 ? "+" : ""}${round1(difference)}%`}</strong></div>
     </div>
     {chartData.length ? <>
@@ -54,8 +53,8 @@ export function InsightsComparisonChart({ metricA, metricB, swapHref }: { metric
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(hours) => `${hours}h`} />
                 <Tooltip formatter={(value: number) => `${value.toLocaleString()} hours`} />
                 <Legend />
-                <Bar dataKey="metricAHours" name="Metric A" fill="#145b9e" radius={[5, 5, 0, 0]} />
-                <Bar dataKey="metricBHours" name="Metric B" fill="#d97706" radius={[5, 5, 0, 0]} />
+                <Bar dataKey="metricAHours" name={`A · ${metricATitle}`} fill="#145b9e" radius={[5, 5, 0, 0]} />
+                <Bar dataKey="metricBHours" name={`B · ${metricBTitle}`} fill="#d97706" radius={[5, 5, 0, 0]} />
               </BarChart>
             : <LineChart data={chartData} margin={{ top: 12, right: 16, left: 0, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -63,15 +62,15 @@ export function InsightsComparisonChart({ metricA, metricB, swapHref }: { metric
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(hours) => `${hours}h`} />
                 <Tooltip formatter={(value: number) => `${value.toLocaleString()} hours`} />
                 <Legend />
-                <Line type="monotone" dataKey="metricAHours" name="Metric A" stroke="#145b9e" strokeWidth={3} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="metricBHours" name="Metric B" stroke="#d97706" strokeWidth={3} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="metricAHours" name={`A · ${metricATitle}`} stroke="#145b9e" strokeWidth={3} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="metricBHours" name={`B · ${metricBTitle}`} stroke="#d97706" strokeWidth={3} dot={{ r: 3 }} />
               </LineChart>}
         </ResponsiveContainer>
       </div>
       <details className="chart-data">
         <summary>View accessible data</summary>
         <table>
-          <thead><tr><th>Month</th><th>Metric A hours</th><th>Metric B hours</th></tr></thead>
+          <thead><tr><th>Month</th><th>A · {metricATitle} hours</th><th>B · {metricBTitle} hours</th></tr></thead>
           <tbody>{chartData.map((row) => <tr key={row.label}><td>{row.label}</td><td>{row.metricAHours}</td><td>{row.metricBHours}</td></tr>)}</tbody>
         </table>
       </details>

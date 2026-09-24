@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { filtersForRpc, filtersToQuery, parseReportingFilters, type ReportingFilters } from "@/lib/reporting/filters";
+import type { StatusFilterOption } from "@/lib/reporting/options";
+import { projectFilterValues, projectPersonLabel, type ProjectFilterFields, type ProjectPersonOption } from "@/lib/reporting/projects";
 
 export type HoursPeriod = { periodStart: string; label: string; minutes: number; cumulativeMinutes: number; projectCount: number };
 export type HoursTimeseries = { totalCourses: number; totalMinutes: number; periods: HoursPeriod[] };
@@ -116,6 +118,27 @@ export function swapPrefixedFiltersHref(pathname: string, query: Record<string, 
     for (const item of Array.isArray(value) ? value : value == null ? [] : [value]) params.append(newKey, item);
   }
   return `${pathname}${params.size ? `?${params}` : ""}`;
+}
+
+/** A short, human label summarizing what a filter panel is currently scoped to (e.g. "2026 ·
+ * Completed"), used to auto-title the Metric A / Metric B comparison panels instead of leaving
+ * them as bare placeholders. Falls back to "All courses" when nothing is selected. */
+export function summarizeReportingFilters(filters: ReportingFilters, context: { fields: ProjectFilterFields; statuses: readonly StatusFilterOption[]; people: readonly ProjectPersonOption[] }) {
+  const parts: string[] = [];
+  const years = filters.reportingYears?.length ? filters.reportingYears : filters.reportingYear != null ? [filters.reportingYear] : [];
+  if (years.length === 1) parts.push(String(years[0]));
+  else if (years.length > 1) parts.push(`${Math.min(...years)}–${Math.max(...years)}`);
+  if (filters.statuses?.length === 1) parts.push(context.statuses.find((status) => status.id === filters.statuses![0])?.name ?? "1 status");
+  else if (filters.statuses?.length) parts.push(`${filters.statuses.length} statuses`);
+  const ownerValues = context.fields.owner ? projectFilterValues(filters.customFields?.[context.fields.owner.id]) : [];
+  if (ownerValues.length === 1) parts.push(projectPersonLabel(ownerValues[0], context.people));
+  else if (ownerValues.length) parts.push(`${ownerValues.length} designers`);
+  if (parts.length < 2) {
+    const toolValues = context.fields.tool ? projectFilterValues(filters.customFields?.[context.fields.tool.id]) : [];
+    if (toolValues.length === 1) parts.push(toolValues[0]);
+    else if (toolValues.length) parts.push(`${toolValues.length} tools`);
+  }
+  return parts.length ? parts.slice(0, 2).join(" · ") : "All courses";
 }
 
 function periodLabel(periodStart: string) {

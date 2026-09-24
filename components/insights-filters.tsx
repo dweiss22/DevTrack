@@ -1,26 +1,25 @@
-import React from "react";
-import Link from "next/link";
+"use client";
+
+import React, { useId, type FormEvent } from "react";
 import { ProjectsMultiSelect } from "@/components/projects-multi-select";
 import { FilterDisclosure } from "@/components/filter-disclosure";
 import type { AccessibleProjectFacets, CustomFieldFilterOption, StatusFilterOption } from "@/lib/reporting/options";
-import { clearInsightsFiltersHref, insightsFilterHref } from "@/lib/reporting/insights";
-import { projectFilterFields, projectFilterValues, projectPersonLabel, projectPersonOptions, reportingYearOptions, type ProjectPersonOption } from "@/lib/reporting/projects";
+import { parseReportingFilters, type ReportingFilters } from "@/lib/reporting/filters";
+import { projectFilterFields, projectFilterValues, projectPersonLabel, projectPersonOptions, reportingYearOptions, type ProjectFilterFields, type ProjectPersonOption } from "@/lib/reporting/projects";
 import { APPROVED_VERTICALS, verticalStateLabel } from "@/lib/wrike/vertical-normalization";
-import type { ReportingFilters } from "@/lib/reporting/filters";
 
 type Props = {
   title: string;
-  prefix: string;
-  pathname: string;
-  foreignParams: URLSearchParams;
   filters: ReportingFilters;
   statuses: StatusFilterOption[];
   customFields: CustomFieldFilterOption[];
   people: ProjectPersonOption[];
   facets: AccessibleProjectFacets;
+  onFiltersChange: (filters: ReportingFilters) => void;
 };
 
-export function InsightsFilters({ title, prefix, pathname, foreignParams, filters, statuses, customFields, people, facets }: Props) {
+export function InsightsFilters({ title, filters, statuses, customFields, people, facets, onFiltersChange }: Props) {
+  const headingId = useId();
   const fields = projectFilterFields(customFields);
   const years = reportingYearOptions(fields.reporting);
   const selectedYears = filters.reportingYears?.map(String) ?? (filters.reportingYear == null ? [] : [String(filters.reportingYear)]);
@@ -40,38 +39,57 @@ export function InsightsFilters({ title, prefix, pathname, foreignParams, filter
   const selectedVerticals = filters.verticalSelections ?? [];
   for (const selected of selectedVerticals) if (!verticalOptions.some((option) => option.value === selected)) verticalOptions.push({ value: selected, label: verticalSelectionLabel(selected) });
   const advancedCount = selectedVerticals.length + selectedCourseTypes.length + selectedCourseStyles.length + selectedCourseLengths.length;
-  const active = activeInsightsFilters(pathname, foreignParams, prefix, filters, fields, people, statuses, selectedVerticals);
+  const active = activeInsightsFilters(filters, fields, people, statuses, selectedVerticals);
+  const facetsAvailable = !fields.vertical && !selectedVerticals.length && !facets.verticalStates.size;
 
-  return <section className="card projects-filter-card insights-filter-card" aria-labelledby={`${prefix}insights-filter-heading`}>
-    <h3 id={`${prefix}insights-filter-heading`}>{title}</h3>
-    <form method="get" className="projects-filter-form">
-      {[...foreignParams.entries()].map(([name, value], index) => <input type="hidden" name={name} value={value} key={`${name}-${value}-${index}`} />)}
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const raw: Record<string, string[]> = {};
+    for (const [key, value] of new FormData(event.currentTarget).entries()) {
+      if (typeof value !== "string") continue;
+      (raw[key] ??= []).push(value);
+    }
+    onFiltersChange(parseReportingFilters(raw));
+  };
+
+  const clearAll = () => {
+    const target: Record<string, unknown> = { ...filters, customFields: { ...(filters.customFields ?? {}) } };
+    delete target.reportingYears; delete target.reportingYear; delete target.statuses; delete target.verticalSelections;
+    delete target.associatedVertical; delete target.verticalReportingCategory; delete target.verticalState; delete target.unresolvedVerticalOnly;
+    for (const field of [fields.owner, fields.tool, fields.courseType, fields.courseStyle, fields.courseLength]) if (field) delete (target.customFields as Record<string, unknown>)[field.id];
+    if (!Object.keys(target.customFields as Record<string, string>).length) delete target.customFields;
+    onFiltersChange(target as ReportingFilters);
+  };
+
+  return <section className="insights-filter-group" aria-labelledby={headingId}>
+    <h3 id={headingId}>{title}</h3>
+    <form className="projects-filter-form" onSubmit={handleSubmit} key={JSON.stringify(filters)}>
       <div className="projects-primary-filters">
-        <ProjectsMultiSelect label="Year" name={`${prefix}reportingYears`} options={years.map((year) => ({ value: String(year), label: String(year) }))} selected={selectedYears} allLabel="All years" emptyLabel="No synchronized years are available." disabled={!years.length && !selectedYears.length} />
-        <ProjectsMultiSelect label="Status" name={`${prefix}statuses`} options={statuses.map((status) => ({ value: status.id, label: status.name }))} selected={selectedStatuses} allLabel="All statuses" emptyLabel="No synchronized statuses are available." disabled={!statuses.length && !selectedStatuses.length} />
-        <ProjectsMultiSelect label="Designer" name={fields.owner ? `${prefix}cf_${fields.owner.id}` : `${prefix}ownerUnavailable`} options={ownerOptions} selected={projectFilterValues(fields.owner ? filters.customFields?.[fields.owner.id] : undefined)} allLabel="All designers" emptyLabel="No synchronized Designer field is available." disabled={!fields.owner} />
-        <ProjectsMultiSelect label="Tools" name={fields.tool ? `${prefix}cf_${fields.tool.id}` : `${prefix}toolUnavailable`} options={(fields.tool?.values ?? []).map(valueOption)} selected={selectedTools} allLabel="All tools" emptyLabel="No synchronized Tool field is available." disabled={!fields.tool} />
+        <ProjectsMultiSelect label="Year" name="reportingYears" options={years.map((year) => ({ value: String(year), label: String(year) }))} selected={selectedYears} allLabel="All years" emptyLabel="No synchronized years are available." disabled={!years.length && !selectedYears.length} />
+        <ProjectsMultiSelect label="Status" name="statuses" options={statuses.map((status) => ({ value: status.id, label: status.name }))} selected={selectedStatuses} allLabel="All statuses" emptyLabel="No synchronized statuses are available." disabled={!statuses.length && !selectedStatuses.length} />
+        <ProjectsMultiSelect label="Designer" name={fields.owner ? `cf_${fields.owner.id}` : "ownerUnavailable"} options={ownerOptions} selected={projectFilterValues(fields.owner ? filters.customFields?.[fields.owner.id] : undefined)} allLabel="All designers" emptyLabel="No synchronized Designer field is available." disabled={!fields.owner} />
+        <ProjectsMultiSelect label="Tools" name={fields.tool ? `cf_${fields.tool.id}` : "toolUnavailable"} options={(fields.tool?.values ?? []).map(valueOption)} selected={selectedTools} allLabel="All tools" emptyLabel="No synchronized Tool field is available." disabled={!fields.tool} />
       </div>
       <FilterDisclosure count={advancedCount} initiallyOpen={advancedCount > 0}>
         <div className="projects-advanced-grid">
-          <ProjectsMultiSelect label="Course Type" name={fields.courseType ? `${prefix}cf_${fields.courseType.id}` : `${prefix}courseTypeUnavailable`} options={(fields.courseType?.values ?? []).map(valueOption)} selected={selectedCourseTypes} allLabel="All course types" emptyLabel="No Course Type values are present on accessible synchronized tasks." disabled={!fields.courseType} />
-          <ProjectsMultiSelect label="Course Style" name={fields.courseStyle ? `${prefix}cf_${fields.courseStyle.id}` : `${prefix}courseStyleUnavailable`} options={(fields.courseStyle?.values ?? []).filter(isCourseStyle).map(valueOption)} selected={selectedCourseStyles} allLabel="All course styles" emptyLabel="No Full Length or Single Video values are present on accessible synchronized tasks." disabled={!fields.courseStyle} />
-          <ProjectsMultiSelect label="Vertical" name={`${prefix}verticalSelections`} options={verticalOptions} selected={selectedVerticals} allLabel="All Verticals" emptyLabel="No synchronized Vertical choices are available." disabled={!fields.vertical && !selectedVerticals.length && !facets.verticalStates.size} />
-          <ProjectsMultiSelect label="Course Length" name={fields.courseLength ? `${prefix}cf_${fields.courseLength.id}` : `${prefix}courseLengthUnavailable`} options={(fields.courseLength?.values ?? []).map(valueOption)} selected={selectedCourseLengths} allLabel="All course lengths" emptyLabel="No synchronized Course Length field is available." disabled={!fields.courseLength} />
+          <ProjectsMultiSelect label="Course Type" name={fields.courseType ? `cf_${fields.courseType.id}` : "courseTypeUnavailable"} options={(fields.courseType?.values ?? []).map(valueOption)} selected={selectedCourseTypes} allLabel="All course types" emptyLabel="No Course Type values are present on accessible synchronized tasks." disabled={!fields.courseType} />
+          <ProjectsMultiSelect label="Course Style" name={fields.courseStyle ? `cf_${fields.courseStyle.id}` : "courseStyleUnavailable"} options={(fields.courseStyle?.values ?? []).filter(isCourseStyle).map(valueOption)} selected={selectedCourseStyles} allLabel="All course styles" emptyLabel="No Full Length or Single Video values are present on accessible synchronized tasks." disabled={!fields.courseStyle} />
+          <ProjectsMultiSelect label="Vertical" name="verticalSelections" options={verticalOptions} selected={selectedVerticals} allLabel="All Verticals" emptyLabel="No synchronized Vertical choices are available." disabled={facetsAvailable} />
+          <ProjectsMultiSelect label="Course Length" name={fields.courseLength ? `cf_${fields.courseLength.id}` : "courseLengthUnavailable"} options={(fields.courseLength?.values ?? []).map(valueOption)} selected={selectedCourseLengths} allLabel="All course lengths" emptyLabel="No synchronized Course Length field is available." disabled={!fields.courseLength} />
         </div>
       </FilterDisclosure>
       <button type="submit">Apply filters</button>
     </form>
     {active.length > 0 && <div className="projects-active-filters" aria-label={`Active ${title} filters`}>
-      <span>Active:</span>{active.map((item) => <Link href={item.href} key={item.key}>{item.label}<span aria-hidden="true"> ×</span><span className="sr-only">Clear {item.label}</span></Link>)}
-      <Link className="projects-clear-all" href={clearInsightsFiltersHref(pathname, foreignParams)}>Clear All</Link>
+      <span>Active:</span>{active.map((item) => <button type="button" onClick={() => onFiltersChange(item.next)} key={item.key}>{item.label}<span aria-hidden="true"> ×</span><span className="sr-only">Clear {item.label}</span></button>)}
+      <button type="button" className="projects-clear-all" onClick={clearAll}>Clear All</button>
     </div>}
   </section>;
 }
 
-function activeInsightsFilters(pathname: string, foreignParams: URLSearchParams, prefix: string, filters: ReportingFilters, fields: ReturnType<typeof projectFilterFields>, people: ProjectPersonOption[], statuses: StatusFilterOption[], selectedVerticals: readonly string[]) {
-  const items: { key: string; label: string; href: string }[] = [];
-  const add = (key: string, label: string, changes: Record<string, string | readonly string[] | null>) => items.push({ key, label, href: insightsFilterHref(pathname, foreignParams, prefix, filters, changes) });
+function activeInsightsFilters(filters: ReportingFilters, fields: ProjectFilterFields, people: ProjectPersonOption[], statuses: StatusFilterOption[], selectedVerticals: readonly string[]) {
+  const items: { key: string; label: string; next: ReportingFilters }[] = [];
+  const add = (key: string, label: string, changes: Record<string, string | readonly string[] | null | undefined>) => items.push({ key, label, next: applyFilterChanges(filters, changes) });
   const selectedYears = filters.reportingYears ?? (filters.reportingYear == null ? [] : [filters.reportingYear]);
   for (const year of selectedYears) add(`year-${year}`, `Year: ${year}`, { reportingYears: selectedYears.filter((value) => value !== year).map(String), reportingYear: null });
   for (const statusId of filters.statuses ?? []) add(`status-${statusId}`, `Status: ${statuses.find((status) => status.id === statusId)?.name ?? statusId}`, { statuses: (filters.statuses ?? []).filter((value) => value !== statusId) });
@@ -83,6 +101,23 @@ function activeInsightsFilters(pathname: string, foreignParams: URLSearchParams,
   }
   for (const selected of selectedVerticals) add(`vertical-${selected}`, `Vertical: ${verticalSelectionLabel(selected)}`, { verticalSelections: selectedVerticals.filter((value) => value !== selected) });
   return items;
+}
+
+function applyFilterChanges(filters: ReportingFilters, changes: Record<string, string | readonly string[] | null | undefined>): ReportingFilters {
+  const target: Record<string, unknown> = { ...filters, customFields: { ...(filters.customFields ?? {}) } };
+  for (const [key, value] of Object.entries(changes)) {
+    if (key.startsWith("cf_")) {
+      const id = key.slice(3);
+      const custom = target.customFields as Record<string, string | readonly string[]>;
+      if (value == null || value === "") delete custom[id];
+      else custom[id] = Array.isArray(value) ? value : String(value);
+      continue;
+    }
+    if (value == null || value === "") delete target[key];
+    else target[key] = value;
+  }
+  if (!Object.keys(target.customFields as Record<string, string>).length) delete target.customFields;
+  return target as ReportingFilters;
 }
 
 const valueOption = (value: string) => ({ value, label: value });
