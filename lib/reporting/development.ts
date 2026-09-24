@@ -1,8 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { ONLINE_LEARNING_WORKFLOW_ID } from "@/lib/reporting/constants";
+import { extractPrefixedValues } from "@/lib/reporting/insights";
 import { loadCustomFieldOptions, type CustomFieldFilterOption, type StatusFilterOption } from "@/lib/reporting/options";
 import { APPROVED_VERTICALS, VERTICAL_REPORTING_FILTER_OPTIONS, VERTICAL_STATE_FILTER_OPTIONS, type VerticalState } from "@/lib/wrike/vertical-normalization";
+
+/** The Development page's project list keeps its own Reporting Year (and other) filters,
+ * independent of the page-level Reporting Year filter that scopes the completion/status/timelog
+ * charts. Its query params live under this prefix so the two filter panels never collide. */
+export const DEVELOPMENT_PROJECT_FILTER_PREFIX = "list_";
 
 const optionalText = z.preprocess((value) => value === "" ? undefined : value, z.string().trim().max(200).optional());
 const optionalDate = z.preprocess((value) => value === "" ? undefined : value, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional());
@@ -53,17 +59,44 @@ export function parseDevelopmentFilters(values: SearchValues, defaultYear?: numb
   return parsed.success ? parsed.data : developmentFiltersSchema.parse({ reportingYear: defaultYear });
 }
 
-export function developmentFiltersToQuery(filters: Partial<DevelopmentFilters>) {
+export function developmentFiltersToQuery(filters: Partial<DevelopmentFilters>, prefix = "") {
   const query = new URLSearchParams();
-  if (filters.reportingYearMode === "missing") query.set("reportingSelection", "missing");
-  else if (filters.reportingYear != null) query.set("reportingSelection", `year:${filters.reportingYear}`);
+  if (filters.reportingYearMode === "missing") query.set(`${prefix}reportingSelection`, "missing");
+  else if (filters.reportingYear != null) query.set(`${prefix}reportingSelection`, `year:${filters.reportingYear}`);
   for (const [key, value] of Object.entries(filters)) {
     if (value == null || value === "" || value === false || ["reportingYear", "reportingYearMode", "customFields"].includes(key)) continue;
-    if (Array.isArray(value)) value.forEach((item) => query.append(key, String(item)));
-    else query.set(key, String(value));
+    if (Array.isArray(value)) value.forEach((item) => query.append(`${prefix}${key}`, String(item)));
+    else query.set(`${prefix}${key}`, String(value));
   }
-  for (const [id, value] of Object.entries(filters.customFields ?? {})) if (value) query.set(`cf_${id}`, value);
+  for (const [id, value] of Object.entries(filters.customFields ?? {})) if (value) query.set(`${prefix}cf_${id}`, value);
   return query.toString();
+}
+
+/** Parses the project list's own Reporting Year (and other) filters from its
+ * `DEVELOPMENT_PROJECT_FILTER_PREFIX`-namespaced query params, independent of the page-level
+ * Reporting Year filter parsed by `parseDevelopmentFilters`. */
+export function parseDevelopmentProjectFilters(values: SearchValues, defaultYear?: number): DevelopmentFilters {
+  return parseDevelopmentFilters(extractPrefixedValues(values, DEVELOPMENT_PROJECT_FILTER_PREFIX), defaultYear);
+}
+
+/** When neither reporting-year panel's query param is set and there's no valid default year but
+ * there are missing/unresolved-year projects, default that panel to the "missing" selection. */
+export function withDefaultDevelopmentSelection(values: SearchValues, prefix: string, years: DevelopmentYearOptions): SearchValues {
+  const key = `${prefix}reportingSelection`;
+  return !values[key] && years.defaultYear == null && years.missingProjects > 0 ? { ...values, [key]: "missing" } : values;
+}
+
+/** Query-string entries belonging to the OTHER Reporting Year panel (page-level vs. project
+ * list), so submitting or clearing one panel's filter never drops the other's selection. */
+export function developmentForeignParams(values: SearchValues, prefix: string) {
+  const otherPrefix = prefix === "" ? DEVELOPMENT_PROJECT_FILTER_PREFIX : "";
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    const belongsToOtherPanel = otherPrefix === "" ? !key.startsWith(DEVELOPMENT_PROJECT_FILTER_PREFIX) : key.startsWith(otherPrefix);
+    if (!belongsToOtherPanel) continue;
+    for (const item of Array.isArray(value) ? value : value == null ? [] : [value]) params.append(key, item);
+  }
+  return params;
 }
 
 export function filtersForDevelopmentRpc(filters: DevelopmentFilters) {
@@ -178,8 +211,14 @@ export function completionPercentages(completed: number, incomplete: number) {
 }
 
 export function statusPercentage(value: number, total: number) { return total ? value / total * 100 : 0; }
-export function developmentFilterHref(filters: DevelopmentFilters, updates: Partial<DevelopmentFilters>) {
-  return `/development?${developmentFiltersToQuery({ ...filters, ...updates, page: 1 })}`;
+
+/** Builds a `/development` link that changes only one Reporting Year panel's filters (`prefix`),
+ * preserving the other panel's current selection via `foreignParams` (see `developmentForeignParams`). */
+export function developmentFilterHref(filters: DevelopmentFilters, updates: Partial<DevelopmentFilters>, prefix = "", foreignParams?: URLSearchParams) {
+  const own = new URLSearchParams(developmentFiltersToQuery({ ...filters, ...updates, page: 1 }, prefix));
+  const query = foreignParams ? new URLSearchParams(foreignParams) : new URLSearchParams();
+  for (const [key, value] of own.entries()) query.append(key, value);
+  return `/development${query.size ? `?${query}` : ""}`;
 }
 
 function analyticsFilters(filters: DevelopmentFilters) {

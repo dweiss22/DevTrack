@@ -4,25 +4,32 @@ import Link from "next/link";
 import { ProjectPercentileRing } from "@/components/project-percentile-ring";
 import { effectiveSortDirection, nextSortDirection, SortableTableHeader, type TableSortDirection } from "@/components/sortable-table-header";
 import { StatusBadge, UnresolvedReferenceLabel } from "@/components/wrike-reference";
-import { developmentFiltersToQuery, type DevelopmentFilters, type DevelopmentProjectRow } from "@/lib/reporting/development";
+import { DEVELOPMENT_PROJECT_FILTER_PREFIX, developmentFiltersToQuery, type DevelopmentFilters, type DevelopmentProjectRow } from "@/lib/reporting/development";
 import type { ProjectLengthBenchmark } from "@/lib/reporting/project-overview";
 import { projectFieldRole, projectOverviewContactValues, projectTableVerticalLabel, type ProjectPersonOption } from "@/lib/reporting/projects";
 
-export function DevelopmentProjectTable({ rows, total, filters, people, percentileByTask }: {
+export function DevelopmentProjectTable({ rows, total, filters, foreignParams, people, percentileByTask }: {
   rows: DevelopmentProjectRow[];
   total: number;
   filters: DevelopmentFilters;
+  foreignParams: URLSearchParams;
   people: ProjectPersonOption[];
   percentileByTask: Record<string, ProjectLengthBenchmark | null>;
 }) {
-  const currentHref = `/development?${developmentFiltersToQuery(filters)}`;
+  const buildHref = (updates: Partial<DevelopmentFilters>) => {
+    const own = new URLSearchParams(developmentFiltersToQuery({ ...filters, ...updates }, DEVELOPMENT_PROJECT_FILTER_PREFIX));
+    const query = new URLSearchParams(foreignParams);
+    for (const [key, value] of own.entries()) query.append(key, value);
+    return `/development${query.size ? `?${query}` : ""}`;
+  };
+  const currentHref = buildHref({});
   return <>
     <div className="project-list-toolbar"><div><h2>Reporting-year project list</h2><p>{total.toLocaleString()} matching course{total === 1 ? "" : "s"}</p></div></div>
     {rows.length ? <div className="projects-table-wrap"><table className="projects-table development-project-table">
       <thead><tr>{DEVELOPMENT_SORT_COLUMNS.map((column) => {
         const active = filters.sort === column.key;
         const direction = effectiveSortDirection(filters.sort, filters.sortDirection);
-        const href = `/development?${developmentFiltersToQuery({ ...filters, sort: column.key, sortDirection: nextSortDirection(active, direction, column.initial), page: 1 })}`;
+        const href = buildHref({ sort: column.key, sortDirection: nextSortDirection(active, direction, column.initial), page: 1 });
         return <SortableTableHeader key={column.key} label={column.label} href={href} active={active} direction={direction} />;
       })}</tr></thead>
       <tbody>{rows.map((row) => {
@@ -39,7 +46,7 @@ export function DevelopmentProjectTable({ rows, total, filters, people, percenti
         </tr>;
       })}</tbody>
     </table></div> : <p className="empty">No projects match the selected reporting year and filters.</p>}
-    <DevelopmentPagination filters={filters} total={total} />
+    <DevelopmentPagination filters={filters} foreignParams={foreignParams} total={total} />
   </>;
 }
 
@@ -52,9 +59,14 @@ const DEVELOPMENT_SORT_COLUMNS = [
   { key: "percentile", label: "Development percentile", initial: "desc" }
 ] as const satisfies readonly { key: DevelopmentFilters["sort"]; label: string; initial: TableSortDirection }[];
 
-function DevelopmentPagination({ filters, total }: { filters: DevelopmentFilters; total: number }) {
+function DevelopmentPagination({ filters, foreignParams, total }: { filters: DevelopmentFilters; foreignParams: URLSearchParams; total: number }) {
   const pages = Math.max(1, Math.ceil(total / filters.pageSize));
   if (pages <= 1) return null;
-  const href = (page: number) => `/development?${developmentFiltersToQuery({ ...filters, page })}`;
+  const href = (page: number) => {
+    const own = new URLSearchParams(developmentFiltersToQuery({ ...filters, page }, DEVELOPMENT_PROJECT_FILTER_PREFIX));
+    const query = new URLSearchParams(foreignParams);
+    for (const [key, value] of own.entries()) query.append(key, value);
+    return `/development${query.size ? `?${query}` : ""}`;
+  };
   return <nav className="pagination" aria-label="Development project pages"><span>Page {filters.page} of {pages} · {total} records</span><div>{filters.page > 1 && <Link className="button secondary" href={href(filters.page - 1)}>Previous</Link>}{filters.page < pages && <Link className="button secondary" href={href(filters.page + 1)}>Next</Link>}</div></nav>;
 }

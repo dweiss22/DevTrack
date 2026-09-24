@@ -2,13 +2,13 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { developmentFilterHref, completionPercentages, statusPercentage, type DevelopmentAnalytics, type DevelopmentFilters, type DevelopmentStatusMetric, type DevelopmentTimeCategoryMetric } from "@/lib/reporting/development";
+import { DEVELOPMENT_PROJECT_FILTER_PREFIX, developmentFilterHref, completionPercentages, statusPercentage, type DevelopmentAnalytics, type DevelopmentFilters, type DevelopmentStatusMetric, type DevelopmentTimeCategoryMetric } from "@/lib/reporting/development";
 
 const CATEGORY_COLORS = ["#2563eb", "#0ea5e9", "#14b8a6", "#84cc16", "#f59e0b", "#f97316", "#ef4444", "#a855f7", "#64748b"];
 const categoryColor = (index: number) => CATEGORY_COLORS[index % CATEGORY_COLORS.length];
 const CATEGORY_CHART_LIMIT = 15;
 
-export function DevelopmentAnalyticsView({ analytics, filters }: { analytics: DevelopmentAnalytics; filters: DevelopmentFilters }) {
+export function DevelopmentAnalyticsView({ analytics, projectFilters, projectForeign }: { analytics: DevelopmentAnalytics; projectFilters: DevelopmentFilters; projectForeign: URLSearchParams }) {
   const router = useRouter();
   const [showAllCategories, setShowAllCategories] = useState(false);
   const { metrics } = analytics;
@@ -17,14 +17,15 @@ export function DevelopmentAnalyticsView({ analytics, filters }: { analytics: De
   const minutesTotal = analytics.hoursByCategory.reduce((sum, row) => sum + row.minutes, 0);
   const visibleCategories = showAllCategories ? analytics.hoursByCategory : analytics.hoursByCategory.slice(0, CATEGORY_CHART_LIMIT);
   const hiddenCategoryCount = analytics.hoursByCategory.length - visibleCategories.length;
-  const statusHref = (statusId: string) => developmentFilterHref(filters, { developmentStatus: statusId, completionClassification: undefined, timelogCategory: undefined });
-  const categoryHref = (categoryId: string) => developmentFilterHref(filters, { timelogCategory: categoryId, timeState: "with-time", completionClassification: undefined, developmentStatus: undefined });
+  const toProjectListHref = (updates: Partial<DevelopmentFilters>) => developmentFilterHref(projectFilters, updates, DEVELOPMENT_PROJECT_FILTER_PREFIX, projectForeign);
+  const statusHref = (statusId: string) => toProjectListHref({ developmentStatus: statusId, completionClassification: undefined, timelogCategory: undefined });
+  const categoryHref = (categoryId: string) => toProjectListHref({ timelogCategory: categoryId, timeState: "with-time", completionClassification: undefined, developmentStatus: undefined });
   return <>
     <section className="card development-overview" aria-labelledby="development-overview-title">
       <div className="development-section-heading"><div><p className="eyebrow">DEVELOPMENT COMPLETION OVERVIEW</p><h2 id="development-overview-title">Reporting-year completion</h2></div><strong>{metrics.totalCourses.toLocaleString()} total courses</strong></div>
-      <div className="completion-totals"><button type="button" className="completion-total completed" onClick={() => router.push(developmentFilterHref(filters, { completionClassification: "completed", developmentStatus: undefined }))}><span>Completed</span><strong>{metrics.completedCourses.toLocaleString()}</strong></button><button type="button" className="completion-total incomplete" onClick={() => router.push(developmentFilterHref(filters, { completionClassification: "incomplete", developmentStatus: undefined }))}><span>Incomplete</span><strong>{metrics.incompleteCourses.toLocaleString()}</strong></button></div>
+      <div className="completion-totals"><button type="button" className="completion-total completed" onClick={() => router.push(toProjectListHref({ completionClassification: "completed", developmentStatus: undefined }))}><span>Completed</span><strong>{metrics.completedCourses.toLocaleString()}</strong></button><button type="button" className="completion-total incomplete" onClick={() => router.push(toProjectListHref({ completionClassification: "incomplete", developmentStatus: undefined }))}><span>Incomplete</span><strong>{metrics.incompleteCourses.toLocaleString()}</strong></button></div>
       <div className={`completion-gauge${metrics.totalCourses ? "" : " empty"}`} role="img" aria-label={`${percentages.completion.toFixed(1)} percent completed and ${percentages.incomplete.toFixed(1)} percent incomplete`} title={`${metrics.completedCourses} completed; ${metrics.incompleteCourses} incomplete`}>
-        {metrics.totalCourses > 0 && <><button aria-label={`Filter to ${metrics.completedCourses} completed courses`} style={{ width: `${percentages.completion}%` }} className="gauge-completed" onClick={() => router.push(developmentFilterHref(filters, { completionClassification: "completed", developmentStatus: undefined }))} /><button aria-label={`Filter to ${metrics.incompleteCourses} incomplete courses`} style={{ width: `${percentages.incomplete}%` }} className="gauge-incomplete" onClick={() => router.push(developmentFilterHref(filters, { completionClassification: "incomplete", developmentStatus: undefined }))} /></>}
+        {metrics.totalCourses > 0 && <><button aria-label={`Filter to ${metrics.completedCourses} completed courses`} style={{ width: `${percentages.completion}%` }} className="gauge-completed" onClick={() => router.push(toProjectListHref({ completionClassification: "completed", developmentStatus: undefined }))} /><button aria-label={`Filter to ${metrics.incompleteCourses} incomplete courses`} style={{ width: `${percentages.incomplete}%` }} className="gauge-incomplete" onClick={() => router.push(toProjectListHref({ completionClassification: "incomplete", developmentStatus: undefined }))} /></>}
       </div>
       <div className="completion-percentages"><span><strong>{percentages.completion.toFixed(1)}%</strong> complete</span><span><strong>{percentages.incomplete.toFixed(1)}%</strong> incomplete</span></div>
       {metrics.unmappedStatusCourses > 0 && <p className="notice error">{metrics.unmappedStatusCourses} course{metrics.unmappedStatusCourses === 1 ? " has" : "s have"} an unmapped or unresolved status and {metrics.unmappedStatusCourses === 1 ? "is" : "are"} counted as incomplete. Review status mappings in Data administration.</p>}
