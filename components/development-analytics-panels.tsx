@@ -14,11 +14,11 @@ function useDevelopmentAnalyticsPanel(initialFilters: DevelopmentFilters, initia
   const [filters, setFilters] = useState(initialFilters);
   const [data, setData] = useState(initialData);
   const [updating, setUpdating] = useState(false);
-  const didMountRef = useRef(false);
+  const initialFiltersRef = useRef(initialFilters);
   const requestRef = useRef(0);
 
   useEffect(() => {
-    if (!didMountRef.current) { didMountRef.current = true; return; }
+    if (filters === initialFiltersRef.current) return;
     const requestId = ++requestRef.current;
     const controller = new AbortController();
     setUpdating(true);

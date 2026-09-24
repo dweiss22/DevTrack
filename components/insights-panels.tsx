@@ -27,11 +27,11 @@ export function InsightsCumulativePanel({ initialFilters, initialData, options }
   const [filters, setFilters] = useState(initialFilters);
   const [data, setData] = useState(initialData);
   const [updating, setUpdating] = useState(false);
-  const didMountRef = useRef(false);
+  const initialFiltersRef = useRef(initialFilters);
   const requestRef = useRef(0);
 
   useEffect(() => {
-    if (!didMountRef.current) { didMountRef.current = true; return; }
+    if (filters === initialFiltersRef.current) return;
     const requestId = ++requestRef.current;
     const controller = new AbortController();
     setUpdating(true);
@@ -61,12 +61,13 @@ export function InsightsComparisonPanel({ initialFiltersA, initialFiltersB, init
   const [dataA, setDataA] = useState(initialDataA);
   const [dataB, setDataB] = useState(initialDataB);
   const [updating, setUpdating] = useState(false);
-  const didMountRef = useRef(false);
+  const initialFiltersARef = useRef(initialFiltersA);
+  const initialFiltersBRef = useRef(initialFiltersB);
   const requestRef = useRef(0);
   const fields = projectFilterFields(options.customFields);
 
   useEffect(() => {
-    if (!didMountRef.current) { didMountRef.current = true; return; }
+    if (filtersA === initialFiltersARef.current && filtersB === initialFiltersBRef.current) return;
     const requestId = ++requestRef.current;
     const controller = new AbortController();
     setUpdating(true);
