@@ -8,32 +8,53 @@ const CATEGORY_COLORS = ["#2563eb", "#0ea5e9", "#14b8a6", "#84cc16", "#f59e0b", 
 const categoryColor = (index: number) => CATEGORY_COLORS[index % CATEGORY_COLORS.length];
 const CATEGORY_CHART_LIMIT = 15;
 
-export function DevelopmentAnalyticsView({ analytics, projectFilters, projectForeign }: { analytics: DevelopmentAnalytics; projectFilters: DevelopmentFilters; projectForeign: URLSearchParams }) {
+type ProjectListLinkProps = { projectFilters: DevelopmentFilters; projectForeign: URLSearchParams };
+
+export function DevelopmentCompletionChart({ metrics, projectFilters, projectForeign }: { metrics: DevelopmentAnalytics["metrics"] } & ProjectListLinkProps) {
+  const router = useRouter();
+  const percentages = completionPercentages(metrics.completedCourses, metrics.incompleteCourses);
+  const toProjectListHref = (updates: Partial<DevelopmentFilters>) => developmentFilterHref(projectFilters, updates, DEVELOPMENT_PROJECT_FILTER_PREFIX, projectForeign);
+  return <>
+    <div className="development-section-heading"><div><p className="eyebrow">DEVELOPMENT COMPLETION OVERVIEW</p><h2 id="development-overview-title">Reporting-year completion</h2></div><strong>{metrics.totalCourses.toLocaleString()} total courses</strong></div>
+    <div className="completion-totals"><button type="button" className="completion-total completed" onClick={() => router.push(toProjectListHref({ completionClassification: "completed", developmentStatus: undefined }))}><span>Completed</span><strong>{metrics.completedCourses.toLocaleString()}</strong></button><button type="button" className="completion-total incomplete" onClick={() => router.push(toProjectListHref({ completionClassification: "incomplete", developmentStatus: undefined }))}><span>Incomplete</span><strong>{metrics.incompleteCourses.toLocaleString()}</strong></button></div>
+    <div className={`completion-gauge${metrics.totalCourses ? "" : " empty"}`} role="img" aria-label={`${percentages.completion.toFixed(1)} percent completed and ${percentages.incomplete.toFixed(1)} percent incomplete`} title={`${metrics.completedCourses} completed; ${metrics.incompleteCourses} incomplete`}>
+      {metrics.totalCourses > 0 && <><button aria-label={`Filter to ${metrics.completedCourses} completed courses`} style={{ width: `${percentages.completion}%` }} className="gauge-completed" onClick={() => router.push(toProjectListHref({ completionClassification: "completed", developmentStatus: undefined }))} /><button aria-label={`Filter to ${metrics.incompleteCourses} incomplete courses`} style={{ width: `${percentages.incomplete}%` }} className="gauge-incomplete" onClick={() => router.push(toProjectListHref({ completionClassification: "incomplete", developmentStatus: undefined }))} /></>}
+    </div>
+    <div className="completion-percentages"><span><strong>{percentages.completion.toFixed(1)}%</strong> complete</span><span><strong>{percentages.incomplete.toFixed(1)}%</strong> incomplete</span></div>
+    {metrics.unmappedStatusCourses > 0 && <p className="notice error">{metrics.unmappedStatusCourses} course{metrics.unmappedStatusCourses === 1 ? " has" : "s have"} an unmapped or unresolved status and {metrics.unmappedStatusCourses === 1 ? "is" : "are"} counted as incomplete. Review status mappings in Data administration.</p>}
+  </>;
+}
+
+export function DevelopmentStatusChart({ activeStatuses, projectFilters, projectForeign }: { activeStatuses: DevelopmentStatusMetric[] } & ProjectListLinkProps) {
+  const router = useRouter();
+  const activeTotal = activeStatuses.reduce((sum, row) => sum + row.projects, 0);
+  const statusHref = (statusId: string) => developmentFilterHref(projectFilters, { developmentStatus: statusId, completionClassification: undefined, timelogCategory: undefined }, DEVELOPMENT_PROJECT_FILTER_PREFIX, projectForeign);
+  return <>
+    <h2>Active projects by custom status</h2>
+    <p>Incomplete courses grouped by their current normalized status. Click a bar to view those projects.</p>
+    {activeStatuses.length ? <>
+      <div role="img" aria-label="Active project counts by custom status"><ResponsiveContainer width="100%" height={Math.max(280, activeStatuses.length * 48)}><BarChart data={activeStatuses} layout="vertical" margin={{ top: 8, right: 22, bottom: 8, left: 18 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" allowDecimals={false} /><YAxis type="category" dataKey="name" width={145} tickMargin={10} tick={{ fontSize: 12 }} /><Tooltip content={<ActiveStatusTooltip total={activeTotal} />} /><Bar dataKey="projects" radius={[0,6,6,0]} onClick={(entry) => { const row = chartPayload<DevelopmentStatusMetric>(entry); if (row) router.push(statusHref(row.statusId)); }}>{activeStatuses.map((row) => <Cell key={row.statusId} fill={row.color ?? "#64748b"} />)}</Bar></BarChart></ResponsiveContainer></div>
+      <StatusDataTable rows={activeStatuses.map((row)=>[row.name,String(row.projects),`${statusPercentage(row.projects,activeTotal).toFixed(1)}%`])} valueHeader="Projects" />
+    </> : <EmptyChart message="No incomplete courses match this reporting year." />}
+  </>;
+}
+
+export function DevelopmentHoursByCategoryChart({ hoursByCategory, projectFilters, projectForeign }: { hoursByCategory: DevelopmentTimeCategoryMetric[] } & ProjectListLinkProps) {
   const router = useRouter();
   const [showAllCategories, setShowAllCategories] = useState(false);
-  const { metrics } = analytics;
-  const percentages = completionPercentages(metrics.completedCourses, metrics.incompleteCourses);
-  const activeTotal = analytics.activeStatuses.reduce((sum, row) => sum + row.projects, 0);
-  const minutesTotal = analytics.hoursByCategory.reduce((sum, row) => sum + row.minutes, 0);
-  const visibleCategories = showAllCategories ? analytics.hoursByCategory : analytics.hoursByCategory.slice(0, CATEGORY_CHART_LIMIT);
-  const hiddenCategoryCount = analytics.hoursByCategory.length - visibleCategories.length;
-  const toProjectListHref = (updates: Partial<DevelopmentFilters>) => developmentFilterHref(projectFilters, updates, DEVELOPMENT_PROJECT_FILTER_PREFIX, projectForeign);
-  const statusHref = (statusId: string) => toProjectListHref({ developmentStatus: statusId, completionClassification: undefined, timelogCategory: undefined });
-  const categoryHref = (categoryId: string) => toProjectListHref({ timelogCategory: categoryId, timeState: "with-time", completionClassification: undefined, developmentStatus: undefined });
+  const minutesTotal = hoursByCategory.reduce((sum, row) => sum + row.minutes, 0);
+  const visibleCategories = showAllCategories ? hoursByCategory : hoursByCategory.slice(0, CATEGORY_CHART_LIMIT);
+  const hiddenCategoryCount = hoursByCategory.length - visibleCategories.length;
+  const categoryHref = (categoryId: string) => developmentFilterHref(projectFilters, { timelogCategory: categoryId, timeState: "with-time", completionClassification: undefined, developmentStatus: undefined }, DEVELOPMENT_PROJECT_FILTER_PREFIX, projectForeign);
   return <>
-    <section className="card development-overview" aria-labelledby="development-overview-title">
-      <div className="development-section-heading"><div><p className="eyebrow">DEVELOPMENT COMPLETION OVERVIEW</p><h2 id="development-overview-title">Reporting-year completion</h2></div><strong>{metrics.totalCourses.toLocaleString()} total courses</strong></div>
-      <div className="completion-totals"><button type="button" className="completion-total completed" onClick={() => router.push(toProjectListHref({ completionClassification: "completed", developmentStatus: undefined }))}><span>Completed</span><strong>{metrics.completedCourses.toLocaleString()}</strong></button><button type="button" className="completion-total incomplete" onClick={() => router.push(toProjectListHref({ completionClassification: "incomplete", developmentStatus: undefined }))}><span>Incomplete</span><strong>{metrics.incompleteCourses.toLocaleString()}</strong></button></div>
-      <div className={`completion-gauge${metrics.totalCourses ? "" : " empty"}`} role="img" aria-label={`${percentages.completion.toFixed(1)} percent completed and ${percentages.incomplete.toFixed(1)} percent incomplete`} title={`${metrics.completedCourses} completed; ${metrics.incompleteCourses} incomplete`}>
-        {metrics.totalCourses > 0 && <><button aria-label={`Filter to ${metrics.completedCourses} completed courses`} style={{ width: `${percentages.completion}%` }} className="gauge-completed" onClick={() => router.push(toProjectListHref({ completionClassification: "completed", developmentStatus: undefined }))} /><button aria-label={`Filter to ${metrics.incompleteCourses} incomplete courses`} style={{ width: `${percentages.incomplete}%` }} className="gauge-incomplete" onClick={() => router.push(toProjectListHref({ completionClassification: "incomplete", developmentStatus: undefined }))} /></>}
-      </div>
-      <div className="completion-percentages"><span><strong>{percentages.completion.toFixed(1)}%</strong> complete</span><span><strong>{percentages.incomplete.toFixed(1)}%</strong> incomplete</span></div>
-      {metrics.unmappedStatusCourses > 0 && <p className="notice error">{metrics.unmappedStatusCourses} course{metrics.unmappedStatusCourses === 1 ? " has" : "s have"} an unmapped or unresolved status and {metrics.unmappedStatusCourses === 1 ? "is" : "are"} counted as incomplete. Review status mappings in Data administration.</p>}
-    </section>
-    <section className="development-analysis-grid" aria-label="Status and time analysis">
-      <article className="card development-analysis-card"><h2>Active projects by custom status</h2><p>Incomplete courses grouped by their current normalized status. Click a bar to view those projects.</p>{analytics.activeStatuses.length ? <><div role="img" aria-label="Active project counts by custom status"><ResponsiveContainer width="100%" height={Math.max(280, analytics.activeStatuses.length * 48)}><BarChart data={analytics.activeStatuses} layout="vertical" margin={{ top: 8, right: 22, bottom: 8, left: 18 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" allowDecimals={false} /><YAxis type="category" dataKey="name" width={145} tickMargin={10} tick={{ fontSize: 12 }} /><Tooltip content={<ActiveStatusTooltip total={activeTotal} />} /><Bar dataKey="projects" radius={[0,6,6,0]} onClick={(entry) => { const row = chartPayload<DevelopmentStatusMetric>(entry); if (row) router.push(statusHref(row.statusId)); }}>{analytics.activeStatuses.map((row) => <Cell key={row.statusId} fill={row.color ?? "#64748b"} />)}</Bar></BarChart></ResponsiveContainer></div><StatusDataTable rows={analytics.activeStatuses.map((row)=>[row.name,String(row.projects),`${statusPercentage(row.projects,activeTotal).toFixed(1)}%`])} valueHeader="Projects" /></> : <EmptyChart message="No incomplete courses match this reporting year." />}</article>
-      <article className="card development-analysis-card"><h2>Hours spent by timelog category</h2><p>Total recorded effort grouped by the category logged on each time entry, not the task’s current status. Click a bar to view those projects.</p>{visibleCategories.length ? <><div role="img" aria-label="Recorded hours by timelog category"><ResponsiveContainer width="100%" height={Math.max(280, visibleCategories.length * 48)}><BarChart data={visibleCategories} layout="vertical" margin={{ top: 8, right: 22, bottom: 8, left: 18 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" tickFormatter={(minutes) => `${hours(Number(minutes))}h`} /><YAxis type="category" dataKey="name" width={145} tickMargin={10} tick={{ fontSize: 12 }} /><Tooltip content={<TimeCategoryTooltip total={minutesTotal} />} /><Bar dataKey="minutes" radius={[0,6,6,0]} onClick={(entry) => { const row = chartPayload<DevelopmentTimeCategoryMetric>(entry); if (row) router.push(categoryHref(row.categoryId)); }}>{visibleCategories.map((row, index) => <Cell key={row.categoryId} fill={categoryColor(index)} />)}</Bar></BarChart></ResponsiveContainer></div>{hiddenCategoryCount > 0 && <button type="button" className="link-button chart-expand-toggle" onClick={() => setShowAllCategories(true)}>Show all {analytics.hoursByCategory.length} categories ({hiddenCategoryCount} more)</button>}{showAllCategories && analytics.hoursByCategory.length > CATEGORY_CHART_LIMIT && <button type="button" className="link-button chart-expand-toggle" onClick={() => setShowAllCategories(false)}>Show top {CATEGORY_CHART_LIMIT} categories</button>}<StatusDataTable rows={analytics.hoursByCategory.map((row)=>[row.name,hours(row.minutes),`${statusPercentage(row.minutes,minutesTotal).toFixed(1)}%`,String(row.projectCount)])} valueHeader="Hours" extraHeader="Projects" labelHeader="Category" /></> : <EmptyChart message="No recorded time is available for these courses." />}</article>
-    </section>
+    <h2>Hours spent by timelog category</h2>
+    <p>Total recorded effort grouped by the category logged on each time entry, not the task’s current status. Click a bar to view those projects.</p>
+    {visibleCategories.length ? <>
+      <div role="img" aria-label="Recorded hours by timelog category"><ResponsiveContainer width="100%" height={Math.max(280, visibleCategories.length * 48)}><BarChart data={visibleCategories} layout="vertical" margin={{ top: 8, right: 22, bottom: 8, left: 18 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" tickFormatter={(minutes) => `${hours(Number(minutes))}h`} /><YAxis type="category" dataKey="name" width={145} tickMargin={10} tick={{ fontSize: 12 }} /><Tooltip content={<TimeCategoryTooltip total={minutesTotal} />} /><Bar dataKey="minutes" radius={[0,6,6,0]} onClick={(entry) => { const row = chartPayload<DevelopmentTimeCategoryMetric>(entry); if (row) router.push(categoryHref(row.categoryId)); }}>{visibleCategories.map((row, index) => <Cell key={row.categoryId} fill={categoryColor(index)} />)}</Bar></BarChart></ResponsiveContainer></div>
+      {hiddenCategoryCount > 0 && <button type="button" className="link-button chart-expand-toggle" onClick={() => setShowAllCategories(true)}>Show all {hoursByCategory.length} categories ({hiddenCategoryCount} more)</button>}
+      {showAllCategories && hoursByCategory.length > CATEGORY_CHART_LIMIT && <button type="button" className="link-button chart-expand-toggle" onClick={() => setShowAllCategories(false)}>Show top {CATEGORY_CHART_LIMIT} categories</button>}
+      <StatusDataTable rows={hoursByCategory.map((row)=>[row.name,hours(row.minutes),`${statusPercentage(row.minutes,minutesTotal).toFixed(1)}%`,String(row.projectCount)])} valueHeader="Hours" extraHeader="Projects" labelHeader="Category" />
+    </> : <EmptyChart message="No recorded time is available for these courses." />}
   </>;
 }
 
