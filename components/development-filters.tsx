@@ -13,14 +13,18 @@ export function developmentContactKeys(options: DevelopmentOptions) {
     .map((field) => field.name.toLocaleLowerCase()));
 }
 
-export function DevelopmentFiltersForm({ filters, years }: { filters: DevelopmentFilters; years: DevelopmentYearOptions; options: DevelopmentOptions }) {
-  return <form className="card dashboard-year-filter" method="get" aria-label="Development Reporting Year filter">
-    <label>Reporting Year<select name="reportingSelection" defaultValue={filters.reportingYearMode === "missing" ? "missing" : `year:${filters.reportingYear}`}>
+export function DevelopmentFiltersForm({ filters, years, prefix = "", foreignParams, label = "Development Reporting Year filter" }: {
+  filters: DevelopmentFilters; years: DevelopmentYearOptions; options: DevelopmentOptions; prefix?: string; foreignParams?: URLSearchParams; label?: string;
+}) {
+  const clearQuery = foreignParams && foreignParams.size ? `?${foreignParams}` : "";
+  return <form className="card dashboard-year-filter" method="get" aria-label={label}>
+    {foreignParams && [...foreignParams.entries()].map(([name, value], index) => <input type="hidden" name={name} value={value} key={`${name}-${value}-${index}`} />)}
+    <label>Reporting Year<select name={`${prefix}reportingSelection`} defaultValue={filters.reportingYearMode === "missing" ? "missing" : `year:${filters.reportingYear}`}>
       <option value="" disabled>Select year</option>
       {years.years.map((year) => <option key={year.year} value={`year:${year.year}`}>{year.label}</option>)}
       {years.missingProjects > 0 && <option value="missing">Missing/Unresolved</option>}
     </select></label>
     <button type="submit">Apply</button>
-    <a className="button secondary" href="/development">Clear</a>
+    <a className="button secondary" href={`/development${clearQuery}`}>Clear</a>
   </form>;
 }
