@@ -515,6 +515,24 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
 .identity-details dt { color: var(--muted); }
 .identity-details dd { margin: 0; overflow-wrap: anywhere; }
 
+.insights-section { margin-bottom: 26px; }
+.insights-filter-card { margin-bottom: 18px; }
+.insights-compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+.insights-chart-card { min-width: 0; padding: 24px; }
+.insights-chart-card h2 { margin: 0 0 4px; font-size: 18px; }
+.insights-chart-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.insights-mode-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.insights-mode-toggle button { padding: 6px 12px; border: 0; background: transparent; color: var(--navy); cursor: pointer; font-size: 12px; font-weight: 650; }
+.insights-mode-toggle button[aria-pressed="true"] { background: var(--blue); color: #fff; }
+.insights-chart-summary { margin: 0 0 14px; font-size: 14px; }
+.insights-chart-canvas { min-width: 0; }
+.insights-comparison-summary { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; }
+.insights-comparison-stat { display: flex; flex-direction: column; gap: 2px; min-width: 150px; padding: 10px 16px; border: 1px solid var(--line); border-radius: 10px; }
+.insights-comparison-stat span { color: var(--muted); font-size: 11px; font-weight: 750; letter-spacing: .3px; text-transform: uppercase; }
+.insights-comparison-stat strong { font-size: 20px; }
+.insights-comparison-stat.metric-a strong { color: #145b9e; }
+.insights-comparison-stat.metric-b strong { color: #d97706; }
+
 @media (max-width: 1100px) {
   .filter-fields { grid-template-columns: repeat(3, minmax(130px, 1fr)); }
   .dashboard-donut-grid { grid-template-columns: 1fr 1fr; }
@@ -537,6 +555,7 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
   .import-conflict-heading { display: grid; }
   .import-conflict-heading .notice { justify-self: start; white-space: normal; }
   .development-analysis-grid, .development-loading { grid-template-columns: 1fr; }
+  .insights-compare-grid { grid-template-columns: 1fr; }
   .development-loading > :first-child { grid-column: auto; }
   .conversation-list { order: 2; }
   .project-chart-grid, .project-additional-grid, .id-dashboard-analytics { grid-template-columns: 1fr; }
