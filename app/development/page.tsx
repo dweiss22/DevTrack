@@ -3,21 +3,20 @@ import { AppShell } from "@/components/app-shell";
 import { DevelopmentAnalyticsView } from "@/components/development-analytics";
 import { DevelopmentFiltersForm } from "@/components/development-filters";
 import { DevelopmentProjectTable } from "@/components/development-project-table";
-import { InsightsFilters } from "@/components/insights-filters";
-import { InsightsCumulativeChart } from "@/components/insights-cumulative-chart";
-import { InsightsComparisonChart } from "@/components/insights-comparison-chart";
+import { InsightsCumulativePanel, InsightsComparisonPanel } from "@/components/insights-panels";
 import { ProjectsLoadFailure } from "@/components/projects-load-failure";
 import { requirePageCapability } from "@/lib/auth";
 import { isAdministratorRole } from "@/lib/auth/roles";
 import { reportingFailure, type ReportingFailure } from "@/lib/reporting/failure";
 import { loadProjectLengthPercentilesResult } from "@/lib/reporting/data";
 import { loadDevelopmentAnalytics, loadDevelopmentOptions, loadDevelopmentProjects, loadDevelopmentYearOptions, parseDevelopmentFilters, type DevelopmentOptions } from "@/lib/reporting/development";
-import { foreignFilterParams, loadHoursTimeseries, parsePrefixedReportingFilters, swapPrefixedFiltersHref, type HoursTimeseries } from "@/lib/reporting/insights";
-import { loadAccessibleProjectFacets } from "@/lib/reporting/options";
+import { loadHoursTimeseries, parsePrefixedReportingFilters, type HoursTimeseries } from "@/lib/reporting/insights";
+import { loadAccessibleProjectFacets, type AccessibleProjectFacets, type CustomFieldFilterOption, type StatusFilterOption } from "@/lib/reporting/options";
 import type { ProjectPersonOption } from "@/lib/reporting/projects";
+import type { ReportingFilters } from "@/lib/reporting/filters";
 
 type SearchValues = Record<string, string | string[] | undefined>;
-const PATHNAME = "/development";
+type InsightsOptions = { statuses: StatusFilterOption[]; customFields: CustomFieldFilterOption[]; people: ProjectPersonOption[]; facets: AccessibleProjectFacets };
 
 export default async function DevelopmentPage({ searchParams }: { searchParams: Promise<SearchValues> }) {
   const query = await searchParams;
@@ -40,34 +39,20 @@ export default async function DevelopmentPage({ searchParams }: { searchParams: 
   const primaryFilters = parsePrefixedReportingFilters(query, "");
   const metricAFilters = parsePrefixedReportingFilters(query, "a_");
   const metricBFilters = parsePrefixedReportingFilters(query, "b_");
-  const primaryForeign = foreignFilterParams(query, "");
-  const metricAForeign = foreignFilterParams(query, "a_");
-  const metricBForeign = foreignFilterParams(query, "b_");
-  const swapHref = swapPrefixedFiltersHref(PATHNAME, query, "a_", "b_");
   const cumulativePromise = loadHoursTimeseries(supabase, primaryFilters);
   const comparisonPromise = Promise.all([loadHoursTimeseries(supabase, metricAFilters), loadHoursTimeseries(supabase, metricBFilters)]);
+  const insightsOptions = { statuses: options.statuses, customFields: options.customFields, people, facets };
 
   return <AppShell isAdmin={isAdministrator} lastSynced={lastRunResult.data?.created_at}>
     <DevelopmentHeader />
     {optionsResult.error && <p className="notice error" role="status">Analytics remain available, but some filter and reference options could not be loaded. Unresolved values will remain identified.</p>}
     <DevelopmentFiltersForm filters={filters} years={years} options={options} />
+
+    <Suspense fallback={<DevelopmentSectionSkeleton label="Loading cumulative hours" cards={1} />}><CumulativeSection promise={cumulativePromise} filters={primaryFilters} options={insightsOptions} /></Suspense>
+    <Suspense fallback={<DevelopmentSectionSkeleton label="Loading comparison" cards={1} />}><ComparisonSection promise={comparisonPromise} filtersA={metricAFilters} filtersB={metricBFilters} options={insightsOptions} /></Suspense>
+
     <Suspense fallback={<DevelopmentSectionSkeleton label="Loading completion and status analytics" cards={3} />}><AnalyticsSection promise={analyticsPromise} filters={filters} /></Suspense>
     <Suspense fallback={<DevelopmentSectionSkeleton label="Loading reporting-year projects" cards={1} />}><ProjectsSection promise={projectsPromise} filters={filters} people={people} /></Suspense>
-
-    <section className="insights-section" aria-labelledby="cumulative-section-title">
-      <div className="development-section-heading"><div><p className="eyebrow">DEVELOPMENT ANALYTICS</p><h2 id="cumulative-section-title">Cumulative hours</h2></div></div>
-      <InsightsFilters title="Filters" prefix="" pathname={PATHNAME} foreignParams={primaryForeign} filters={primaryFilters} statuses={options.statuses} customFields={options.customFields} people={people} facets={facets} />
-      <Suspense fallback={<DevelopmentSectionSkeleton label="Loading cumulative hours" cards={1} />}><CumulativeSection promise={cumulativePromise} /></Suspense>
-    </section>
-
-    <section className="insights-section" aria-labelledby="comparison-section-title">
-      <div className="development-section-heading"><div><p className="eyebrow">DEVELOPMENT ANALYTICS</p><h2 id="comparison-section-title">Compare two metrics</h2></div></div>
-      <div className="insights-compare-grid">
-        <InsightsFilters title="Metric A" prefix="a_" pathname={PATHNAME} foreignParams={metricAForeign} filters={metricAFilters} statuses={options.statuses} customFields={options.customFields} people={people} facets={facets} />
-        <InsightsFilters title="Metric B" prefix="b_" pathname={PATHNAME} foreignParams={metricBForeign} filters={metricBFilters} statuses={options.statuses} customFields={options.customFields} people={people} facets={facets} />
-      </div>
-      <Suspense fallback={<DevelopmentSectionSkeleton label="Loading comparison" cards={1} />}><ComparisonSection promise={comparisonPromise} swapHref={swapHref} /></Suspense>
-    </section>
   </AppShell>;
 }
 
@@ -79,17 +64,17 @@ function QueryError({ title, message, code }: { title: string; message: string; 
 function DevelopmentSectionSkeleton({ label, cards }: { label: string; cards: number }) { return <section className="development-loading" aria-label={label} aria-busy="true">{Array.from({length:cards},(_,index)=><article className="card loading-chart loading-pulse" key={index}><span className="sr-only">{label}</span></article>)}</section>; }
 const EMPTY_OPTIONS: DevelopmentOptions = { statuses: [],users: [],folders: [],projects: [],customFields: [] };
 
-async function CumulativeSection({ promise }: { promise: Promise<HoursTimeseries> }) {
+async function CumulativeSection({ promise, filters, options }: { promise: Promise<HoursTimeseries>; filters: ReportingFilters; options: InsightsOptions }) {
   const result = await capture(promise, "Development hours time series");
   if (result.failure) return <ProjectsLoadFailure failure={result.failure} isAdmin={false} nonfatal nonfatalImpact="The cumulative hours chart is temporarily unavailable." />;
-  return <InsightsCumulativeChart data={result.data} />;
+  return <InsightsCumulativePanel initialFilters={filters} initialData={result.data} options={options} />;
 }
 
-async function ComparisonSection({ promise, swapHref }: { promise: Promise<[HoursTimeseries, HoursTimeseries]>; swapHref: string }) {
+async function ComparisonSection({ promise, filtersA, filtersB, options }: { promise: Promise<[HoursTimeseries, HoursTimeseries]>; filtersA: ReportingFilters; filtersB: ReportingFilters; options: InsightsOptions }) {
   const result = await capture(promise, "Development hours comparison");
   if (result.failure) return <ProjectsLoadFailure failure={result.failure} isAdmin={false} nonfatal nonfatalImpact="The comparison chart is temporarily unavailable." />;
-  const [metricA, metricB] = result.data;
-  return <InsightsComparisonChart metricA={metricA} metricB={metricB} swapHref={swapHref} />;
+  const [dataA, dataB] = result.data;
+  return <InsightsComparisonPanel initialFiltersA={filtersA} initialFiltersB={filtersB} initialDataA={dataA} initialDataB={dataB} options={options} />;
 }
 
 async function capture<T>(promise: Promise<T>, operation: string): Promise<{ data: T; failure: null } | { data: null; failure: ReportingFailure }> {
