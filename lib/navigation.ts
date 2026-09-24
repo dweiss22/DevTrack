@@ -1,13 +1,12 @@
 import { hasCapability, type AccessProfile, type ApplicationRole, type Capability } from "@/lib/auth/roles";
 
 export type NavigationEntry =
-  | { kind: "link"; id: "dashboard" | "development" | "insights" | "sme-dashboard" | "sme-management" | "id-dashboard" | "video-dashboard" | "survey-results" | "projects" | "users" | "data" | "admin-surveys"; href: string; label: string; capability: Capability }
+  | { kind: "link"; id: "dashboard" | "development" | "sme-dashboard" | "sme-management" | "id-dashboard" | "video-dashboard" | "survey-results" | "projects" | "users" | "data" | "admin-surveys"; href: string; label: string; capability: Capability }
   | { kind: "divider"; id: "projects-divider" | "administration-divider" };
 
 export const APPLICATION_NAVIGATION: readonly NavigationEntry[] = [
   { kind: "link", id: "dashboard", href: "/", label: "Dashboard", capability: "view_core_pages" },
   { kind: "link", id: "development", href: "/development", label: "Development", capability: "view_core_pages" },
-  { kind: "link", id: "insights", href: "/insights", label: "Development Analytics", capability: "view_core_pages" },
   { kind: "link", id: "sme-dashboard", href: "/sme-dashboard", label: "SME Dashboard", capability: "view_sme_dashboard" },
   { kind: "link", id: "id-dashboard", href: "/id-dashboard", label: "ID Dashboard", capability: "view_id_dashboard" },
   { kind: "link", id: "video-dashboard", href: "/video-dashboard", label: "Video Dashboard", capability: "view_video_dashboard" },
