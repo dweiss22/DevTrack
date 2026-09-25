@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useId, useState } from "react";
+import React, { useId, useRef, useState } from "react";
 import {
   CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
+import { ChartExportButton } from "@/components/chart-export-button";
 import {
   categoryPeriodForYear,
   type VideoCategoryAverage,
@@ -40,11 +41,16 @@ export function VideoDashboardAnalyticsSection({
 function DevelopmentTimeChart({ analytics }: { analytics: VideoDashboardAnalytics }) {
   const hasData = analytics.timeDataSynchronized
     && analytics.developmentTimeByYear.some((row) => row.averageMinutes != null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const title = "Average Development Time by Year";
   return <article className="card dashboard-chart id-dashboard-chart" aria-labelledby="video-development-time-title">
-    <h2 id="video-development-time-title">Average Development Time by Year</h2>
-    <p>The selected videographer&rsquo;s total logged time divided by their distinct completed Single Video projects (including Roll Call Training), by completion year.</p>
+    <div className="chart-heading">
+      <div><h2 id="video-development-time-title">{title}</h2>
+        <p>The selected videographer&rsquo;s total logged time divided by their distinct completed Single Video projects (including Roll Call Training), by completion year.</p></div>
+      {hasData && <div className="insights-chart-controls"><ChartExportButton containerRef={containerRef} filename="development-time-by-year.png" title={title} /></div>}
+    </div>
     {hasData ? <>
-      <div className="id-chart-canvas" role="img" aria-label="Line chart of average development hours per project by year">
+      <div className="id-chart-canvas" role="img" aria-label="Line chart of average development hours per project by year" ref={containerRef}>
         <ResponsiveContainer width="100%" height={300}>
           <ComposedChart data={analytics.developmentTimeByYear} margin={{ top: 12, right: 24, left: 30, bottom: 30 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -80,23 +86,28 @@ function CategoryTimeChart({ analytics }: { analytics: VideoDashboardAnalytics }
   );
   const period = categoryPeriodForYear(analytics, selectedYear);
   const hasData = analytics.timeDataSynchronized && period.categories.length > 0;
+  const containerRef = useRef<HTMLDivElement>(null);
   return <article className="card dashboard-chart id-dashboard-chart" aria-labelledby="video-category-time-title">
     <div className="chart-heading id-chart-heading">
       <div><h2 id="video-category-time-title">Time by Workflow Category</h2>
         <p>The selected videographer&rsquo;s logged hours and share of time in each synchronized workflow category.</p></div>
-      <label className="id-chart-year-selector" htmlFor={selectId}>Year
-        <select id={selectId} value={selectedYear}
-          onChange={(event) => setSelectedYear(event.target.value === "all" ? "all" : Number(event.target.value))}>
-          <option value="all">All time</option>
-          {analytics.categoryTime.years.map((item) =>
-            <option key={item.year} value={item.year ?? ""}>{item.year}</option>)}
-        </select>
-      </label>
+      <div className="insights-chart-controls">
+        <label className="id-chart-year-selector" htmlFor={selectId}>Year
+          <select id={selectId} value={selectedYear}
+            onChange={(event) => setSelectedYear(event.target.value === "all" ? "all" : Number(event.target.value))}>
+            <option value="all">All time</option>
+            {analytics.categoryTime.years.map((item) =>
+              <option key={item.year} value={item.year ?? ""}>{item.year}</option>)}
+          </select>
+        </label>
+        {hasData && <ChartExportButton containerRef={containerRef} filename="time-by-workflow-category.png" title="Time by Workflow Category" />}
+      </div>
     </div>
     {hasData ? <>
       <div className="id-category-visual">
         <div className="id-chart-canvas" role="img"
-          aria-label={`Donut chart of time by workflow category for ${selectedYear === "all" ? "all time" : selectedYear}`}>
+          aria-label={`Donut chart of time by workflow category for ${selectedYear === "all" ? "all time" : selectedYear}`}
+          ref={containerRef}>
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
               <Pie data={period.categories} dataKey="totalMinutes" nameKey="name"

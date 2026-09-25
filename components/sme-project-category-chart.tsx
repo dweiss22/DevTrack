@@ -1,10 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useRef } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { ChartExportButton } from "@/components/chart-export-button";
 import { workflowCategoryColor } from "@/lib/reporting/workflow-category-colors";
 
 export function SmeProjectCategoryChart({ rows }: { rows: Array<{ category: string; minutes: number }> }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const data = rows.map((row) => ({
     ...row,
     color: workflowCategoryColor(row.category),
@@ -12,7 +14,11 @@ export function SmeProjectCategoryChart({ rows }: { rows: Array<{ category: stri
   }));
   const totalHours = data.reduce((total, row) => total + row.hours, 0);
   if (!data.length) return <p className="empty">No recorded time is available for this project.</p>;
-  return <><div className="sme-category-chart">
+  return <>
+  <div className="insights-chart-controls" style={{ justifyContent: "flex-end", marginBottom: 8 }}>
+    <ChartExportButton containerRef={containerRef} filename="hours-by-category.png" title="Hours by category" />
+  </div>
+  <div className="sme-category-chart" ref={containerRef}>
     <div className="sme-category-pie" role="img" aria-label="Pie chart of total project hours by time category">
       <ResponsiveContainer width="100%" height={280}><PieChart>
         <Pie data={data} dataKey="hours" nameKey="category" cx="50%" cy="50%" innerRadius="42%" outerRadius="78%"

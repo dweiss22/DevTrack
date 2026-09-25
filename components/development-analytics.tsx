@@ -1,7 +1,8 @@
 "use client";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { ChartExportButton } from "@/components/chart-export-button";
 import { DEVELOPMENT_PROJECT_FILTER_PREFIX, developmentFilterHref, completionPercentages, statusPercentage, type DevelopmentAnalytics, type DevelopmentFilters, type DevelopmentStatusMetric, type DevelopmentTimeCategoryMetric } from "@/lib/reporting/development";
 
 const CATEGORY_COLORS = ["#2563eb", "#0ea5e9", "#14b8a6", "#84cc16", "#f59e0b", "#f97316", "#ef4444", "#a855f7", "#64748b"];
@@ -27,13 +28,16 @@ export function DevelopmentCompletionChart({ metrics, projectFilters, projectFor
 
 export function DevelopmentStatusChart({ activeStatuses, projectFilters, projectForeign }: { activeStatuses: DevelopmentStatusMetric[] } & ProjectListLinkProps) {
   const router = useRouter();
+  const containerRef = useRef<HTMLDivElement>(null);
   const activeTotal = activeStatuses.reduce((sum, row) => sum + row.projects, 0);
   const statusHref = (statusId: string) => developmentFilterHref(projectFilters, { developmentStatus: statusId, completionClassification: undefined, timelogCategory: undefined }, DEVELOPMENT_PROJECT_FILTER_PREFIX, projectForeign);
   return <>
-    <h2>Active projects by custom status</h2>
-    <p>Incomplete courses grouped by their current normalized status. Click a bar to view those projects.</p>
+    <div className="chart-heading">
+      <div><h2>Active projects by custom status</h2><p>Incomplete courses grouped by their current normalized status. Click a bar to view those projects.</p></div>
+      {activeStatuses.length > 0 && <div className="insights-chart-controls"><ChartExportButton containerRef={containerRef} filename="active-projects-by-status.png" title="Active projects by custom status" /></div>}
+    </div>
     {activeStatuses.length ? <>
-      <div role="img" aria-label="Active project counts by custom status"><ResponsiveContainer width="100%" height={Math.max(280, activeStatuses.length * 48)}><BarChart data={activeStatuses} layout="vertical" margin={{ top: 8, right: 22, bottom: 8, left: 18 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" allowDecimals={false} /><YAxis type="category" dataKey="name" width={145} tickMargin={10} tick={{ fontSize: 12 }} /><Tooltip content={<ActiveStatusTooltip total={activeTotal} />} /><Bar dataKey="projects" radius={[0,6,6,0]} onClick={(entry) => { const row = chartPayload<DevelopmentStatusMetric>(entry); if (row) router.push(statusHref(row.statusId)); }}>{activeStatuses.map((row) => <Cell key={row.statusId} fill={row.color ?? "#64748b"} />)}</Bar></BarChart></ResponsiveContainer></div>
+      <div role="img" aria-label="Active project counts by custom status" ref={containerRef}><ResponsiveContainer width="100%" height={Math.max(280, activeStatuses.length * 48)}><BarChart data={activeStatuses} layout="vertical" margin={{ top: 8, right: 22, bottom: 8, left: 18 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" allowDecimals={false} /><YAxis type="category" dataKey="name" width={145} tickMargin={10} tick={{ fontSize: 12 }} /><Tooltip content={<ActiveStatusTooltip total={activeTotal} />} /><Bar dataKey="projects" radius={[0,6,6,0]} onClick={(entry) => { const row = chartPayload<DevelopmentStatusMetric>(entry); if (row) router.push(statusHref(row.statusId)); }}>{activeStatuses.map((row) => <Cell key={row.statusId} fill={row.color ?? "#64748b"} />)}</Bar></BarChart></ResponsiveContainer></div>
       <StatusDataTable rows={activeStatuses.map((row)=>[row.name,String(row.projects),`${statusPercentage(row.projects,activeTotal).toFixed(1)}%`])} valueHeader="Projects" />
     </> : <EmptyChart message="No incomplete courses match this reporting year." />}
   </>;
@@ -41,16 +45,19 @@ export function DevelopmentStatusChart({ activeStatuses, projectFilters, project
 
 export function DevelopmentHoursByCategoryChart({ hoursByCategory, projectFilters, projectForeign }: { hoursByCategory: DevelopmentTimeCategoryMetric[] } & ProjectListLinkProps) {
   const router = useRouter();
+  const containerRef = useRef<HTMLDivElement>(null);
   const [showAllCategories, setShowAllCategories] = useState(false);
   const minutesTotal = hoursByCategory.reduce((sum, row) => sum + row.minutes, 0);
   const visibleCategories = showAllCategories ? hoursByCategory : hoursByCategory.slice(0, CATEGORY_CHART_LIMIT);
   const hiddenCategoryCount = hoursByCategory.length - visibleCategories.length;
   const categoryHref = (categoryId: string) => developmentFilterHref(projectFilters, { timelogCategory: categoryId, timeState: "with-time", completionClassification: undefined, developmentStatus: undefined }, DEVELOPMENT_PROJECT_FILTER_PREFIX, projectForeign);
   return <>
-    <h2>Hours spent by timelog category</h2>
-    <p>Total recorded effort grouped by the category logged on each time entry, not the task’s current status. Click a bar to view those projects.</p>
+    <div className="chart-heading">
+      <div><h2>Hours spent by timelog category</h2><p>Total recorded effort grouped by the category logged on each time entry, not the task’s current status. Click a bar to view those projects.</p></div>
+      {visibleCategories.length > 0 && <div className="insights-chart-controls"><ChartExportButton containerRef={containerRef} filename="hours-by-category.png" title="Hours spent by timelog category" /></div>}
+    </div>
     {visibleCategories.length ? <>
-      <div role="img" aria-label="Recorded hours by timelog category"><ResponsiveContainer width="100%" height={Math.max(280, visibleCategories.length * 48)}><BarChart data={visibleCategories} layout="vertical" margin={{ top: 8, right: 22, bottom: 8, left: 18 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" tickFormatter={(minutes) => `${hours(Number(minutes))}h`} /><YAxis type="category" dataKey="name" width={145} tickMargin={10} tick={{ fontSize: 12 }} /><Tooltip content={<TimeCategoryTooltip total={minutesTotal} />} /><Bar dataKey="minutes" radius={[0,6,6,0]} onClick={(entry) => { const row = chartPayload<DevelopmentTimeCategoryMetric>(entry); if (row) router.push(categoryHref(row.categoryId)); }}>{visibleCategories.map((row, index) => <Cell key={row.categoryId} fill={categoryColor(index)} />)}</Bar></BarChart></ResponsiveContainer></div>
+      <div role="img" aria-label="Recorded hours by timelog category" ref={containerRef}><ResponsiveContainer width="100%" height={Math.max(280, visibleCategories.length * 48)}><BarChart data={visibleCategories} layout="vertical" margin={{ top: 8, right: 22, bottom: 8, left: 18 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" tickFormatter={(minutes) => `${hours(Number(minutes))}h`} /><YAxis type="category" dataKey="name" width={145} tickMargin={10} tick={{ fontSize: 12 }} /><Tooltip content={<TimeCategoryTooltip total={minutesTotal} />} /><Bar dataKey="minutes" radius={[0,6,6,0]} onClick={(entry) => { const row = chartPayload<DevelopmentTimeCategoryMetric>(entry); if (row) router.push(categoryHref(row.categoryId)); }}>{visibleCategories.map((row, index) => <Cell key={row.categoryId} fill={categoryColor(index)} />)}</Bar></BarChart></ResponsiveContainer></div>
       {hiddenCategoryCount > 0 && <button type="button" className="link-button chart-expand-toggle" onClick={() => setShowAllCategories(true)}>Show all {hoursByCategory.length} categories ({hiddenCategoryCount} more)</button>}
       {showAllCategories && hoursByCategory.length > CATEGORY_CHART_LIMIT && <button type="button" className="link-button chart-expand-toggle" onClick={() => setShowAllCategories(false)}>Show top {CATEGORY_CHART_LIMIT} categories</button>}
       <StatusDataTable rows={hoursByCategory.map((row)=>[row.name,hours(row.minutes),`${statusPercentage(row.minutes,minutesTotal).toFixed(1)}%`,String(row.projectCount)])} valueHeader="Hours" extraHeader="Projects" labelHeader="Category" />

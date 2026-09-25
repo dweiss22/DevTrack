@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { ChartExportButton } from "@/components/chart-export-button";
 import {
   filterProjectTime,
   groupProjectTimeByCategory,
@@ -36,7 +37,9 @@ function TimelineChart({ entries, contributors, categories }: { entries: Project
   const [from, setFrom] = useState(""); const [to, setTo] = useState(""); const [grain, setGrain] = useState<TimeGrain>("week");
   const [contributorId, setContributor] = useState(""); const [categoryId, setCategory] = useState("");
   const data = useMemo(() => groupProjectTimeOverTime(filterProjectTime(entries, { from, to, contributorId, categoryId }), grain), [entries, from, to, contributorId, categoryId, grain]);
-  return <ChartCard title="Time over time" description="Recorded hours grouped by day, week, or month.">
+  const containerRef = useRef<HTMLDivElement>(null);
+  const filterLines = describeFilters({ from, to, grain, contributorId, categoryId, contributors, categories });
+  return <ChartCard title="Time over time" description="Recorded hours grouped by day, week, or month." filename="time-over-time.png" containerRef={data.length ? containerRef : undefined} filterLines={filterLines}>
     <div className="project-chart-filters">
       <DateFilters prefix="timeline" from={from} to={to} setFrom={setFrom} setTo={setTo} />
       <label>Group by<select value={grain} onChange={(event) => setGrain(event.target.value as TimeGrain)}><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option></select></label>
@@ -44,40 +47,65 @@ function TimelineChart({ entries, contributors, categories }: { entries: Project
       <OptionFilter label="Category" value={categoryId} setValue={setCategory} options={categories} allLabel="All categories" />
     </div>
     <ChartReset active={Boolean(from || to || contributorId || categoryId || grain !== "week")} onReset={() => { setFrom(""); setTo(""); setContributor(""); setCategory(""); setGrain("week"); }} />
-    {data.length ? <><div className="project-chart-canvas" role="img" aria-label="Line chart of recorded hours over time"><ResponsiveContainer width="100%" height={250}><LineChart data={data} margin={{ top: 8, right: 12, left: -15, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 11 }} /><Tooltip formatter={hoursTooltip} /><Line type="monotone" dataKey="hours" name="Hours" stroke="#145b9e" strokeWidth={3} dot={{ r: 3 }} /></LineChart></ResponsiveContainer></div><AccessibleData title="Time over time data" headers={["Period", "Hours", "Entries"]} rows={data.map((row) => [row.label, formatHours(row.minutes), String(row.entries)])} /></> : <ChartEmpty />}
+    {data.length ? <><div className="project-chart-canvas" role="img" aria-label="Line chart of recorded hours over time" ref={containerRef}><ResponsiveContainer width="100%" height={250}><LineChart data={data} margin={{ top: 8, right: 12, left: -15, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 11 }} /><Tooltip formatter={hoursTooltip} /><Line type="monotone" dataKey="hours" name="Hours" stroke="#145b9e" strokeWidth={3} dot={{ r: 3 }} /></LineChart></ResponsiveContainer></div><AccessibleData title="Time over time data" headers={["Period", "Hours", "Entries"]} rows={data.map((row) => [row.label, formatHours(row.minutes), String(row.entries)])} /></> : <ChartEmpty />}
   </ChartCard>;
 }
 
 function ContributorChart({ entries, categories }: { entries: ProjectTimeEntry[]; categories: Option[] }) {
   const [from, setFrom] = useState(""); const [to, setTo] = useState(""); const [categoryId, setCategory] = useState("");
   const data = useMemo(() => groupProjectTimeByContributor(filterProjectTime(entries, { from, to, categoryId })), [entries, from, to, categoryId]);
-  return <ChartCard title="Time by contributor" description="Recorded effort attributed to synchronized people.">
+  const containerRef = useRef<HTMLDivElement>(null);
+  const filterLines = describeFilters({ from, to, categoryId, categories });
+  return <ChartCard title="Time by contributor" description="Recorded effort attributed to synchronized people." filename="time-by-contributor.png" containerRef={data.length ? containerRef : undefined} filterLines={filterLines}>
     <div className="project-chart-filters"><DateFilters prefix="contributor" from={from} to={to} setFrom={setFrom} setTo={setTo} /><OptionFilter label="Category" value={categoryId} setValue={setCategory} options={categories} allLabel="All categories" /></div>
     <ChartReset active={Boolean(from || to || categoryId)} onReset={() => { setFrom(""); setTo(""); setCategory(""); }} />
-    {data.length ? <><div className="project-chart-canvas" role="img" aria-label="Bar chart of recorded hours by contributor"><ResponsiveContainer width="100%" height={250}><BarChart data={data} margin={{ top: 8, right: 12, left: -15, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} angle={data.length > 4 ? -20 : 0} textAnchor={data.length > 4 ? "end" : "middle"} height={data.length > 4 ? 62 : 34} /><YAxis tick={{ fontSize: 11 }} /><Tooltip formatter={hoursTooltip} /><Bar dataKey="hours" name="Hours" radius={[5, 5, 0, 0]}>{data.map((row, index) => <Cell key={row.key} fill={row.resolved ? COLORS[index % COLORS.length] : "#d97706"} />)}</Bar></BarChart></ResponsiveContainer></div><AccessibleData title="Contributor time data" headers={["Contributor", "Hours", "Entries", "Reference"]} rows={data.map((row) => [row.label, formatHours(row.minutes), String(row.entries), row.resolved ? "Resolved" : "Unresolved"])} /></> : <ChartEmpty />}
+    {data.length ? <><div className="project-chart-canvas" role="img" aria-label="Bar chart of recorded hours by contributor" ref={containerRef}><ResponsiveContainer width="100%" height={250}><BarChart data={data} margin={{ top: 8, right: 12, left: -15, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} angle={data.length > 4 ? -20 : 0} textAnchor={data.length > 4 ? "end" : "middle"} height={data.length > 4 ? 62 : 34} /><YAxis tick={{ fontSize: 11 }} /><Tooltip formatter={hoursTooltip} /><Bar dataKey="hours" name="Hours" radius={[5, 5, 0, 0]}>{data.map((row, index) => <Cell key={row.key} fill={row.resolved ? COLORS[index % COLORS.length] : "#d97706"} />)}</Bar></BarChart></ResponsiveContainer></div><AccessibleData title="Contributor time data" headers={["Contributor", "Hours", "Entries", "Reference"]} rows={data.map((row) => [row.label, formatHours(row.minutes), String(row.entries), row.resolved ? "Resolved" : "Unresolved"])} /></> : <ChartEmpty />}
   </ChartCard>;
 }
 
 function CategoryChart({ entries, contributors }: { entries: ProjectTimeEntry[]; contributors: Option[] }) {
   const [from, setFrom] = useState(""); const [to, setTo] = useState(""); const [contributorId, setContributor] = useState("");
   const data = useMemo(() => groupProjectTimeByCategory(filterProjectTime(entries, { from, to, contributorId })), [entries, from, to, contributorId]);
-  return <ChartCard title="Time by category" description="Recorded effort grouped by synchronized timelog category." className="project-chart-card-wide">
+  const containerRef = useRef<HTMLDivElement>(null);
+  const filterLines = describeFilters({ from, to, contributorId, contributors });
+  return <ChartCard title="Time by category" description="Recorded effort grouped by synchronized timelog category." className="project-chart-card-wide" filename="time-by-category.png" containerRef={data.length ? containerRef : undefined} filterLines={filterLines}>
     <div className="project-chart-filters"><DateFilters prefix="category" from={from} to={to} setFrom={setFrom} setTo={setTo} /><OptionFilter label="Contributor" value={contributorId} setValue={setContributor} options={contributors} allLabel="All contributors" /></div>
     <ChartReset active={Boolean(from || to || contributorId)} onReset={() => { setFrom(""); setTo(""); setContributor(""); }} />
-    {data.length ? <><div className="project-chart-canvas" role="img" aria-label="Bar chart of recorded hours by category"><ResponsiveContainer width="100%" height={250}><BarChart data={data} margin={{ top: 8, right: 12, left: -15, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} angle={data.length > 4 ? -20 : 0} textAnchor={data.length > 4 ? "end" : "middle"} height={data.length > 4 ? 62 : 34} /><YAxis tick={{ fontSize: 11 }} /><Tooltip formatter={hoursTooltip} /><Bar dataKey="hours" name="Hours" radius={[5, 5, 0, 0]}>{data.map((row) => <Cell key={row.key} fill={workflowCategoryColor(row.label)} />)}</Bar></BarChart></ResponsiveContainer></div><AccessibleData title="Category time data" headers={["Category", "Hours", "Entries", "Reference"]} rows={data.map((row) => [row.label, formatHours(row.minutes), String(row.entries), row.resolved ? "Resolved" : "Unresolved"])} /></> : <ChartEmpty />}
+    {data.length ? <><div className="project-chart-canvas" role="img" aria-label="Bar chart of recorded hours by category" ref={containerRef}><ResponsiveContainer width="100%" height={250}><BarChart data={data} margin={{ top: 8, right: 12, left: -15, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} angle={data.length > 4 ? -20 : 0} textAnchor={data.length > 4 ? "end" : "middle"} height={data.length > 4 ? 62 : 34} /><YAxis tick={{ fontSize: 11 }} /><Tooltip formatter={hoursTooltip} /><Bar dataKey="hours" name="Hours" radius={[5, 5, 0, 0]}>{data.map((row) => <Cell key={row.key} fill={workflowCategoryColor(row.label)} />)}</Bar></BarChart></ResponsiveContainer></div><AccessibleData title="Category time data" headers={["Category", "Hours", "Entries", "Reference"]} rows={data.map((row) => [row.label, formatHours(row.minutes), String(row.entries), row.resolved ? "Resolved" : "Unresolved"])} /></> : <ChartEmpty />}
   </ChartCard>;
 }
 
 function PlannedActualChart({ plannedMinutes, actualMinutes }: { plannedMinutes: number; actualMinutes: number }) {
   const data = [{ label: "Planned", hours: plannedMinutes / 60, minutes: plannedMinutes }, { label: "Actual", hours: actualMinutes / 60, minutes: actualMinutes }];
-  return <ChartCard title="Planned vs. actual" description="Wrike planned effort compared with visible recorded time.">
-    <div className="project-chart-canvas" role="img" aria-label="Bar chart comparing planned and actual hours"><ResponsiveContainer width="100%" height={250}><BarChart data={data} margin={{ top: 8, right: 12, left: -15, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" /><YAxis /><Tooltip formatter={hoursTooltip} /><Bar dataKey="hours" name="Hours" radius={[5, 5, 0, 0]}><Cell fill="#78a7df" /><Cell fill="#145b9e" /></Bar></BarChart></ResponsiveContainer></div>
+  const containerRef = useRef<HTMLDivElement>(null);
+  return <ChartCard title="Planned vs. actual" description="Wrike planned effort compared with visible recorded time." filename="planned-vs-actual.png" containerRef={containerRef}>
+    <div className="project-chart-canvas" role="img" aria-label="Bar chart comparing planned and actual hours" ref={containerRef}><ResponsiveContainer width="100%" height={250}><BarChart data={data} margin={{ top: 8, right: 12, left: -15, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" /><YAxis /><Tooltip formatter={hoursTooltip} /><Bar dataKey="hours" name="Hours" radius={[5, 5, 0, 0]}><Cell fill="#78a7df" /><Cell fill="#145b9e" /></Bar></BarChart></ResponsiveContainer></div>
     <AccessibleData title="Planned and actual effort data" headers={["Effort", "Hours"]} rows={data.map((row) => [row.label, formatHours(row.minutes)])} />
   </ChartCard>;
 }
 
-function ChartCard({ title, description, children, className = "" }: { title: string; description: string; children: React.ReactNode; className?: string }) {
-  return <article className={`card project-chart-card ${className}`.trim()}><h3>{title}</h3><p>{description}</p>{children}</article>;
+function ChartCard({ title, description, children, className = "", filename, containerRef, filterLines }: { title: string; description: string; children: React.ReactNode; className?: string; filename: string; containerRef?: React.RefObject<HTMLElement | null>; filterLines?: string[] }) {
+  return <article className={`card project-chart-card ${className}`.trim()}>
+    <div className="chart-heading">
+      <div><h3>{title}</h3><p>{description}</p></div>
+      {containerRef && <div className="insights-chart-controls"><ChartExportButton containerRef={containerRef} filename={filename} title={title} description={description} filterSections={filterLines?.length ? [{ label: "Filters", lines: filterLines }] : undefined} /></div>}
+    </div>
+    {children}
+  </article>;
+}
+
+function describeFilters({ from, to, grain, contributorId, categoryId, contributors, categories }: { from?: string; to?: string; grain?: TimeGrain; contributorId?: string; categoryId?: string; contributors?: Option[]; categories?: Option[] }): string[] {
+  const lines: string[] = [];
+  if (from) lines.push(`From ${from}`);
+  if (to) lines.push(`To ${to}`);
+  if (grain) lines.push(`Grouped by ${grain}`);
+  if (contributorId) lines.push(`Contributor: ${optionLabel(contributors, contributorId)}`);
+  if (categoryId) lines.push(`Category: ${optionLabel(categories, categoryId)}`);
+  return lines;
+}
+
+function optionLabel(options: Option[] | undefined, id: string) {
+  return options?.find((option) => option.id === id)?.label ?? id;
 }
 
 function DateFilters({ prefix, from, to, setFrom, setTo }: { prefix: string; from: string; to: string; setFrom: (value: string) => void; setTo: (value: string) => void }) {
