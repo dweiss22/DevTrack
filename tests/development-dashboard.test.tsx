@@ -4,7 +4,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DevelopmentFiltersForm } from "@/components/development-filters";
-import { completionPercentages, developmentFilterHref, parseDevelopmentFilters, resolveDevelopmentContactValues, type DevelopmentOptions, type DevelopmentProjectRow } from "@/lib/reporting/development";
+import { completionPercentages, developmentFilterHref, developmentFiltersToQuery, parseDevelopmentFilters, resolveDevelopmentContactValues, type DevelopmentOptions, type DevelopmentProjectRow } from "@/lib/reporting/development";
 
 const options: DevelopmentOptions = {
   statuses: [{ id: "S1", name: "In Review", color: "#123456", resolved: true }],
@@ -16,6 +16,17 @@ describe("Development reporting dashboard", () => {
   it("defaults to the latest supplied reporting year and supports missing records", () => {
     expect(parseDevelopmentFilters({}, 2027)).toMatchObject({ reportingYearMode: "year", reportingYear: 2027, page: 1 });
     expect(parseDevelopmentFilters({ reportingSelection: "missing" }, 2027)).toMatchObject({ reportingYearMode: "missing" });
+  });
+
+  it("resolves the selected reporting year from an API route's array-shaped searchParams", () => {
+    // The analytics API route builds its query object with URLSearchParams.getAll(), which always
+    // returns a string[] even for a single value - unlike app/development/page.tsx's searchParams
+    // prop, which hands parseDevelopmentFilters a bare string. Both call sites must resolve to the
+    // same reportingYear, or a client-side chart refetch silently loses the selected year.
+    const query = new URLSearchParams(developmentFiltersToQuery({ reportingYearMode: "year", reportingYear: 2027 }));
+    const asRouteSearchValues: Record<string, string[]> = {};
+    for (const key of query.keys()) asRouteSearchValues[key] = query.getAll(key);
+    expect(parseDevelopmentFilters(asRouteSearchValues)).toMatchObject({ reportingYearMode: "year", reportingYear: 2027 });
   });
 
   it("serializes cumulative chart filters while resetting pagination", () => {

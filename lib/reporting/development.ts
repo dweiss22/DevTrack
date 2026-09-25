@@ -46,7 +46,7 @@ export type DevelopmentFilters = z.infer<typeof developmentFiltersSchema>;
 type SearchValues = Record<string, string | string[] | undefined>;
 
 export function parseDevelopmentFilters(values: SearchValues, defaultYear?: number): DevelopmentFilters {
-  const selection = typeof values.reportingSelection === "string" ? values.reportingSelection : undefined;
+  const selection = first(values.reportingSelection);
   const customFields = Object.fromEntries(Object.entries(values).filter(([key, value]) => key.startsWith("cf_") && typeof value === "string" && value.trim()).map(([key, value]) => [key.slice(3), value as string]));
   const normalized = {
     ...values,
