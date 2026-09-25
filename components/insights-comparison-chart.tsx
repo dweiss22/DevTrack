@@ -25,6 +25,8 @@ export function InsightsComparisonChart({ metricA, metricB, metricATitle, metric
   }));
   const totalAHours = round1(hoursFromMinutes(metricA.totalMinutes));
   const totalBHours = round1(hoursFromMinutes(metricB.totalMinutes));
+  const avgAHoursPerCourse = metricA.totalCourses ? round1(totalAHours / metricA.totalCourses) : 0;
+  const avgBHoursPerCourse = metricB.totalCourses ? round1(totalBHours / metricB.totalCourses) : 0;
   const difference = percentDifference(totalAHours, totalBHours);
   const description = `${metricATitle} compared with ${metricBTitle}, based on the filter panels above.`;
   const exportImage = () => exportChartAsImage(containerRef.current, "comparison-hours.png", {
@@ -52,8 +54,8 @@ export function InsightsComparisonChart({ metricA, metricB, metricATitle, metric
       </div>
     </div>
     <div className="insights-comparison-summary">
-      <div className="insights-comparison-stat metric-a"><span>Metric A · {metricATitle}</span><strong>{totalAHours.toLocaleString()}h</strong><small>{metricA.totalCourses.toLocaleString()} course{metricA.totalCourses === 1 ? "" : "s"}</small></div>
-      <div className="insights-comparison-stat metric-b"><span>Metric B · {metricBTitle}</span><strong>{totalBHours.toLocaleString()}h</strong><small>{metricB.totalCourses.toLocaleString()} course{metricB.totalCourses === 1 ? "" : "s"}</small></div>
+      <div className="insights-comparison-stat metric-a"><span>Metric A · {metricATitle}</span><strong>{totalAHours.toLocaleString()}h</strong><small>{metricA.totalCourses.toLocaleString()} course{metricA.totalCourses === 1 ? "" : "s"} · avg {avgAHoursPerCourse.toLocaleString()}h/course</small></div>
+      <div className="insights-comparison-stat metric-b"><span>Metric B · {metricBTitle}</span><strong>{totalBHours.toLocaleString()}h</strong><small>{metricB.totalCourses.toLocaleString()} course{metricB.totalCourses === 1 ? "" : "s"} · avg {avgBHoursPerCourse.toLocaleString()}h/course</small></div>
       <div className="insights-comparison-stat"><span>Difference (B vs A)</span><strong>{difference == null ? "—" : `${difference >= 0 ? "+" : ""}${round1(difference)}%`}</strong></div>
     </div>
     {chartData.length ? <>
