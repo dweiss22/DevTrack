@@ -528,6 +528,8 @@ pre { max-height: 300px; overflow: auto; white-space: pre-wrap; font-size: 12px;
 .insights-chart-card { min-width: 0; }
 .insights-chart-card h2 { margin: 0 0 4px; font-size: 18px; }
 .insights-chart-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.chart-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--blue-soft); color: var(--navy); box-shadow: none; }
+.chart-icon-button:hover { background: var(--sky); color: #fff; }
 .insights-mode-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .insights-mode-toggle button { padding: 6px 12px; border: 0; background: transparent; color: var(--navy); cursor: pointer; font-size: 12px; font-weight: 650; }
 .insights-mode-toggle button[aria-pressed="true"] { background: var(--blue); color: #fff; }
