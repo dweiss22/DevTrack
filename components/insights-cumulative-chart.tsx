@@ -2,14 +2,17 @@
 
 import React, { useRef, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { exportChartSvgAsPng } from "@/lib/reporting/chart-export";
+import { exportChartAsImage } from "@/lib/reporting/chart-export";
 import { hoursFromMinutes, type HoursTimeseries } from "@/lib/reporting/insights";
+import { ChartExportIcon } from "@/components/chart-export-icon";
 
 type ChartMode = "cumulative" | "period";
+const CUMULATIVE_TITLE = "Cumulative hours";
+const CUMULATIVE_DESCRIPTION = "Recorded hours across the courses matching the filters above, grouped by month.";
 
-export function InsightsCumulativeChart({ data }: { data: HoursTimeseries }) {
+export function InsightsCumulativeChart({ data, filterLabels }: { data: HoursTimeseries; filterLabels: string[] }) {
   const [mode, setMode] = useState<ChartMode>("cumulative");
-  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
   const chartData = data.periods.map((period) => ({
     label: period.label,
     hours: round1(hoursFromMinutes(period.minutes)),
@@ -17,24 +20,29 @@ export function InsightsCumulativeChart({ data }: { data: HoursTimeseries }) {
     projectCount: period.projectCount
   }));
   const totalHours = round1(hoursFromMinutes(data.totalMinutes));
+  const exportImage = () => exportChartAsImage(chartRef.current, "cumulative-hours.png", {
+    title: CUMULATIVE_TITLE,
+    description: CUMULATIVE_DESCRIPTION,
+    filterSections: [{ label: "Filters", lines: filterLabels }]
+  });
 
   return <article className="insights-chart-card" aria-labelledby="cumulative-hours-title">
     <div className="chart-heading">
       <div>
-        <h2 id="cumulative-hours-title">Cumulative hours</h2>
-        <p>Recorded hours across the courses matching the filters above, grouped by month.</p>
+        <h2 id="cumulative-hours-title">{CUMULATIVE_TITLE}</h2>
+        <p>{CUMULATIVE_DESCRIPTION}</p>
       </div>
       <div className="insights-chart-controls">
         <div className="insights-mode-toggle" role="group" aria-label="Chart view">
           <button type="button" aria-pressed={mode === "cumulative"} onClick={() => setMode("cumulative")}>Cumulative</button>
           <button type="button" aria-pressed={mode === "period"} onClick={() => setMode("period")}>By month</button>
         </div>
-        <button type="button" className="secondary" onClick={() => exportChartSvgAsPng(containerRef.current, "cumulative-hours.png")}>Export as image</button>
+        <button type="button" className="chart-icon-button" title="Export chart as image" aria-label="Export chart as image" onClick={exportImage}><ChartExportIcon /></button>
       </div>
     </div>
     <p className="insights-chart-summary"><strong>{data.totalCourses.toLocaleString()}</strong> matching course{data.totalCourses === 1 ? "" : "s"} · <strong>{totalHours.toLocaleString()}</strong> total hours</p>
     {chartData.length ? <>
-      <div className="insights-chart-canvas" role="img" aria-label={mode === "cumulative" ? "Area chart of cumulative recorded hours by month" : "Bar chart of recorded hours by month"} ref={containerRef}>
+      <div className="insights-chart-canvas" role="img" aria-label={mode === "cumulative" ? "Area chart of cumulative recorded hours by month" : "Bar chart of recorded hours by month"} ref={chartRef}>
         <ResponsiveContainer width="100%" height={320}>
           {mode === "cumulative"
             ? <AreaChart data={chartData} margin={{ top: 12, right: 16, left: 0, bottom: 4 }}>

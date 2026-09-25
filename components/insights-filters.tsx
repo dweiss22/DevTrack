@@ -5,8 +5,9 @@ import { ProjectsMultiSelect } from "@/components/projects-multi-select";
 import { FilterDisclosure } from "@/components/filter-disclosure";
 import type { AccessibleProjectFacets, CustomFieldFilterOption, StatusFilterOption } from "@/lib/reporting/options";
 import { parseReportingFilters, type ReportingFilters } from "@/lib/reporting/filters";
+import { verticalSelectionLabel } from "@/lib/reporting/insights";
 import { projectFilterFields, projectFilterValues, projectPersonLabel, projectPersonOptions, reportingYearOptions, type ProjectFilterFields, type ProjectPersonOption } from "@/lib/reporting/projects";
-import { APPROVED_VERTICALS, verticalStateLabel } from "@/lib/wrike/vertical-normalization";
+import { APPROVED_VERTICALS } from "@/lib/wrike/vertical-normalization";
 
 type Props = {
   title: string;
@@ -122,10 +123,3 @@ function applyFilterChanges(filters: ReportingFilters, changes: Record<string, s
 
 const valueOption = (value: string) => ({ value, label: value });
 const isCourseStyle = (value: string) => ["full length", "single video"].includes(value.trim().toLocaleLowerCase());
-
-function verticalSelectionLabel(value: string) {
-  if (value.startsWith("associated:")) return value.slice("associated:".length);
-  if (value.startsWith("category:")) return value.slice("category:".length).replace("Cross Vertical", "Cross-Vertical");
-  if (value.startsWith("state:")) return verticalStateLabel(value.slice("state:".length) as Parameters<typeof verticalStateLabel>[0]);
-  return "Any Vertical issue";
-}

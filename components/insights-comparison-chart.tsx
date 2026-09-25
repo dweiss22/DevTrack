@@ -2,12 +2,16 @@
 
 import React, { useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { exportChartSvgAsPng } from "@/lib/reporting/chart-export";
+import { ChartExportIcon } from "@/components/chart-export-icon";
+import { exportChartAsImage } from "@/lib/reporting/chart-export";
 import { hoursFromMinutes, percentDifference, type HoursTimeseries } from "@/lib/reporting/insights";
 
 type ChartMode = "bar" | "line";
+const COMPARISON_TITLE = "Compare two metrics";
 
-export function InsightsComparisonChart({ metricA, metricB, metricATitle, metricBTitle, onSwap }: { metricA: HoursTimeseries; metricB: HoursTimeseries; metricATitle: string; metricBTitle: string; onSwap: () => void }) {
+export function InsightsComparisonChart({ metricA, metricB, metricATitle, metricBTitle, filterLabelsA, filterLabelsB, onSwap }: {
+  metricA: HoursTimeseries; metricB: HoursTimeseries; metricATitle: string; metricBTitle: string; filterLabelsA: string[]; filterLabelsB: string[]; onSwap: () => void
+}) {
   const [mode, setMode] = useState<ChartMode>("bar");
   const containerRef = useRef<HTMLDivElement>(null);
   const months = [...new Set([...metricA.periods.map((period) => period.label), ...metricB.periods.map((period) => period.label)])];
@@ -22,12 +26,21 @@ export function InsightsComparisonChart({ metricA, metricB, metricATitle, metric
   const totalAHours = round1(hoursFromMinutes(metricA.totalMinutes));
   const totalBHours = round1(hoursFromMinutes(metricB.totalMinutes));
   const difference = percentDifference(totalAHours, totalBHours);
+  const description = `${metricATitle} compared with ${metricBTitle}, based on the filter panels above.`;
+  const exportImage = () => exportChartAsImage(containerRef.current, "comparison-hours.png", {
+    title: COMPARISON_TITLE,
+    description,
+    filterSections: [
+      { label: `Metric A filters (${metricATitle})`, lines: filterLabelsA },
+      { label: `Metric B filters (${metricBTitle})`, lines: filterLabelsB }
+    ]
+  });
 
   return <article className="insights-chart-card" aria-labelledby="comparison-chart-title">
     <div className="chart-heading">
       <div>
-        <h2 id="comparison-chart-title">Compare two metrics</h2>
-        <p>{metricATitle} compared with {metricBTitle}, based on the filter panels above.</p>
+        <h2 id="comparison-chart-title">{COMPARISON_TITLE}</h2>
+        <p>{description}</p>
       </div>
       <div className="insights-chart-controls">
         <div className="insights-mode-toggle" role="group" aria-label="Chart type">
@@ -35,7 +48,7 @@ export function InsightsComparisonChart({ metricA, metricB, metricATitle, metric
           <button type="button" aria-pressed={mode === "line"} onClick={() => setMode("line")}>Lines</button>
         </div>
         <button type="button" className="secondary" onClick={onSwap}>Swap A / B</button>
-        <button type="button" className="secondary" onClick={() => exportChartSvgAsPng(containerRef.current, "comparison-hours.png")}>Export as image</button>
+        <button type="button" className="chart-icon-button" title="Export chart as image" aria-label="Export chart as image" onClick={exportImage}><ChartExportIcon /></button>
       </div>
     </div>
     <div className="insights-comparison-summary">

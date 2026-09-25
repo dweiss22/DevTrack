@@ -3,6 +3,7 @@ import { z } from "zod";
 import { filtersForRpc, filtersToQuery, parseReportingFilters, type ReportingFilters } from "@/lib/reporting/filters";
 import type { StatusFilterOption } from "@/lib/reporting/options";
 import { projectFilterValues, projectPersonLabel, type ProjectFilterFields, type ProjectPersonOption } from "@/lib/reporting/projects";
+import { verticalStateLabel } from "@/lib/wrike/vertical-normalization";
 
 export type HoursPeriod = { periodStart: string; label: string; minutes: number; cumulativeMinutes: number; projectCount: number };
 export type HoursTimeseries = { totalCourses: number; totalMinutes: number; periods: HoursPeriod[] };
@@ -139,6 +140,32 @@ export function summarizeReportingFilters(filters: ReportingFilters, context: { 
     else if (toolValues.length) parts.push(`${toolValues.length} tools`);
   }
   return parts.length ? parts.slice(0, 2).join(" · ") : "All courses";
+}
+
+export function verticalSelectionLabel(value: string) {
+  if (value.startsWith("associated:")) return value.slice("associated:".length);
+  if (value.startsWith("category:")) return value.slice("category:".length).replace("Cross Vertical", "Cross-Vertical");
+  if (value.startsWith("state:")) return verticalStateLabel(value.slice("state:".length) as Parameters<typeof verticalStateLabel>[0]);
+  return "Any Vertical issue";
+}
+
+/** The full, human-readable list of a filter panel's active selections (e.g. "Year: 2026",
+ * "Designer: Jane Doe"), used to record what a chart's exported image was actually filtered to.
+ * Unlike summarizeReportingFilters, this isn't truncated to a short title. */
+export function activeReportingFilterLabels(filters: ReportingFilters, context: { fields: ProjectFilterFields; statuses: readonly StatusFilterOption[]; people: readonly ProjectPersonOption[] }): string[] {
+  const labels: string[] = [];
+  const years = filters.reportingYears?.length ? filters.reportingYears : filters.reportingYear != null ? [filters.reportingYear] : [];
+  for (const year of years) labels.push(`Year: ${year}`);
+  for (const statusId of filters.statuses ?? []) labels.push(`Status: ${context.statuses.find((status) => status.id === statusId)?.name ?? statusId}`);
+  for (const [field, prefixLabel, contact] of [
+    [context.fields.owner, "Designer", true], [context.fields.tool, "Tools", false],
+    [context.fields.courseType, "Course Type", false], [context.fields.courseStyle, "Course Style", false], [context.fields.courseLength, "Course Length", false]
+  ] as const) {
+    if (!field) continue;
+    for (const value of projectFilterValues(filters.customFields?.[field.id])) labels.push(`${prefixLabel}: ${contact ? projectPersonLabel(value, context.people) : value}`);
+  }
+  for (const selected of filters.verticalSelections ?? []) labels.push(`Vertical: ${verticalSelectionLabel(selected)}`);
+  return labels;
 }
 
 function periodLabel(periodStart: string) {

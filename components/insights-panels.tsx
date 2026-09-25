@@ -5,7 +5,7 @@ import { InsightsFilters } from "@/components/insights-filters";
 import { InsightsCumulativeChart } from "@/components/insights-cumulative-chart";
 import { InsightsComparisonChart } from "@/components/insights-comparison-chart";
 import { filtersToQuery, type ReportingFilters } from "@/lib/reporting/filters";
-import { summarizeReportingFilters, type HoursTimeseries } from "@/lib/reporting/insights";
+import { activeReportingFilterLabels, summarizeReportingFilters, type HoursTimeseries } from "@/lib/reporting/insights";
 import { projectFilterFields } from "@/lib/reporting/projects";
 import type { AccessibleProjectFacets, CustomFieldFilterOption, StatusFilterOption } from "@/lib/reporting/options";
 import type { ProjectPersonOption } from "@/lib/reporting/projects";
@@ -42,10 +42,13 @@ export function InsightsCumulativePanel({ initialFilters, initialData, options }
     return () => controller.abort();
   }, [filters]);
 
+  const fields = projectFilterFields(options.customFields);
+  const filterLabels = activeReportingFilterLabels(filters, { fields, statuses: options.statuses, people: options.people });
+
   return <section className="card insights-panel" aria-labelledby="cumulative-hours-title">
     <p className="eyebrow">DEVELOPMENT ANALYTICS</p>
     <InsightsFilters title="Filters" filters={filters} statuses={options.statuses} customFields={options.customFields} people={options.people} facets={options.facets} onFiltersChange={setFilters} />
-    <div className={`insights-chart-transition${updating ? " is-updating" : ""}`}><InsightsCumulativeChart data={data} /></div>
+    <div className={`insights-chart-transition${updating ? " is-updating" : ""}`}><InsightsCumulativeChart data={data} filterLabels={filterLabels} /></div>
   </section>;
 }
 
@@ -80,6 +83,8 @@ export function InsightsComparisonPanel({ initialFiltersA, initialFiltersB, init
 
   const titleA = summarizeReportingFilters(filtersA, { fields, statuses: options.statuses, people: options.people });
   const titleB = summarizeReportingFilters(filtersB, { fields, statuses: options.statuses, people: options.people });
+  const filterLabelsA = activeReportingFilterLabels(filtersA, { fields, statuses: options.statuses, people: options.people });
+  const filterLabelsB = activeReportingFilterLabels(filtersB, { fields, statuses: options.statuses, people: options.people });
   const swap = () => { setFiltersA(filtersB); setFiltersB(filtersA); };
 
   return <section className="card insights-panel" aria-labelledby="comparison-chart-title">
@@ -88,6 +93,6 @@ export function InsightsComparisonPanel({ initialFiltersA, initialFiltersB, init
       <InsightsFilters title={`Metric A · ${titleA}`} filters={filtersA} statuses={options.statuses} customFields={options.customFields} people={options.people} facets={options.facets} onFiltersChange={setFiltersA} />
       <InsightsFilters title={`Metric B · ${titleB}`} filters={filtersB} statuses={options.statuses} customFields={options.customFields} people={options.people} facets={options.facets} onFiltersChange={setFiltersB} />
     </div>
-    <div className={`insights-chart-transition${updating ? " is-updating" : ""}`}><InsightsComparisonChart metricA={dataA} metricB={dataB} metricATitle={titleA} metricBTitle={titleB} onSwap={swap} /></div>
+    <div className={`insights-chart-transition${updating ? " is-updating" : ""}`}><InsightsComparisonChart metricA={dataA} metricB={dataB} metricATitle={titleA} metricBTitle={titleB} filterLabelsA={filterLabelsA} filterLabelsB={filterLabelsB} onSwap={swap} /></div>
   </section>;
 }
