@@ -1,7 +1,9 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import React, { useRef } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { ChartExportButton } from "@/components/chart-export-button";
 import type { DashboardCategory, DashboardOverview, DashboardTimeAnalytics, ReportingYearCount, ReportingYearStatus, ReportingYearTime } from "@/lib/reporting/dashboard";
 import { assignedDashboardRows, dashboardDrilldownHref, type DashboardClassification, type DashboardField } from "@/lib/reporting/dashboard-navigation";
 import type { ReportingFilters } from "@/lib/reporting/filters";
@@ -13,12 +15,12 @@ export function DashboardOverviewCharts({ analytics, filters }: { analytics: Das
   const projectsByReportingYear = assignedDashboardRows(analytics.projectsByReportingYear, "label");
   const projectsByStatus = assignedDashboardRows(analytics.projectsByStatus, "label");
   return <div className="dashboard-charts">
-    <ChartCard title="Projects by Reporting Year" description="Completed Online Learning projects grouped by the normalized Reporting field. Select a bar to view its projects." empty={!projectsByReportingYear.length}>
+    <ChartCard title="Projects by Reporting Year" description="Completed Online Learning projects grouped by the normalized Reporting field. Select a bar to view its projects." empty={!projectsByReportingYear.length} filename="projects-by-reporting-year.png">
       <ResponsiveContainer width="100%" height={300}><BarChart data={projectsByReportingYear} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" /><YAxis allowDecimals={false} /><Tooltip formatter={(value) => [`${value} completed projects`, "Projects"]} /><Bar dataKey="projects" name="Completed projects" fill="#145b9e" radius={[6,6,0,0]} onClick={(entry) => navigateToYear(router.push, filters, chartRow<ReportingYearCount>(entry)?.label, "completed")} /></BarChart></ResponsiveContainer>
       <AccessibleTable caption="Completed projects by reporting year" headers={["Reporting year", "Completed projects"]} rows={projectsByReportingYear.map((row) => [<DrilldownLink href={yearHref(filters, row.label, "completed")} label={row.label} />, row.projects])} />
     </ChartCard>
 
-    <ChartCard title="Projects by Status" description="Current project status classification by reporting year. Select a segment to view its projects." empty={!projectsByStatus.length}>
+    <ChartCard title="Projects by Status" description="Current project status classification by reporting year. Select a segment to view its projects." empty={!projectsByStatus.length} filename="projects-by-status.png">
       <ResponsiveContainer width="100%" height={330}><BarChart data={projectsByStatus} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" /><YAxis allowDecimals={false} /><Tooltip content={<StatusTooltip />} /><Legend /><Bar dataKey="stalledOrCanceled" name="Stalled or Canceled" stackId="status" fill="#64748b" onClick={(entry) => navigateToStatus(router.push, filters, chartRow<ReportingYearStatus>(entry)?.label, "stalled_or_canceled")} /><Bar dataKey="active" name="Active or In Progress" stackId="status" fill="#3b82c4" onClick={(entry) => navigateToStatus(router.push, filters, chartRow<ReportingYearStatus>(entry)?.label, "active")} /><Bar dataKey="completed" name="Completed" stackId="status" fill="#0c8f78" radius={[6,6,0,0]} onClick={(entry) => navigateToStatus(router.push, filters, chartRow<ReportingYearStatus>(entry)?.label, "completed")} /></BarChart></ResponsiveContainer>
       <StatusAccessibleTable filters={filters} data={projectsByStatus} />
     </ChartCard>
@@ -34,23 +36,37 @@ export function DashboardOverviewCharts({ analytics, filters }: { analytics: Das
 export function DashboardTimeChart({ analytics, filters }: { analytics: DashboardTimeAnalytics; filters: ReportingFilters }) {
   const router = useRouter();
   const rows = assignedDashboardRows(analytics.averageTimeByReportingYear, "label");
-  return <div className="dashboard-charts"><ChartCard title="Average Time Spent by Reporting Year" description="Each completed project contributes one total-time value before the yearly average is calculated. Select a point to view its projects." empty={!rows.length}>
+  return <div className="dashboard-charts"><ChartCard title="Average Time Spent by Reporting Year" description="Each completed project contributes one total-time value before the yearly average is calculated. Select a point to view its projects." empty={!rows.length} filename="average-time-by-reporting-year.png">
     {analytics.timeDataSynchronized && <ResponsiveContainer width="100%" height={300}><LineChart data={rows} margin={{ top: 12, right: 22, left: 8, bottom: 4 }} onClick={(state) => navigateToYear(router.push, filters, state?.activeLabel, "completed")}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" /><YAxis tickFormatter={(minutes) => `${Math.round(Number(minutes) / 60)}h`} /><Tooltip content={<AverageTimeTooltip />} /><Line type="monotone" dataKey="averageMinutes" name="Average hours per project" stroke="#0c8f78" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} /></LineChart></ResponsiveContainer>}
     <AccessibleTable caption="Average project time by reporting year" headers={["Reporting year", "Projects", "Average hours", "Combined hours"]} rows={rows.map((row) => [<DrilldownLink href={yearHref(filters, row.label, "completed")} label={row.label} />, row.projectCount, row.averageMinutes == null ? "Not synchronized" : hours(row.averageMinutes), hours(row.totalMinutes)])} />
   </ChartCard></div>;
 }
 
-function ChartCard({ title, description, empty, children }: { title: string; description: string; empty: boolean; children: React.ReactNode }) {
-  return <article className="card dashboard-chart" aria-labelledby={`${slug(title)}-title`}><div className="chart-heading"><div><h2 id={`${slug(title)}-title`}>{title}</h2><p>{description}</p></div></div>{empty ? <p className="chart-empty">No assigned project values are available for this chart.</p> : children}</article>;
+function ChartCard({ title, description, empty, filename, children }: { title: string; description: string; empty: boolean; filename: string; children: React.ReactNode }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  return <article className="card dashboard-chart" aria-labelledby={`${slug(title)}-title`}>
+    <div className="chart-heading">
+      <div><h2 id={`${slug(title)}-title`}>{title}</h2><p>{description}</p></div>
+      {!empty && <div className="insights-chart-controls"><ChartExportButton containerRef={containerRef} filename={filename} title={title} description={description} /></div>}
+    </div>
+    {empty ? <p className="chart-empty">No assigned project values are available for this chart.</p> : <div ref={containerRef}>{children}</div>}
+  </article>;
 }
 
 function DonutChart({ title, field, data, filters }: { title: string; field: DashboardField | "verticalReportingCategory"; data: DashboardCategory[]; filters: ReportingFilters }) {
   const router = useRouter();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const description = "Each Online Learning project is counted once. Select a slice to view its projects.";
   const total = data.reduce((sum, item) => sum + item.projects, 0);
-  return <article className="card dashboard-chart donut-card" aria-labelledby={`${slug(title)}-title`}><h2 id={`${slug(title)}-title`}>{title}</h2><p>Each Online Learning project is counted once. Select a slice to view its projects.</p>{data.length ? <>
+  return <article className="card dashboard-chart donut-card" aria-labelledby={`${slug(title)}-title`}>
+    <div className="chart-heading">
+      <div><h2 id={`${slug(title)}-title`}>{title}</h2><p>{description}</p></div>
+      {data.length > 0 && <div className="insights-chart-controls"><ChartExportButton containerRef={containerRef} filename={`${slug(title)}.png`} title={title} description={description} /></div>}
+    </div>
+    {data.length ? <div ref={containerRef}>
     <ResponsiveContainer width="100%" height={260}><PieChart><Pie data={data} dataKey="projects" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={2} onClick={(entry) => { const row = chartRow<DashboardCategory>(entry); if (row) router.push(categoryHref(filters, field, row.name)); }}>{data.map((item, index) => <Cell key={item.name} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />)}</Pie><Tooltip formatter={(value, _name, item) => [`${value} projects (${percent(Number(value), total)})`, item.payload.name]} /><Legend verticalAlign="bottom" height={48} /></PieChart></ResponsiveContainer>
     <AccessibleTable caption={title} headers={["Category", "Projects", "Percentage"]} rows={data.map((item) => [<DrilldownLink href={categoryHref(filters, field, item.name)} label={item.name} />, item.projects, percent(item.projects, total)])} />
-  </> : <p className="chart-empty">No assigned project values are available for this chart.</p>}</article>;
+  </div> : <p className="chart-empty">No assigned project values are available for this chart.</p>}</article>;
 }
 
 function AverageTimeTooltip({ active, payload }: { active?: boolean; payload?: { payload: ReportingYearTime }[] }) {

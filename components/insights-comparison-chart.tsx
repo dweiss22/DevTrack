@@ -2,8 +2,7 @@
 
 import React, { useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ChartExportIcon } from "@/components/chart-export-icon";
-import { exportChartAsImage } from "@/lib/reporting/chart-export";
+import { ChartExportButton } from "@/components/chart-export-button";
 import { hoursFromMinutes, percentDifference, type HoursTimeseries } from "@/lib/reporting/insights";
 
 type ChartMode = "bar" | "line";
@@ -29,14 +28,10 @@ export function InsightsComparisonChart({ metricA, metricB, metricATitle, metric
   const avgBHoursPerCourse = metricB.totalCourses ? round1(totalBHours / metricB.totalCourses) : 0;
   const difference = percentDifference(totalAHours, totalBHours);
   const description = `${metricATitle} compared with ${metricBTitle}, based on the filter panels above.`;
-  const exportImage = () => exportChartAsImage(containerRef.current, "comparison-hours.png", {
-    title: COMPARISON_TITLE,
-    description,
-    filterSections: [
-      { label: `Metric A filters (${metricATitle})`, lines: filterLabelsA },
-      { label: `Metric B filters (${metricBTitle})`, lines: filterLabelsB }
-    ]
-  });
+  const filterSections = [
+    { label: `Metric A filters (${metricATitle})`, lines: filterLabelsA },
+    { label: `Metric B filters (${metricBTitle})`, lines: filterLabelsB }
+  ];
 
   return <article className="insights-chart-card" aria-labelledby="comparison-chart-title">
     <div className="chart-heading">
@@ -50,7 +45,7 @@ export function InsightsComparisonChart({ metricA, metricB, metricATitle, metric
           <button type="button" aria-pressed={mode === "line"} onClick={() => setMode("line")}>Lines</button>
         </div>
         <button type="button" className="secondary" onClick={onSwap}>Swap A / B</button>
-        <button type="button" className="chart-icon-button" title="Export chart as image" aria-label="Export chart as image" onClick={exportImage}><ChartExportIcon /></button>
+        <ChartExportButton containerRef={containerRef} filename="comparison-hours.png" title={COMPARISON_TITLE} description={description} filterSections={filterSections} />
       </div>
     </div>
     <div className="insights-comparison-summary">

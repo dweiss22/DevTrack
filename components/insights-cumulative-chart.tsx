@@ -2,9 +2,8 @@
 
 import React, { useRef, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { exportChartAsImage } from "@/lib/reporting/chart-export";
 import { hoursFromMinutes, type HoursTimeseries } from "@/lib/reporting/insights";
-import { ChartExportIcon } from "@/components/chart-export-icon";
+import { ChartExportButton } from "@/components/chart-export-button";
 
 type ChartMode = "cumulative" | "period";
 const CUMULATIVE_TITLE = "Cumulative hours";
@@ -20,11 +19,7 @@ export function InsightsCumulativeChart({ data, filterLabels }: { data: HoursTim
     projectCount: period.projectCount
   }));
   const totalHours = round1(hoursFromMinutes(data.totalMinutes));
-  const exportImage = () => exportChartAsImage(chartRef.current, "cumulative-hours.png", {
-    title: CUMULATIVE_TITLE,
-    description: CUMULATIVE_DESCRIPTION,
-    filterSections: [{ label: "Filters", lines: filterLabels }]
-  });
+  const filterSections = [{ label: "Filters", lines: filterLabels }];
 
   return <article className="insights-chart-card" aria-labelledby="cumulative-hours-title">
     <div className="chart-heading">
@@ -37,7 +32,7 @@ export function InsightsCumulativeChart({ data, filterLabels }: { data: HoursTim
           <button type="button" aria-pressed={mode === "cumulative"} onClick={() => setMode("cumulative")}>Cumulative</button>
           <button type="button" aria-pressed={mode === "period"} onClick={() => setMode("period")}>By month</button>
         </div>
-        <button type="button" className="chart-icon-button" title="Export chart as image" aria-label="Export chart as image" onClick={exportImage}><ChartExportIcon /></button>
+        <ChartExportButton containerRef={chartRef} filename="cumulative-hours.png" title={CUMULATIVE_TITLE} description={CUMULATIVE_DESCRIPTION} filterSections={filterSections} />
       </div>
     </div>
     <p className="insights-chart-summary"><strong>{data.totalCourses.toLocaleString()}</strong> matching course{data.totalCourses === 1 ? "" : "s"} · <strong>{totalHours.toLocaleString()}</strong> total hours</p>
