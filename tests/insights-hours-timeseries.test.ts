@@ -1,10 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { hoursFromMinutes, loadHoursTimeseries, percentDifference } from "@/lib/reporting/insights";
+import { averageHoursPerCourse, hoursFromMinutes, loadHoursTimeseries, percentDifference } from "@/lib/reporting/insights";
 
 describe("insights hours time series", () => {
   it("converts minutes to hours", () => {
     expect(hoursFromMinutes(90)).toBe(1.5);
     expect(hoursFromMinutes(0)).toBe(0);
+  });
+
+  it("averages hours across all matching courses and handles zero courses", () => {
+    expect(averageHoursPerCourse(300, 3)).toBeCloseTo(5 / 3);
+    expect(averageHoursPerCourse(0, 0)).toBe(0);
+  });
+
+  it("passes per-course minutes through and tolerates a payload without courses", async () => {
+    const base = { totalCourses: 2, totalMinutes: 90, periods: [] };
+    const withCourses = await loadHoursTimeseries({ rpc: async () => ({ data: { ...base, courses: [{ taskId: "a", title: "Course A", minutes: 90 }, { taskId: "b", title: null, minutes: 0 }] }, error: null }) } as never, {} as never);
+    expect(withCourses.courses).toEqual([{ taskId: "a", title: "Course A", minutes: 90 }, { taskId: "b", title: "Untitled course", minutes: 0 }]);
+    const without = await loadHoursTimeseries({ rpc: async () => ({ data: base, error: null }) } as never, {} as never);
+    expect(without.courses).toEqual([]);
   });
 
   it("computes a percentage difference between two totals", () => {
