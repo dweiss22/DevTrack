@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Area,AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { averageHoursPerCourse, hoursFromMinutes, type HoursTimeseries } from "@/lib/reporting/insights";
 import { ChartExportButton } from "@/components/chart-export-button";
 
@@ -10,6 +12,9 @@ const CUMULATIVE_TITLE = "Cumulative hours";
 const CUMULATIVE_DESCRIPTION = "Recorded hours across the courses matching the filters above, grouped by month.";
 
 export function InsightsCumulativeChart({ data, filterLabels }: { data: HoursTimeseries; filterLabels: string[] }) {
+  const pathname = usePathname();
+  const query = useSearchParams().toString();
+  const returnTo = query ? `${pathname}?${query}` : pathname;
   const [mode, setMode] = useState<ChartMode>("cumulative");
   const chartRef = useRef<HTMLDivElement>(null);
   const chartData = data.periods.map((period) => ({
@@ -69,7 +74,7 @@ export function InsightsCumulativeChart({ data, filterLabels }: { data: HoursTim
       <summary>Hours per course ({data.courses.length.toLocaleString()})</summary>
       <table>
         <thead><tr><th>Course</th><th>Hours</th></tr></thead>
-        <tbody>{data.courses.map((course) => <tr key={course.taskId}><td>{course.title}</td><td>{round1(hoursFromMinutes(course.minutes)).toLocaleString()}</td></tr>)}</tbody>
+        <tbody>{data.courses.map((course) => <tr key={course.taskId}><td><Link href={`/projects/${course.taskId}?returnTo=${encodeURIComponent(returnTo)}&returnLabel=Development`}>{course.title}</Link></td><td>{round1(hoursFromMinutes(course.minutes)).toLocaleString()}</td></tr>)}</tbody>
         <tfoot><tr><th>Average across {data.totalCourses.toLocaleString()} course{data.totalCourses === 1 ? "" : "s"} (incl. courses with no time)</th><th>{avgHours.toLocaleString()}</th></tr></tfoot>
       </table>
     </details>}
