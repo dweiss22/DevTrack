@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { hoursFromMinutes, type HoursTimeseries } from "@/lib/reporting/insights";
+import { averageHoursPerCourse, hoursFromMinutes, type HoursTimeseries } from "@/lib/reporting/insights";
 import { ChartExportButton } from "@/components/chart-export-button";
 
 type ChartMode = "cumulative" | "period";
@@ -19,6 +19,7 @@ export function InsightsCumulativeChart({ data, filterLabels }: { data: HoursTim
     projectCount: period.projectCount
   }));
   const totalHours = round1(hoursFromMinutes(data.totalMinutes));
+  const avgHours = round1(averageHoursPerCourse(data.totalMinutes, data.totalCourses));
   const filterSections = [{ label: "Filters", lines: filterLabels }];
 
   return <article className="insights-chart-card" aria-labelledby="cumulative-hours-title">
@@ -35,7 +36,7 @@ export function InsightsCumulativeChart({ data, filterLabels }: { data: HoursTim
         <ChartExportButton containerRef={chartRef} filename="cumulative-hours.png" title={CUMULATIVE_TITLE} description={CUMULATIVE_DESCRIPTION} filterSections={filterSections} />
       </div>
     </div>
-    <p className="insights-chart-summary"><strong>{data.totalCourses.toLocaleString()}</strong> matching course{data.totalCourses === 1 ? "" : "s"} · <strong>{totalHours.toLocaleString()}</strong> total hours</p>
+    <p className="insights-chart-summary"><strong>{data.totalCourses.toLocaleString()}</strong> matching course{data.totalCourses === 1 ? "" : "s"} · <strong>{totalHours.toLocaleString()}</strong> total hours · <strong>{avgHours.toLocaleString()}</strong> avg hours/course</p>
     {chartData.length ? <>
       <div className="insights-chart-canvas" role="img" aria-label={mode === "cumulative" ? "Area chart of cumulative recorded hours by month" : "Bar chart of recorded hours by month"} ref={chartRef}>
         <ResponsiveContainer width="100%" height={320}>
@@ -64,6 +65,14 @@ export function InsightsCumulativeChart({ data, filterLabels }: { data: HoursTim
         </table>
       </details>
     </> : <p className="chart-empty">No recorded time matches these filters.</p>}
+    {data.courses.length > 0 && <details className="chart-data">
+      <summary>Hours per course ({data.courses.length.toLocaleString()})</summary>
+      <table>
+        <thead><tr><th>Course</th><th>Hours</th></tr></thead>
+        <tbody>{data.courses.map((course) => <tr key={course.taskId}><td>{course.title}</td><td>{round1(hoursFromMinutes(course.minutes)).toLocaleString()}</td></tr>)}</tbody>
+        <tfoot><tr><th>Average across {data.totalCourses.toLocaleString()} course{data.totalCourses === 1 ? "" : "s"} (incl. courses with no time)</th><th>{avgHours.toLocaleString()}</th></tr></tfoot>
+      </table>
+    </details>}
   </article>;
 }
 

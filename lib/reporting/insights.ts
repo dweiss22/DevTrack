@@ -6,10 +6,12 @@ import { projectFilterValues, projectPersonLabel, type ProjectFilterFields, type
 import { verticalStateLabel } from "@/lib/wrike/vertical-normalization";
 
 export type HoursPeriod = { periodStart: string; label: string; minutes: number; cumulativeMinutes: number; projectCount: number };
-export type HoursTimeseries = { totalCourses: number; totalMinutes: number; periods: HoursPeriod[] };
+export type HoursCourse = { taskId: string; title: string; minutes: number };
+export type HoursTimeseries = { totalCourses: number; totalMinutes: number; periods: HoursPeriod[]; courses: HoursCourse[] };
 
 const rpcPeriodSchema = z.object({ periodStart: z.string(), minutes: z.coerce.number(), projectCount: z.coerce.number() });
-const rpcResultSchema = z.object({ totalCourses: z.coerce.number(), totalMinutes: z.coerce.number(), periods: z.array(rpcPeriodSchema) });
+const rpcCourseSchema = z.object({ taskId: z.string(), title: z.string().nullish().transform((title) => title ?? "Untitled course"), minutes: z.coerce.number() });
+const rpcResultSchema = z.object({ totalCourses: z.coerce.number(), totalMinutes: z.coerce.number(), periods: z.array(rpcPeriodSchema), courses: z.array(rpcCourseSchema).default([]) });
 
 export async function loadHoursTimeseries(supabase: SupabaseClient, filters: ReportingFilters) {
   const { data, error } = await supabase.rpc("reporting_hours_timeseries", { filters: filtersForRpc(filters) });
@@ -20,7 +22,13 @@ export async function loadHoursTimeseries(supabase: SupabaseClient, filters: Rep
     running += period.minutes;
     return { periodStart: period.periodStart, label: periodLabel(period.periodStart), minutes: period.minutes, cumulativeMinutes: running, projectCount: period.projectCount };
   });
-  return { totalCourses: parsed.totalCourses, totalMinutes: parsed.totalMinutes, periods } satisfies HoursTimeseries;
+  return { totalCourses: parsed.totalCourses, totalMinutes: parsed.totalMinutes, periods, courses: parsed.courses } satisfies HoursTimeseries;
+}
+
+/** Average recorded hours across every matching course (courses with no time count as zero),
+ * computed from raw minutes so it isn't rounded twice. */
+export function averageHoursPerCourse(totalMinutes: number, totalCourses: number) {
+  return totalCourses > 0 ? hoursFromMinutes(totalMinutes) / totalCourses : 0;
 }
 
 export function percentDifference(a: number, b: number) {
